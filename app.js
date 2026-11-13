@@ -490,7 +490,7 @@
     const iC12 = needRange ? numIn('C12', '예: 205000') : null;
     const atk = label('AC67') === '마법' ? '마법' : '물리';
     const card = el('div', { class: 'dialog-card extra-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'exTitle' },
-      el('h3', { id: 'exTitle', text: iC13 ? '무기 공격력을 알려주세요' : '극대화 범위 최댓값을 알려주세요' }),
+      el('h3', { id: 'exTitle', text: '무기 공격력 수치를 기입하세요' }),
       el('p', { text: iC13 ? '스크린샷에 안 나오는 값이에요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.' : '이번 사진에서 못 찾은 값이에요.' }),
       iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '극대화 범위가 아닌 무기 자체 수치' })), iC13) : null,
       iC12 ? el('label', { class: 'ex-row' }, el('span', {}, `${atk} 공격력 극대화 범위 최댓값`, el('small', { text: `이번 사진에서 못 찾았어요. 다음엔 ${atk} 공격력에 마우스를 올린 채로 찍으면 자동으로 들어가요` })), iC12) : null,
