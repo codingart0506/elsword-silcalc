@@ -3,12 +3,12 @@
   'use strict';
   const E = window.SilEngine, O = window.SilOCR, M = window.SIL_MODEL;
   const SH = '<Main>';
-  // 원본 시트에서 숨은 '아이템 시뮬레이터'에만 있던 피시방 버프·특수 버프(지애·랜미)를 메인 입력처럼 쓰게 함
+  // 원본 시트의 'Items Simulator'(상세스펙 시뮬레이터)에만 있던 피시방 버프·지애 버프를 메인 입력처럼 쓰게 함
   // <Main>!ZB1(피시방), ZB2(특수)를 새로 두고 <교체 정보>의 '메인기준' 체크칸이 이 값을 보게 연결
   const EXTRA_BUFF = {
     ZB1: { t: '피시방 버프', rows: [['HE14', '피방벞'], ['HE15', '에너지드링크'], ['HE16', '피방 + 에너지드링크'], ['HE17', '미적용']] },
-    ZB2: { t: '지애·랜미 버프', rows: [['HM14', '지애벞'], ['HM15', '랜미벞 1스택'], ['HM16', '랜미벞 2스택'], ['HM17', '랜미벞 3스택'],
-      ['HM18', '지애 + 랜미 1스택'], ['HM19', '지애 + 랜미 2스택'], ['HM20', '지애 + 랜미 3스택'], ['HM21', '미적용']] },
+    // 랜미벞(HM15~HM20)은 안 씀: 시트 값(FALSE) 그대로
+    ZB2: { t: '지애 버프', rows: [['HM14', '지애벞'], ['HM21', '미적용']] },
   };
   if (!M.sheets[SH].ZB1) {
     for (const [cell, d] of Object.entries(EXTRA_BUFF)) {
@@ -41,7 +41,7 @@
     H13: '1. 테네브로스 상의 두 번째 그림자 옵션 / 2. 엑사스케일 복원 세트효과 10%',
     H15: '캐시샵 20000 캐시 업그레이드 이용권',
     ZB1: '피방벞은 최종 데미지 5%, 에너지드링크는 크리·극대 5%와 최종 데미지 5%. 켜 두면 랭킹에 올릴 수 없어요.',
-    ZB2: '지애벞은 최종 데미지 5%, 랜미벞은 물마공 3%씩(최대 3스택). 켜 두면 랭킹에 올릴 수 없어요.',
+    ZB2: '지애벞은 최종 데미지 5%. 켜 두면 랭킹에 올릴 수 없어요.',
     L15: '스피릿 챌린저는 "미사용" 선택',
     J21: '녹힐 직업(디우스 아에르, 일천, 오버마인드, 데메르시오, 블루헨, 라디언트 소울, 닉스 피에타, 애버리스)은 직업을 고르면 적용3-적청엑사로 바뀌어요.',
     J26: '미착용이면 종류는 아무거나, 강화 수치를 0으로.',
@@ -73,7 +73,7 @@
     { id: 'gear', name: '스킬·장비', groups: [
       { bar: '캐릭터 버프 스킬', fields: [{ c: 'L11', lab: 'I11' }, { c: 'L12', lab: 'I12' }, { c: 'L13', lab: 'I13' }, { c: 'L14', lab: 'I14' }, { c: 'L15', lab: 'I15' }] },
       { bar: '도핑', fields: [{ c: 'J17', lab: 'I17' }, { c: 'J18', lab: 'I18' }, { c: 'J19', lab: 'I19' }, { c: 'J20', lab: 'I20' }, { c: 'J21', lab: 'I21' }, { c: 'J22', lab: 'I22' }, { c: 'J23', lab: 'I23' },
-        { c: 'ZB1', t: '피시방 버프' }, { c: 'ZB2', t: '지애·랜미 버프' }] },
+        { c: 'ZB1', t: '피시방 버프' }, { c: 'ZB2', t: '지애 버프' }] },
       { bar: '장비 종류와 강화', fields: [[{ c: 'J26', lab: 'I26' }, { c: 'L26' }], [{ c: 'J27', lab: 'I27' }, { c: 'L27' }], [{ c: 'J28', lab: 'I28' }, { c: 'L28' }], [{ c: 'J29', lab: 'I29' }, { c: 'L29' }],
         [{ c: 'J31', lab: 'I31' }, { c: 'L31' }], [{ c: 'J32', lab: 'I32' }, { c: 'L32' }], { c: 'J30', t: '방어구 세트 효과' }] },
       { bar: '전투력 출력 기준 필드', fields: [{ c: 'I34', t: '필드' }], extra: 'field' },
@@ -173,6 +173,11 @@
   if (!store.mig.pcrit10) {
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && !(Number(v.H11) > 0) && partyCrit(v.J30 ?? BLANK.J30) > 0) v.H11 = 0.1;
     store.mig.pcrit10 = 1;
+  }
+  // 랜미벞 보기를 뺀 뒤: 잠깐 골라 둔 '지애 + 랜미'는 지애벞으로, '랜미벞'만은 미적용으로
+  for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) {
+    if (!v || typeof v.ZB2 !== 'string' || !/랜미/.test(v.ZB2)) continue;
+    v.ZB2 = /지애/.test(v.ZB2) ? '지애벞' : '미적용';
   }
   if (!store.mig.heal3) {
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && HEALERS.has(v.C6) && v.J30 === BLANK.J30) { v.J30 = SET_HEAL; if (Number(v.H11) === 0.1) v.H11 = 0; }
@@ -910,7 +915,7 @@
     rankInputs: () => Object.assign({}, inputs),
     rankCp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
     customShare: () => inputs.L42 === true,
-    // 랭킹에 못 올리는 버프(피시방·지애·랜미)를 켰으면 그 이름들
+    // 랭킹에 못 올리는 버프(피시방·지애)를 켰으면 그 이름들
     rankBuffs: () => ['ZB1', 'ZB2'].filter(a => (inputs[a] ?? '미적용') !== '미적용').map(a => `${EXTRA_BUFF[a].t}(${inputs[a]})`),
     missing: () => isEmptySetting(inputs) ? ['세팅'] : ['C12', 'C13'].filter(a => !(Number(g(a)) > 0)).map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력'),
     cls: () => inputs.C6 || '',
