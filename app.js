@@ -464,7 +464,7 @@
       if (!(await dialog({ title: '세팅 비우기', text: '이 캐릭터의 입력값을 모두 지우고 처음 상태로 돌아가요.', ok: '비우기', danger: true }))) return;
       inputs = blank(); store.profiles[store.current] = blank(); store.bases[store.current] = blank(); delete store.names[store.current]; syncNick();
       persist(); applyInputs(); applyBase(); renderProfiles(); refresh();
-      $('#ocrResult').hidden = true; $('#stage').hidden = true;
+      clearShot();
     };
     $('#btnPin').onclick = () => { store.bases[store.current] = Object.assign({}, inputs); persist(); applyBase(); refresh(); };
     $('#btnRevert').onclick = () => { inputs = Object.assign({}, store.bases[store.current] || {}); store.profiles[store.current] = Object.assign({}, inputs); persist(); applyInputs(); refresh(); };
@@ -473,11 +473,22 @@
   // ---------- 화면인식 ----------
   let shot = null, selRect = null, drawSel = () => {};
   const canvas = $('#shot');
+  // 사진을 넣으면 안내 칸 자리에 사진을 보여 주고, ×로 지우면 다시 안내 칸으로
+  let ocrBusy = false;
   function showShot(c) {
+    if (ocrBusy) { toast('사진을 읽는 중이에요. 다 읽은 뒤에 바꿔 주세요'); return; }
     shot = c; selRect = null;
     canvas.width = c.width; canvas.height = c.height; canvas.getContext('2d').drawImage(c, 0, 0);
-    $('#stage').hidden = false; $('#sel').hidden = true; $('#ocrResult').hidden = true;
+    $('#dropZone').hidden = true;
+    $('#stage').hidden = false; $('#sel').hidden = true; $('#ocrResult').hidden = true; $('#ocrProg').hidden = true;
+    $('#btnOcr').textContent = '읽기';
     $('#stage').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  function clearShot() {
+    if (ocrBusy) { toast('사진을 읽는 중이에요. 다 읽은 뒤에 지워 주세요'); return; }
+    shot = null; selRect = null;
+    $('#stage').hidden = true; $('#ocrResult').hidden = true; $('#ocrProg').hidden = true;
+    $('#dropZone').hidden = false;
   }
   function wireSelection() {
     const sel = $('#sel'); let start = null;
@@ -516,6 +527,7 @@
     card.addEventListener('dragleave', () => card.classList.remove('drop-on'));
     card.addEventListener('drop', async (e) => { e.preventDefault(); card.classList.remove('drop-on'); const f = [...e.dataTransfer.files].find(f => f.type.startsWith('image/')); if (f) showShot(await O.imageFromBlob(f)); });
     $('#btnOcr').onclick = runOcr;
+    $('#btnShotX').onclick = clearShot;
     $('#btnApply').onclick = applyOcr;
     $('#btnOcrAll').onclick = () => { const boxes = [...document.querySelectorAll('#ocrBody input[type=checkbox]')]; const all = boxes.every(b => b.checked); boxes.forEach(b => { b.checked = !all; }); };
   }
@@ -525,7 +537,7 @@
     if (!shot) return;
     askExtras({ weapon: true, during: true });
     const prog = $('#ocrProg'), bar = prog.querySelector('.bar'), pt = prog.querySelector('.ptext');
-    prog.hidden = false; $('#btnOcr').disabled = true; bar.style.width = '5%'; pt.textContent = '이미지 준비 중';
+    prog.hidden = false; $('#btnOcr').disabled = true; ocrBusy = true; $('#btnShotX').hidden = true; bar.style.width = '5%'; pt.textContent = '이미지 준비 중';
     try {
       const res = await O.recognize(shot, selRect, (m) => {
         if (m.status) pt.textContent = (STEP[m.status] || m.status) + (m.tag === 'eng' ? ' (숫자)' : '');
@@ -544,7 +556,7 @@
     } catch (e) {
       console.error(e); pt.textContent = '인식 실패: ' + (e.message || e);
       return;
-    } finally { $('#btnOcr').disabled = false; }
+    } finally { $('#btnOcr').disabled = false; ocrBusy = false; $('#btnShotX').hidden = false; $('#btnOcr').textContent = '다시 읽기'; }
     prog.hidden = true;
   }
   const LABEL_OF = {}; for (const t of TABS) for (const gr of t.groups) for (const f of gr.fields.flat()) if (f.t && f.c) LABEL_OF[f.c] = f.t;
@@ -784,8 +796,8 @@
     if (!shared && isEmptySetting(store.bases[store.current] || {}) && !isEmptySetting(inputs)) { store.bases[store.current] = Object.assign({}, inputs); applyBase(); autoBase = true; }
     applyInputs(); refresh(); scheduleAutosave(); renderProfiles();
     ocrSnap = Object.assign({}, inputs); ocrShot = shot; ocrSnap._key = store.current;
-    // 적용이 끝나면 인식 결과 목록은 접어서 화면을 가볍게 유지
-    $('#ocrResult').hidden = true; $('#stage').hidden = true;
+    // 적용이 끝나면 인식 결과 목록만 접고, 사진은 ×로 지울 때까지 남겨 둠
+    $('#ocrResult').hidden = true;
     toast(autoBase ? `${n}개 값을 채우고 기준 세팅으로 잡았어요` : `${n}개 값을 채웠어요`);
     // 적용 뒤: 무기 공격력을 아직 안 넣었거나 극대화 범위를 못 읽었으면 그것만 다시 물음
     if (pendingExtras) {
@@ -880,6 +892,58 @@
     toast, el, fmtInt, korUnit, dialog,
   };
 
+  // ---------- 크극 최적화 (엑셀 "크극 최적화 계산") ----------
+  const OPT = window.SilOpt;
+  function optCfg() { if (!store.opt) store.opt = { base: 'atma', min: 25 }; return store.opt; }
+  function wireOpt() {
+    if (!OPT || !$('#optCard')) return;
+    const sel = $('#optBase'), mn = $('#optMin'), cfg = optCfg();
+    for (const b of OPT.BASES) sel.append(el('option', { value: b.v, text: b.t }));
+    sel.value = cfg.base || 'atma'; mn.value = cfg.min ?? 25;
+    sel.onchange = () => { cfg.base = sel.value; persist(); renderOpt(); };
+    mn.onchange = () => {
+      let v = Number(String(mn.value).replace(',', '.'));
+      if (!isFinite(v) || v < 0 || mn.value === '') v = 25;
+      v = Math.min(100, Math.round(v * 10) / 10); mn.value = v; cfg.min = v; persist(); renderOpt();
+    };
+  }
+  let optT = 0;
+  hooks.push(() => { clearTimeout(optT); optT = setTimeout(renderOpt, 120); });
+  function optDelta(x) {
+    const d = Math.round(x * 1000) / 10;
+    if (Math.abs(d) < 0.05) return { t: '그대로', c: 'same' };
+    return { t: (d > 0 ? '+' : '−') + Math.abs(d).toFixed(1) + '%', c: d > 0 ? 'up' : 'down' };
+  }
+  function renderOpt() {
+    const card = $('#optCard'); if (!card || !OPT) return;
+    const cp = g('C36');
+    const bad = isEmptySetting(inputs) || $('#rCP').classList.contains('err') || typeof cp !== 'number' ||
+      !(Number(g('C11')) > 0) || !(Number(g('C12')) > 0) || !(Number(g('C13')) > 0);
+    let r = null;
+    if (!bad) { try { const cfg = optCfg(); r = OPT.run(wb, { base: cfg.base, minCrit: (cfg.min ?? 25) / 100 }); } catch (e) { console.error(e); } }
+    if (!r || !isFinite(r.dps) || !isFinite(r.cpOpt)) { card.hidden = true; return; }
+    card.hidden = false;
+    const body = $('#optBody'); body.textContent = '';
+    const rows = [['크리티컬 확률', 'crit'], ['극대화', 'max'], ['보스 데미지', 'boss']];
+    if (r.short) {
+      setText('#optGain', '바꿀 수 없는 크리·극대·보뎀만으로 지금 수치를 넘어서 계산할 수 없어요. 계산 기준의 크리 최소 수치를 낮춰 보세요');
+      $('#optGain').className = 'opt-gain warn';
+      for (const [t, k] of rows) body.append(el('tr', null, el('th', { scope: 'row', text: t }), el('td', { text: fmtPct(r.cur[k]) }), el('td', { text: '-' }), el('td', { class: 'same', text: '-' })));
+      return;
+    }
+    for (const [t, k] of rows) {
+      const d = optDelta(r.change[k]);
+      body.append(el('tr', null, el('th', { scope: 'row', text: t }), el('td', { text: fmtPct(r.cur[k]) }),
+        el('td', { class: 'opt-best', text: fmtPct(r.opt[k]) }), el('td', { class: d.c, text: d.t })));
+    }
+    const gain = $('#optGain');
+    if (r.dps < 0.00005) { gain.className = 'opt-gain'; gain.textContent = '지금 배분이 이미 최적이에요'; return; }
+    gain.className = 'opt-gain';
+    gain.textContent = '';
+    gain.append('최적으로 바꾸면 DPS ', el('b', { class: 'up', text: '+' + (r.dps * 100).toFixed(2) + '%' }),
+      el('br'), '실질 전투력 ' + fmtInt(r.cpOpt) + ' ', el('span', { class: 'up', text: '(▲ ' + fmtInt(r.cpOpt - cp) + ')' }));
+  }
+
   // ---------- 시작 ----------
   function selfTest() {
     const t = new E.Workbook(M); const v = t.get(SH, 'C36'); const exp = M.check['<Main>!C36'];
@@ -893,7 +957,7 @@
     n.readOnly = !!shared;
     n.value = shared ? (shared.nk || '') : nickOf(store.current);
   }
-  renderForms(); renderProfiles(); wireProfiles(); syncNick(); wireSelection(); wireCapture(); wireShare();
+  renderForms(); renderProfiles(); wireProfiles(); syncNick(); wireSelection(); wireCapture(); wireShare(); wireOpt();
   refresh();
   openHash();
   selfTest();

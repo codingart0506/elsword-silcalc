@@ -6,7 +6,7 @@
 <title>엘소드 실투력 계산기</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%233182F6%22/%3E%3Cpath d=%22M9 20 L14 14 L18 17 L23 10%22 stroke=%22white%22 stroke-width=%223%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 
-<link rel="stylesheet" href="style.css?v=6d0a4136">
+<link rel="stylesheet" href="style.css?v=5b1780dd">
 </head>
 <body>
 <div class="wrap">
@@ -67,6 +67,7 @@
       <div class="stage-inner">
         <canvas id="shot"></canvas>
         <div class="sel" id="sel" hidden></div>
+        <button type="button" class="shot-x" id="btnShotX" aria-label="사진 지우기" title="사진 지우기">×</button>
       </div>
       <div class="stage-bar">
         <button class="txt sm mute" id="btnSelAll">영역 다시 고르기</button>
@@ -85,6 +86,22 @@
         <button class="btn primary wide" id="btnApply">선택한 값 적용</button>
       </div>
     </div>
+  </section>
+
+  <section class="card opt-card" id="optCard" hidden aria-labelledby="optTitle">
+    <h2 id="optTitle">크극 최적화</h2>
+    <p class="opt-sub">DPS가 가장 높아지는 크리·극대·보뎀 소켓 배분이에요</p>
+    <table class="opt-table">
+      <thead><tr><th scope="col"><span class="sr">항목</span></th><th scope="col">지금</th><th scope="col">최적</th><th scope="col">소켓 조정</th></tr></thead>
+      <tbody id="optBody"></tbody>
+    </table>
+    <p class="opt-gain" id="optGain"></p>
+    <details class="opt-set">
+      <summary>계산 기준</summary>
+      <div class="opt-set-row"><label for="optBase">기준 보뎀</label><select id="optBase"></select></div>
+      <div class="opt-set-row"><label for="optMin">크리 최소 수치</label><span class="opt-min"><input id="optMin" type="text" inputmode="decimal" class="num" autocomplete="off"><span>%</span></span></div>
+      <p class="opt-hint">크리 최소 수치는 아이템에 붙어 있어 바꿀 수 없는 크리 소켓 합이에요. 기본 25%</p>
+    </details>
   </section>
 
   </div>
@@ -160,10 +177,11 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
 <script src="engine.js?v=8825723b"></script>
 <script src="model.js?v=e821cead"></script>
-<script src="ocr.js?v=bf357292"></script>
+<script src="ocr.js?v=e616a30f"></script>
 <script src="icons.js?v=8eccb507"></script>
 <script src="gear.js?v=ceb96c08"></script>
-<script src="app.js?v=066d2939"></script>
+<script src="opt.js?v=8522dd93"></script>
+<script src="app.js?v=5ed11480"></script>
 <script src="rank.js?v=719e30ab"></script>
 </body>
 </html>
