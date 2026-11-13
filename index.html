@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>엘소드 실투력 계산기 · 화면인식 자동기입</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M16 3 L28 7 V15 C28 22 22 27 16 29 C10 27 4 22 4 15 V7 Z%22 fill=%22%23E8213F%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="tb-title">
+    <svg class="shield" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 L28 7 V15 C28 22 22 27 16 29 C10 27 4 22 4 15 V7 Z"/></svg>
+    <h1>실투력 계산기</h1>
+    <span class="ver" id="ver"></span>
+  </div>
+  <div class="tb-tools">
+    <label class="sr" for="profileSel">저장된 캐릭터</label>
+    <select id="profileSel"></select>
+    <button class="gbtn" id="btnSave">저장</button>
+    <button class="gbtn" id="btnNew">새 캐릭터</button>
+    <button class="gbtn icon" id="btnMore" aria-expanded="false" aria-label="더보기">⋯</button>
+    <div class="menu" id="moreMenu" hidden>
+      <button id="btnRename">이름 바꾸기</button>
+      <button id="btnExport">설정 내보내기</button>
+      <button id="btnImport">설정 가져오기</button>
+      <button id="btnReset">예시 값으로 되돌리기</button>
+      <button id="btnDelete" class="danger">이 캐릭터 삭제</button>
+    </div>
+  </div>
+</header>
+
+<div class="dialog" id="dialog" hidden>
+  <div class="win dialog-win" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <div class="win-title"><h3 id="dlgTitle"></h3></div>
+    <div class="win-body">
+      <p id="dlgText"></p>
+      <input id="dlgInput" type="text" hidden>
+      <textarea id="dlgArea" rows="6" hidden></textarea>
+      <div class="dlg-actions">
+        <button class="gbtn" id="dlgCancel">취소</button>
+        <button class="gbtn sky" id="dlgOk">확인</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<main class="layout">
+  <div class="col-main">
+    <section class="win" id="ocrCard" aria-labelledby="ocrTitle">
+      <div class="win-title"><h2 id="ocrTitle">화면인식</h2><span class="win-sub">상세 스탯 창을 찍으면 수치가 채워져요</span></div>
+      <div class="win-body">
+        <div class="ocr-src">
+          <button class="gbtn sky" id="btnShare">화면 공유로 캡처</button>
+          <button class="gbtn sky" id="btnGrab" hidden>지금 캡처</button>
+          <button class="gbtn" id="btnStop" hidden>공유 중지</button>
+          <label class="gbtn" for="fileIn">이미지 열기</label>
+          <input id="fileIn" type="file" accept="image/*" hidden>
+          <span class="hint">스크린샷을 <kbd>Ctrl</kbd>+<kbd>V</kbd>로 붙여넣거나 끌어다 놓아도 돼요</span>
+        </div>
+        <p class="notice" id="shareMsg" hidden></p>
+        <div class="stage" id="stage" hidden>
+          <div class="stage-inner">
+            <canvas id="shot"></canvas>
+            <div class="sel" id="sel" hidden></div>
+          </div>
+          <div class="stage-bar">
+            <span class="hint">상세 스탯 창은 자동으로 찾아요. 잘 안 되면 창 부분만 드래그해서 고르세요</span>
+            <button class="gbtn" id="btnSelAll">전체 영역</button>
+            <button class="gbtn sky" id="btnOcr">인식하기</button>
+          </div>
+          <div class="progress" id="ocrProg" hidden><div class="bar"></div><span class="ptext"></span></div>
+        </div>
+        <div class="ocr-result" id="ocrResult" hidden>
+          <div class="ocr-res-head"><strong id="ocrCount"></strong><span class="hint">틀린 값은 고친 뒤 적용하세요</span></div>
+          <div class="table-wrap">
+            <table class="ocr-table">
+              <thead><tr><th scope="col"><span class="sr">적용</span></th><th scope="col">항목</th><th scope="col">지금 값</th><th scope="col">읽은 값</th></tr></thead>
+              <tbody id="ocrBody"></tbody>
+            </table>
+          </div>
+          <div class="ocr-actions">
+            <button class="gbtn" id="btnOcrAll">전체 선택</button>
+            <button class="gbtn sky" id="btnApply">선택한 값 적용</button>
+          </div>
+          <details class="raw"><summary>읽은 글자 그대로 보기</summary><pre id="ocrRaw"></pre></details>
+        </div>
+      </div>
+    </section>
+
+    <section class="win" aria-labelledby="statTitle">
+      <div class="win-title"><h2 id="statTitle">상세 스탯</h2>
+        <div class="class-pick"><label for="in-C6">전직</label><span id="classSlot"></span></div>
+      </div>
+      <div class="win-body flush">
+        <div class="tabs" role="tablist" id="tabs"></div>
+        <div id="forms"></div>
+      </div>
+    </section>
+  </div>
+
+  <aside class="col-side">
+    <div class="side-stick">
+      <section class="win cp-win" aria-labelledby="cpTitle">
+        <div class="win-title"><h2 id="cpTitle">전투력</h2><span class="win-sub" id="rClass"></span></div>
+        <div class="win-body light">
+          <div class="cp-row">
+            <svg class="shield big" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 L28 7 V15 C28 22 22 27 16 29 C10 27 4 22 4 15 V7 Z"/></svg>
+            <div>
+              <div class="cp-label">실질 전투력</div>
+              <div class="cp-value" id="rCP">-</div>
+              <div class="cp-unit" id="rCPk"></div>
+            </div>
+          </div>
+          <div class="cmp">
+            <div class="cmp-row"><select id="selP12" data-cell="P12" aria-label="비교 기준"></select><span>의</span><b id="rY12">-</b><span>배</span></div>
+            <div class="cmp-row"><select id="selQ15" data-cell="Q15" aria-label="목표 기준"></select><span>까지 DPS</span><b id="rZ15">-</b><span>더 필요</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="win" aria-labelledby="mkTitle">
+        <div class="win-title"><h2 id="mkTitle">만크극</h2><span class="win-sub">DPS와 상관없이 크리·극대화 최대치</span></div>
+        <div class="win-body flush">
+          <div class="srow"><span class="lab">크리티컬 확률</span><b class="val" id="rAJ28">-</b></div>
+          <div class="srow"><span class="lab">극대화</span><b class="val" id="rAJ29">-</b></div>
+          <div class="srow"><span class="lab">100% 크리 가능</span><b class="val" id="rAG30">-</b></div>
+          <div class="srow"><span class="lab">최대 최종 크확</span><b class="val" id="rAJ30">-</b></div>
+        </div>
+      </section>
+
+      <section class="win" aria-labelledby="raidTitle">
+        <div class="win-title"><h2 id="raidTitle">갈 수 있는 던전</h2></div>
+        <div class="win-body flush">
+          <div class="raid" id="raid"></div>
+          <p class="foot-note pad">실질 체력 기준 순수 딜타임 추정이에요. 패턴이 긴 레이드는 실제와 차이가 커요.</p>
+        </div>
+      </section>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <p>계산 공식은 <b>[실질전투력] Actual Combat Power</b> 시트(제작 마음담은편지, <a href="https://discord.gg/A3BJHhWuMZ" target="_blank" rel="noopener">디스코드</a>)를 그대로 옮겼어요. 시트와 값이 다르면 알려주세요.</p>
+  <p id="selfTest"></p>
+</footer>
+
+<script>window.SIL_CDN = true;</script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
+<script src="engine.js"></script>
+<script src="model.js"></script>
+<script src="ocr.js"></script>
+<script src="icons.js"></script>
+<script src="gear.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
