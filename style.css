@@ -190,7 +190,17 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 
 /* 대화상자 */
 .dialog { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 50; padding: 16px; }
-.dialog-card { background: #fff; border-radius: 20px; padding: 24px; width: min(400px, 100%); }
+.dialog-card { background: #fff; border-radius: 20px; padding: 24px; width: min(400px, 100%); max-height: 92vh; overflow: auto; }
+.extra-card { width: min(480px, 100%); }
+.ex-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.ex-row > span { flex: 1; font-size: 15px; font-weight: 600; display: flex; flex-direction: column; gap: 2px; }
+.ex-row > span small { font-size: 12px; color: var(--mute); font-weight: 400; }
+.ex-row input.num { width: 130px; }
+.ex-sub { font-size: 13px; font-weight: 700; color: var(--mute); margin-top: 16px; }
+.ex-row.eng { border-bottom: 0; padding: 4px 0; }
+.ex-row.eng > span { flex: 0 0 16px; color: var(--mute); }
+.ex-row.eng select:first-of-type { flex: 1; min-width: 0; }
+.ex-row.eng select:last-of-type { width: 96px; }
 .dialog-card h3 { margin: 0 0 6px; font-size: 18px; }
 .dialog-card p { margin: 0 0 14px; color: var(--sub); font-size: 14px; }
 .dialog-card input { width: 100%; }
@@ -222,3 +232,8 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 .mutetag { color: var(--mute); font-size: 12px; font-weight: 500; }
 .unk-det summary { cursor: pointer; font-size: 13px; color: var(--mute); font-weight: 600; padding: 4px 0; }
 .unk-det[open] summary { margin-bottom: 6px; }
+
+/* 각인석: 이름·지금 값 아래 줄에 옵션+수치 */
+.ocr-table tr.engrave-row td:nth-child(4) { grid-column: 2 / -1; grid-row: 3; justify-content: flex-start; padding-top: 6px; }
+.engrave-row .gear-pick select:first-child { flex: 1; max-width: 260px; }
+.engrave-row .gear-pick select:last-child { width: 110px; }

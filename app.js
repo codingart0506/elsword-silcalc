@@ -84,7 +84,7 @@
   const STAT_CELLS = 'C11 C12 C13 C14 C15 C17 C18 C19 C20 C21 C22 C24 C25 C26 C27 C29 C30 C31 C32 C33 C34 C35'.split(' ');
   const BLANK = Object.assign({ C6: '' }, Object.fromEntries(STAT_CELLS.map(a => [a, null])), {
     H11: 0, H12: 0, H13: 0, H15: '미사용', F17: '해당사항 없음', F18: '해당사항 없음', H17: 0, H18: 0,
-    D20: '해당사항 없음', D21: '해당사항 없음', D22: '해당사항 없음', H20: '해당사항 없음', H21: '해당사항 없음', H22: '해당사항 없음',
+    D20: '물리 공격력 증가 (%)', D21: '크리티컬 데미지 증가 (%)', D22: '스킬 데미지 증가 (%)', H20: 0.05, H21: 0.05, H22: 0.05,
     G24: '미착용', G25: '미착용', G27: '해당사항 없음', G28: '해당사항 없음', G29: '해당사항 없음', G30: '해당사항 없음',
     H31: 0, H32: 0, H33: 0, G35: '1세트 또는 미착용',
     L11: '미사용', L12: '미사용', L13: '미사용', L14: '미사용', L15: '미사용',
@@ -100,6 +100,8 @@
   try { const s = JSON.parse(localStorage.getItem(LS)); if (s && s.profiles) store = s; } catch (e) { /* 저장소 없음 */ }
   // 예전 버전에서 손대지 않은 캐릭터(시트 예시 값)는 빈 세팅으로
   for (const [k, v] of Object.entries(store.profiles)) if (!v || !Object.keys(v).length) { store.profiles[k] = blank(); if (store.bases) delete store.bases[k]; }
+  // 예전 기본값(각인 없음)이던 캐릭터는 기본 각인으로
+  for (const v of Object.values(store.profiles)) if (v && v.D20 === '해당사항 없음' && v.D21 === '해당사항 없음' && v.D22 === '해당사항 없음' && v.H20 === '해당사항 없음') Object.assign(v, { D20: BLANK.D20, D21: BLANK.D21, D22: BLANK.D22, H20: 0.05, H21: 0.05, H22: 0.05 });
   if (!store.bases) store.bases = {};
   let inputs = Object.assign({}, store.profiles[store.current] || {});
   if (!store.bases[store.current]) store.bases[store.current] = Object.assign({}, inputs);
@@ -242,9 +244,16 @@
 
   // ---------- 값 변경 / 재계산 ----------
   let raf = 0;
+  const ATK = ['물리 공격력 증가 (%)', '마법 공격력 증가 (%)'];
+  function syncEngraveType() {
+    const t = g('AC67'); if (t !== '물리' && t !== '마법') return false;
+    const want = t === '마법' ? ATK[1] : ATK[0]; let ch = false;
+    for (const a of ['D20', 'D21', 'D22']) if (ATK.includes(inputs[a]) && inputs[a] !== want) { inputs[a] = want; wb.setInput(SH, a, want); ch = true; }
+    return ch;
+  }
   function setVal(a, v) {
     inputs[a] = v; wb.setInput(SH, a, v);
-    if (a === 'C6') setTimeout(renderProfiles, 0);
+    if (a === 'C6') { syncEngraveType(); setTimeout(renderProfiles, 0); }
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; refresh(); });
     scheduleAutosave();
   }
@@ -408,6 +417,8 @@
       try { if (window.SilGear) { pt.textContent = '악세서리 아이콘 보는 중'; gear = window.SilGear.recognize(shot); } } catch (e) { console.error(e); }
       try { if (gear && gear.cls) { pt.textContent = '칭호 읽는 중'; res.title = await O.readTitle(shot, gear.cls); } } catch (e) { console.error(e); }
       showOcrResult(res, gear);
+      prog.hidden = true;
+      askExtras(gear && gear.cls && gear.cls.match ? gear.cls.match.name : null);
     } catch (e) {
       console.error(e); pt.textContent = '인식 실패: ' + (e.message || e);
       return;
@@ -451,22 +462,43 @@
         el('td', { class: 'gear-pick' }, sel)));
     }
     // 상세 스탯 창에 없는 값: 비어 있으면 여기서 바로 입력
-    for (const c of ['C12', 'C13']) {
-      if (Number(g(c)) > 0) continue;
-      const cb = el('input', { type: 'checkbox', 'aria-label': '적용' });
-      const inp = el('input', { type: 'text', inputmode: 'decimal', 'data-cell': c, class: 'num', placeholder: '직접 입력', oninput: () => { cb.checked = inp.value.trim() !== ''; } });
-      body.append(el('tr', { class: 'manual-row' },
-        el('td', {}, cb),
-        el('td', {}, label(c === 'C12' ? 'B12' : 'B13'), el('small', { class: 'lowtag', text: ' 창에 없어요' })),
-        el('td', { class: 'dim', text: '비어 있음' }),
-        el('td', {}, inp)));
-    }
     if (gear) showGearRows(gear);
     else lastGear = null;
     const gearN = body.querySelectorAll('tr.gear-row:not(.none):not(.cls-row)').length;
     if (gear && gear.cls && gear.cls.match) $('#ocrCount').textContent += ', 전직';
     if (gearN) $('#ocrCount').textContent += `, 악세서리 ${gearN}개`;
     $('#ocrResult').hidden = false;
+  }
+
+  // ---------- 사진에 안 나오는 값: 인식 뒤 바로 묻기 ----------
+  function askExtras(clsName) {
+    const old = $('#extraDlg'); if (old) old.remove();
+    if (clsName && !inputs.C6) { setVal('C6', clsName); refresh(); }
+    const numIn = (c, ph) => { const v = g(c); return el('input', { type: 'text', inputmode: 'numeric', class: 'num', 'data-cell': c, placeholder: ph, value: Number(v) > 0 ? String(v) : '' }); };
+    const iC12 = numIn('C12', '예: 205000'), iC13 = numIn('C13', '예: 60000');
+    const rows = [];
+    const engr = [20, 21, 22].map(i => {
+      const mk = (cell) => { const sel = el('select', { 'data-cell': cell }); for (const x of optionsOf(cell) || []) sel.append(el('option', { value: String(x), text: typeof x === 'number' ? fmtPct(x, x * 1000 % 10 ? 1 : 0) : String(x).replace(' (%)', '') })); sel.value = String(g(cell)); return sel; };
+      return [mk('D' + i), mk('H' + i)];
+    });
+    const atk = label('AC67') === '마법' ? '마법' : '물리';
+    const card = el('div', { class: 'dialog-card extra-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'exTitle' },
+      el('h3', { id: 'exTitle', text: '사진에 안 나오는 값' }),
+      el('p', { text: '게임에서 마우스를 올려야 보이는 값이에요. 모르면 비워 두고 넘어가도 돼요.' }),
+      el('label', { class: 'ex-row' }, el('span', {}, `${atk} 공격력 극대화 범위 최댓값`, el('small', { text: `상세 스탯의 ${atk} 공격력에 마우스를 올리면 나오는 "12345 ~ 67890" 중 오른쪽 숫자` })), iC12),
+      el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '무기에 마우스를 올리면 나오는 무기 자체 공격력' })), iC13),
+      el('div', { class: 'ex-sub', text: '금빛 각인석 · 기본은 공격력·크뎀·스뎀 5%' }),
+      ...engr.map(([o, v], k) => el('div', { class: 'ex-row eng' }, el('span', { text: `${k + 1}` }), o, v)),
+      el('div', { class: 'dlg-actions' },
+        el('button', { class: 'btn', onclick: () => wrap.remove(), text: '나중에' }),
+        el('button', { class: 'btn primary', text: '확인', onclick: () => {
+          for (const [inp, c] of [[iC12, 'C12'], [iC13, 'C13']]) { const t = inp.value.replace(/[,\s]/g, ''); if (t && Number(t) > 0) setVal(c, Number(t)); }
+          for (const [o, v] of engr) { setVal(o.dataset.cell, parseOpt(o.dataset.cell, o.value)); setVal(v.dataset.cell, parseOpt(v.dataset.cell, v.value)); }
+          syncEngraveType(); refresh(); scheduleAutosave(); wrap.remove();
+        } })));
+    const wrap = el('div', { class: 'dialog', id: 'extraDlg' }, card);
+    document.body.append(wrap);
+    setTimeout(() => (Number(g('C12')) > 0 ? iC13 : iC12).focus(), 50);
   }
 
   // ---------- 일반 악세서리(아이콘) ----------
@@ -480,7 +512,7 @@
   let lastGear = null;
   function showGearRows(gear) {
     lastGear = gear;
-    const body = $('#ocrBody'); body.querySelectorAll('.gear-row, .gear-head, .gear-unknown').forEach(n => n.remove());
+    const body = $('#ocrBody'); body.querySelectorAll('.gear-row, .gear-head:not(.sec-head), .gear-unknown').forEach(n => n.remove());
     const cat = gearOptions();
     const pick = {};
     for (const c of gear.cells) {
@@ -534,13 +566,16 @@
   function applyOcr() {
     let n = 0;
     document.querySelectorAll('#ocrBody tr').forEach(tr => {
-      const cb = tr.querySelector('input[type=checkbox]'), inp = tr.querySelector('[data-cell]');
-      if (!cb || !inp || !cb.checked) return;
-      const c = inp.getAttribute('data-cell');
-      if (inp.tagName === 'SELECT') { if (inp.value) { inputs[c] = inp.value; n++; } return; }
-      const v = parseNum(inp.value, PCT.has(c) ? 'pct' : 'num');
-      if (v !== null) { inputs[c] = v; n++; }
+      const cb = tr.querySelector('input[type=checkbox]');
+      if (!cb || !cb.checked) return;
+      tr.querySelectorAll('[data-cell]').forEach(inp => {
+        const c = inp.getAttribute('data-cell');
+        if (inp.tagName === 'SELECT') { if (inp.value) { inputs[c] = parseOpt(c, inp.value); n++; } return; }
+        const v = parseNum(inp.value, PCT.has(c) ? 'pct' : 'num');
+        if (v !== null) { inputs[c] = v; n++; }
+      });
     });
+    applyInputs(); syncEngraveType();
     let autoBase = false;
     if (!shared && isEmptySetting(store.bases[store.current] || {}) && !isEmptySetting(inputs)) { store.bases[store.current] = Object.assign({}, inputs); applyBase(); autoBase = true; }
     applyInputs(); refresh(); scheduleAutosave(); renderProfiles();
