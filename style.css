@@ -179,6 +179,10 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 .in-head h2 { margin: 0; }
 .class-pick { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--sub); font-weight: 600; }
 .class-pick select { font-weight: 600; min-width: 170px; }
+.head-picks { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.nick-pick input { font: inherit; font-size: 15px; font-weight: 600; color: var(--text); background: var(--fill); border: 0; border-radius: 10px; padding: 9px 12px; width: 150px; }
+.nick-pick input::placeholder { color: var(--mute); font-weight: 500; }
+.nick-pick input[readonly] { color: var(--sub); }
 .seg { display: flex; background: var(--fill); border-radius: 12px; padding: 4px; gap: 2px; margin-bottom: 8px; }
 .tab { flex: 1; font: inherit; font-size: 14px; font-weight: 600; color: var(--mute); background: none; border: 0; padding: 8px 6px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
 .tab[aria-selected="true"] { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
@@ -238,6 +242,11 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
   input.num, input.pct { width: 104px; }
   .class-pick { width: 100%; }
   .class-pick select { flex: 1; }
+  .head-picks { width: 100%; gap: 8px; }
+  .class-pick label { min-width: 44px; }
+  .nick-pick input { flex: 1; width: auto; }
+  .class-pick > span { flex: 1; display: flex; }
+  .class-pick > span select { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 

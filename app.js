@@ -103,6 +103,8 @@
   // 예전 기본값(각인 없음)이던 캐릭터는 기본 각인으로
   for (const v of Object.values(store.profiles)) if (v && v.D20 === '해당사항 없음' && v.D21 === '해당사항 없음' && v.D22 === '해당사항 없음' && v.H20 === '해당사항 없음') Object.assign(v, { D20: BLANK.D20, D21: BLANK.D21, D22: BLANK.D22, H20: 0.05, H21: 0.05, H22: 0.05 });
   if (!store.bases) store.bases = {};
+  if (!store.names) store.names = {}; // 캐릭터별 닉네임(선택)
+  const nickOf = (key) => (store.names[key] || '').trim();
   let inputs = Object.assign({}, store.profiles[store.current] || {});
   if (!store.bases[store.current]) store.bases[store.current] = Object.assign({}, inputs);
   // 기준 세팅을 따로 계산해서 지금 값과 비교 (공유 링크를 볼 때는 내 세팅이 기준)
@@ -273,7 +275,7 @@
   function renderResults() {
     const hero = $('.hero');
     $('#btnLink').hidden = !CAN_LINK || isEmptySetting(inputs);
-    $('#btnClear').hidden = isEmptySetting(inputs) || !!shared;
+    $('#btnClear').hidden = (isEmptySetting(inputs) && !nickOf(store.current)) || !!shared;
     $('#delta').hidden = isEmptySetting(inputs);
     if (isEmptySetting(inputs)) {
       hero.classList.add('empty');
@@ -289,7 +291,8 @@
     const missing = ['C12', 'C13'].filter(a => !(Number(g(a)) > 0));
     $('#rCPk').classList.toggle('warn', missing.length > 0);
     setText('#rCPk', missing.length ? `${missing.map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력').join('·')}을 넣어야 정확해요` : korUnit(cp));
-    setText('#rClass', label('C6'));
+    const nk = shared ? (shared.nk || '') : nickOf(store.current);
+    setText('#rClass', nk ? `${nk} (${label('C6')})` : label('C6'));
     const fi = $('#fieldInfo'); if (fi) fi.textContent = `${label('K34')} ${fmtPct(g('L34'), 0)}, ${label('K35')} ${fmtPct(g('L35'), 0)} 적용 중`;
     // 기준 대비
     const base = baseWb.get(SH, 'C36');
@@ -308,11 +311,12 @@
   }
 
   // ---------- 프로필 ----------
-  // 캐릭터 이름은 따로 묻지 않고 전직으로 보여줌
+  // 닉네임을 적었으면 닉네임으로, 아니면 전직으로 보여줌
   function profileLabel(key) {
     const p = key === store.current ? inputs : (store.profiles[key] || {});
     const keys = Object.keys(store.profiles);
     const cls = p.C6 || '새 캐릭터';
+    if (nickOf(key)) return p.C6 ? `${nickOf(key)} (${p.C6})` : nickOf(key);
     const same = keys.filter(k => ((k === store.current ? inputs : store.profiles[k]) || {}).C6 === p.C6 || (!p.C6 && !((k === store.current ? inputs : store.profiles[k]) || {}).C6));
     return same.length > 1 ? `${cls} ${same.indexOf(key) + 1}` : cls;
   }
@@ -324,6 +328,7 @@
   }
   function loadProfile(name) {
     store.current = name; inputs = Object.assign({}, store.profiles[name] || {});
+    syncNick();
     if (!store.bases[name]) store.bases[name] = Object.assign({}, inputs);
     persist(); applyInputs(); applyBase(); renderProfiles(); refresh();
   }
@@ -343,17 +348,23 @@
   }
   function wireProfiles() {
     $('#profileSel').onchange = (e) => { if (shared) { shared = null; $('#sharedBar').hidden = true; history.replaceState(null, '', location.pathname); } loadProfile(e.target.value); };
+    $('#nickIn').oninput = (e) => {
+      if (shared) return;
+      const v = e.target.value.trim();
+      if (v) store.names[store.current] = v.slice(0, 20); else delete store.names[store.current];
+      persist(); renderProfiles(); refresh();
+    };
     $('#btnNew').onclick = () => {
       const name = 'c' + Date.now().toString(36);
       store.profiles[name] = blank(); loadProfile(name);
     };
     $('#btnDelete').onclick = async () => {
       if (!(await dialog({ title: '캐릭터 삭제', text: `"${profileLabel(store.current)}" 세팅을 지울까요?`, ok: '삭제', danger: true }))) return;
-      delete store.profiles[store.current]; delete store.bases[store.current]; loadProfile(Object.keys(store.profiles)[0]);
+      delete store.profiles[store.current]; delete store.bases[store.current]; delete store.names[store.current]; loadProfile(Object.keys(store.profiles)[0]);
     };
     $('#btnClear').onclick = async () => {
       if (!(await dialog({ title: '세팅 비우기', text: '이 캐릭터의 입력값을 모두 지우고 처음 상태로 돌아가요.', ok: '비우기', danger: true }))) return;
-      inputs = blank(); store.profiles[store.current] = blank(); store.bases[store.current] = blank();
+      inputs = blank(); store.profiles[store.current] = blank(); store.bases[store.current] = blank(); delete store.names[store.current]; syncNick();
       persist(); applyInputs(); applyBase(); renderProfiles(); refresh();
       $('#ocrResult').hidden = true; $('#stage').hidden = true;
     };
@@ -593,10 +604,10 @@
   const b64u = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
   const unb64u = (t) => { const s = atob(t.replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(s, c => c.charCodeAt(0)); };
   async function pipe(u8, Stream) { return new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new Stream('deflate-raw'))).arrayBuffer()); }
-  async function packShare(name, inp) {
+  async function packShare(name, inp, nick) {
     const i = {};
     for (const [a, v] of Object.entries(inp)) if (String(v) !== String(defaultOf(a))) i[a] = v;
-    const raw = new TextEncoder().encode(JSON.stringify({ v: 1, n: name, i }));
+    const raw = new TextEncoder().encode(JSON.stringify(nick ? { v: 1, n: name, k: nick, i } : { v: 1, n: name, i }));
     if (window.CompressionStream) return 'z' + b64u(await pipe(raw, CompressionStream));
     return 'j' + b64u(raw);
   }
@@ -609,23 +620,24 @@
   }
   function toast(t) { const n = $('#toast'); n.textContent = t; n.hidden = false; clearTimeout(n._t); n._t = setTimeout(() => { n.hidden = true; }, 2200); }
   function enterShared(o) {
-    shared = { n: String(o.n || '공유된 세팅').slice(0, 30), i: o.i };
+    shared = { n: String(o.n || '공유된 세팅').slice(0, 30), nk: String(o.k || '').slice(0, 20), i: o.i };
     inputs = Object.assign({}, shared.i);
     $('#sharedBar').hidden = false;
-    $('#sharedText').textContent = `${shared.n} 세팅을 보고 있어요`;
+    $('#sharedText').textContent = shared.nk ? `${shared.nk} 님의 ${shared.n} 세팅을 보고 있어요` : `${shared.n} 세팅을 보고 있어요`;
+    syncNick();
     applyInputs(); applyBase(); refresh();
   }
   function leaveShared() {
     shared = null; $('#sharedBar').hidden = true;
     history.replaceState(null, '', location.pathname + location.search);
-    inputs = Object.assign({}, store.profiles[store.current] || {});
+    inputs = Object.assign({}, store.profiles[store.current] || {}); syncNick();
     applyInputs(); applyBase(); refresh();
   }
   function wireShare() {
     if (!CAN_LINK) return;
     $('#btnLink').onclick = async () => {
       const nm = inputs.C6 || '공유된';
-      const code = await packShare(nm, inputs);
+      const code = await packShare(nm, inputs, nickOf(store.current));
       const url = location.origin + location.pathname + '#s=' + code;
       try { await navigator.clipboard.writeText(url); toast('링크를 복사했어요. 받은 사람은 이 세팅 그대로 보게 돼요'); }
       catch (e) { await dialog({ title: '링크', text: '아래 주소를 복사해서 보내세요.', area: url, ok: '닫기' }); }
@@ -634,6 +646,7 @@
     $('#btnSaveShared').onclick = () => {
       const name = 'c' + Date.now().toString(36);
       store.profiles[name] = Object.assign({}, inputs); store.bases[name] = Object.assign({}, inputs);
+      if (shared && shared.nk) store.names[name] = shared.nk;
       shared = null; $('#sharedBar').hidden = true; history.replaceState(null, '', location.pathname + location.search);
       loadProfile(name); toast('내 캐릭터 목록에 저장했어요');
     };
@@ -653,7 +666,12 @@
   }
   persist();
   applyInputs();
-  renderForms(); renderProfiles(); wireProfiles(); wireSelection(); wireCapture(); wireShare();
+  function syncNick() {
+    const n = $('#nickIn'); if (!n) return;
+    n.readOnly = !!shared;
+    n.value = shared ? (shared.nk || '') : nickOf(store.current);
+  }
+  renderForms(); renderProfiles(); wireProfiles(); syncNick(); wireSelection(); wireCapture(); wireShare();
   refresh();
   openHash();
   selfTest();
