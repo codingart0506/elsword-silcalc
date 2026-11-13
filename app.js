@@ -251,15 +251,6 @@
     for (const a of ['D20', 'D21', 'D22']) if (ATK.includes(inputs[a]) && inputs[a] !== want) { inputs[a] = want; wb.setInput(SH, a, want); ch = true; }
     return ch;
   }
-  // 무기 공격력은 메타모르피나 일부 아이템에서만 계산에 들어감 → 실제로 결과가 바뀔 때만 물어봄
-  function weaponMatters() {
-    const keep = inputs.C13;
-    const at = (v) => { wb.setInput(SH, 'C13', v); const r = wb.get(SH, 'C36'); return typeof r === 'number' ? r : NaN; };
-    const a = at(0), b = at(Math.max(1000, Math.round((Number(g('C12')) || 200000) / 4)));
-    wb.setInput(SH, 'C13', keep == null ? null : keep);
-    if (Number.isNaN(a) || Number.isNaN(b)) return false;
-    return a !== b;
-  }
   function setVal(a, v) {
     inputs[a] = v; wb.setInput(SH, a, v);
     if (a === 'C6') { syncEngraveType(); setTimeout(renderProfiles, 0); }
@@ -295,7 +286,7 @@
     const cp = g('C36');
     const noRange = !(Number(g('C12')) > 0); // 극대화 범위가 없으면 계산값이 의미 없음(음수 등)
     setText('#rCP', noRange ? '—' : typeof cp === 'number' ? fmtInt(cp) : String(cp));
-    const missing = ['C12', 'C13'].filter(a => !(Number(g(a)) > 0) && (a !== 'C13' || weaponMatters()));
+    const missing = ['C12', 'C13'].filter(a => !(Number(g(a)) > 0));
     $('#rCPk').classList.toggle('warn', missing.length > 0);
     setText('#rCPk', missing.length ? `${missing.map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력').join('·')}을 넣어야 정확해요` : korUnit(cp));
     setText('#rClass', label('C6'));
@@ -494,14 +485,13 @@
     if (clsName && !inputs.C6) { setVal('C6', clsName); refresh(); }
     const numIn = (c, ph) => { const v = g(c); return el('input', { type: 'text', inputmode: 'numeric', class: 'num', 'data-cell': c, placeholder: ph, value: Number(v) > 0 ? String(v) : '' }); };
     const needRange = !gotRange && !(Number(g('C12')) > 0);
-    const needWeapon = !(Number(g('C13')) > 0) && weaponMatters();
-    if (!needRange && !needWeapon) return;
-    const iC13 = needWeapon ? numIn('C13', '예: 60000') : null;
+    // 무기 공격력은 사진에 안 나오므로 사진을 넣을 때마다 꼭 확인받음(전에 넣은 값이 있으면 미리 채워 둠)
+    const iC13 = numIn('C13', '예: 60000');
     const iC12 = needRange ? numIn('C12', '예: 205000') : null;
     const atk = label('AC67') === '마법' ? '마법' : '물리';
     const card = el('div', { class: 'dialog-card extra-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'exTitle' },
       el('h3', { id: 'exTitle', text: iC13 ? '무기 공격력을 알려주세요' : '극대화 범위 최댓값을 알려주세요' }),
-      el('p', { text: iC13 ? '이 세팅은 무기 공격력이 계산에 들어가요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.' : '이번 사진에서 못 찾은 값이에요.' }),
+      el('p', { text: iC13 ? '스크린샷에 안 나오는 값이에요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.' : '이번 사진에서 못 찾은 값이에요.' }),
       iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '극대화 범위가 아닌 무기 자체 수치' })), iC13) : null,
       iC12 ? el('label', { class: 'ex-row' }, el('span', {}, `${atk} 공격력 극대화 범위 최댓값`, el('small', { text: `이번 사진에서 못 찾았어요. 다음엔 ${atk} 공격력에 마우스를 올린 채로 찍으면 자동으로 들어가요` })), iC12) : null,
       el('div', { class: 'dlg-actions' },
