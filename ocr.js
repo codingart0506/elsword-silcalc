@@ -115,35 +115,89 @@
     return out;
   }
 
+  // 상세 스탯 창의 한 줄에 나란히 있는 두 칸(왼쪽, 오른쪽). 마우스 커서가 이름을 가렸을 때 옆 칸으로 추정
+  const ROW_PAIRS = [['C14', 'C15'], ['C17', 'C18'], ['C19', 'C20'], ['C29', 'C30'], ['C31', 'C32'], ['C33', 'C34']];
+  const RIGHT_OF = {}, LEFT_OF = {};
+  for (const [l, r] of ROW_PAIRS) { RIGHT_OF[l] = r; LEFT_OF[r] = l; }
+  const FIELD_OF = {};
+  for (const f of FIELDS) if (f.cell) FIELD_OF[f.cell] = f;
+
   // 행 목록 → 항목별 인식값
   function parseRows(rows) {
-    const found = {};
+    const found = {}, atk = [], guess = [];
     const put = (cell, value, info) => {
       if (value === null) return;
+      if (cell === 'C11') atk.push(Object.assign({ cell, value }, info));
       if (!found[cell] || info.score > found[cell].score) found[cell] = Object.assign({ cell, value }, info);
     };
     for (const row of rows) {
+      const conf = row.conf != null ? row.conf : 100;
+      const items = [];
       let pending = '';
       for (const p of splitPairs(row.text)) {
         const label = (pending + p.label);
         const mf = matchField(label);
-        if (mf && !mf.field.cell) { pending = ''; continue; }
-        if (mf) {
-          const f = mf.field;
-          const conf = row.conf != null ? row.conf : 100;
-          const v = toValue(p.raw, p.pct, f.kind);
-          let score = mf.score * (0.5 + conf / 200);
-          // 퍼센트 항목인데 % 가 없으면 신뢰도 낮춤
-          if (f.kind === 'pct' && !p.pct) score *= 0.85;
-          put(f.cell, v, { score, text: row.text.trim(), conf, label: f.names[0] || f.cell });
-          if (p.rangeMax && f.cell === 'C11') put('C12', toValue(p.rangeMax, false, 'int'), { score, text: row.text.trim(), conf, label: '극대화 범위 최댓값' });
-          pending = '';
-        } else {
+        // 숫자 바로 앞에 %가 붙어 있으면(커서가 숫자를 가려 '6'을 '%'로 읽는 등) 그 값은 믿지 않음
+        items.push({ p, mf, label, bad: /[%％]\s*$/.test(p.label) });
+        if (mf) pending = '';
+        else {
           // 숫자가 라벨 일부였을 수 있음(예: 오인식) → 다음 숫자 라벨에 이어붙임
           pending = label + p.raw;
           if (pending.length > 40) pending = pending.slice(-40);
         }
       }
+      const cellOf = (it) => it.mf ? it.mf.field.cell : null;
+      const baseScore = (it) => { const f = it.mf.field; let sc = it.mf.score * (0.5 + conf / 200); if (f.kind === 'pct' && !it.p.pct) sc *= 0.85; return sc; };
+      const take = (it, cell, sc, how) => { it.as = cell; it.sc = sc; it.how = how; };
+      for (const it of items) if (it.mf && it.mf.field.cell && !it.bad) take(it, it.mf.field.cell, baseScore(it));
+      // 1) 같은 줄에 같은 항목이 두 번(커서가 '초'를 가린 '초적응력' → '적응력'): 짝 칸으로
+      for (let i = 0; i + 1 < items.length; i++) {
+        const a = items[i], b = items[i + 1], c = cellOf(a);
+        if (!c || c !== cellOf(b)) continue;
+        if (RIGHT_OF[c]) take(b, RIGHT_OF[c], baseScore(b) * 0.9, 'pair');
+        else if (LEFT_OF[c]) take(a, LEFT_OF[c], baseScore(a) * 0.9, 'pair');
+      }
+      // 2) 한쪽 이름만 읽히고 옆 칸 이름이 가려졌을 때: 옆 칸 값으로 추정(이름으로 찾은 값이 없을 때만 씀)
+      const weak = (it) => !it.mf || (it.mf.score < 0.95 && !it.as);
+      const fits = (it, cell) => !it.bad && (FIELD_OF[cell].kind === 'pct' ? it.p.pct : !it.p.pct);
+      items.forEach((it, i) => {
+        const c = it.as || cellOf(it); if (!c || !it.mf || it.mf.score < 0.9) return;
+        if (RIGHT_OF[c]) for (let j = i + 1; j < items.length; j++) {
+          const o = items[j]; if (!weak(o)) break;
+          if (fits(o, RIGHT_OF[c])) { guess.push({ cell: RIGHT_OF[c], it: o, score: baseScore(it) * 0.8, row }); break; }
+        }
+        if (LEFT_OF[c]) for (let j = i - 1; j >= 0; j--) {
+          const o = items[j]; if (!weak(o)) break;
+          if (fits(o, LEFT_OF[c])) { guess.push({ cell: LEFT_OF[c], it: o, score: baseScore(it) * 0.8, row }); break; }
+        }
+      });
+      // 3) 공격력 이름이 일부 가려진 경우: '물리'/'마법'이 남아 있고 % 없는 큰 정수
+      for (const it of items) {
+        if (it.as || it.bad || it.p.pct) continue;
+        const t = norm(it.label);
+        if (/물리|마법/.test(t) && !/타입|범위/.test(t)) { const v = toValue(it.p.raw, false, 'int'); if (v >= 1000) guess.push({ cell: 'C11', it, value: v, score: 0.6, row }); }
+      }
+      for (const it of items) {
+        if (!it.as) continue;
+        const f = FIELD_OF[it.as];
+        const v = toValue(it.p.raw, it.p.pct, f.kind);
+        put(it.as, v, { score: it.sc, text: row.text.trim(), conf, label: f.names[0] || f.cell, guessed: !!it.how });
+        if (it.p.rangeMax && it.as === 'C11') put('C12', toValue(it.p.rangeMax, false, 'int'), { score: it.sc, text: row.text.trim(), conf, label: '극대화 범위 최댓값' });
+      }
+    }
+    for (const g of guess) {
+      if (found[g.cell]) continue;
+      const f = FIELD_OF[g.cell];
+      const v = g.value != null ? g.value : toValue(g.it.p.raw, g.it.p.pct, f.kind);
+      if (v === null) continue;
+      if (g.cell === 'C11') { atk.push({ cell: 'C11', value: v, score: g.score, text: g.row.text.trim(), conf: g.row.conf, label: f.names[0], guessed: true }); continue; }
+      found[g.cell] = { cell: g.cell, value: v, score: g.score, text: g.row.text.trim(), conf: g.row.conf, label: f.names[0] || f.cell, guessed: true };
+    }
+    // 물리·마법 공격력이 둘 다 보이면(둘 다 즐겨찾기) 높은 쪽이 주 공격력
+    if (atk.length) {
+      const top = Math.max(...atk.map(a => a.score));
+      const ok = atk.filter(a => a.score >= top * 0.8 || !found.C11);
+      found.C11 = ok.reduce((m, a) => (a.value > m.value ? a : m), ok[0]);
     }
     return found;
   }

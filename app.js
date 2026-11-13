@@ -150,6 +150,16 @@
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === SAGE && v.J30 === BLANK.J30) v.J30 = SET_CYCLE;
     store.mig.sage2 = 1;
   }
+  // 강역강 체크가 잠깐 강렬·초월 스킬 데미지를 같게 만들던 버전의 흔적: 기준 세팅에 원래 값이 있으면 되돌리고, 강배·역강배를 같게
+  if (!store.mig.eqFix) {
+    for (const [k, v] of Object.entries(store.profiles)) {
+      if (!v || !v._eq) continue;
+      const b = store.bases[k];
+      if (v.C29 != null && v.C29 === v.C30 && b && b.C29 != null && b.C30 != null && b.C29 !== b.C30 && Math.max(b.C29, b.C30) === v.C29) { v.C29 = b.C29; v.C30 = b.C30; }
+      const m = Math.max(Number(v.C24) || 0, Number(v.C25) || 0); if (m > 0) v.C24 = v.C25 = m;
+    }
+    store.mig.eqFix = 1;
+  }
   if (!store.names) store.names = {}; // 캐릭터별 닉네임(선택)
   const nickOf = (key) => (store.names[key] || '').trim();
   let inputs = Object.assign({}, store.profiles[store.current] || {});
@@ -546,7 +556,7 @@
       const cur = g(c);
       const inp = el('input', { type: 'text', inputmode: 'decimal', value: kind === 'pct' ? pctIn(f.value) : String(f.value), 'data-cell': c, class: kind });
       const same = typeof cur === 'number' && Math.abs(cur - f.value) < 1e-9;
-      const low = f.score < 0.8;
+      const low = f.score < 0.8 || f.guessed; // 커서에 가려 옆 칸 위치로 추정한 값도 확인 필요로 표시
       body.append(el('tr', { class: (same ? 'same' : '') + (low ? ' low' : '') },
         el('td', {}, el('input', { type: 'checkbox', checked: same ? null : 'checked', 'aria-label': '적용' })),
         el('td', { text: LABEL_OF[c] || label('B' + c.slice(1)) }, low ? el('small', { class: 'lowtag', text: ' 확인 필요' }) : null),
@@ -623,7 +633,7 @@
   }
   function eqRow() {
     const cb = el('input', { type: 'checkbox', id: 'exEq' }); cb.checked = !!inputs._eq;
-    return el('label', { class: 'chk-row ex-eq' }, cb, el('span', {}, '강배·역강배 바지 착용', el('small', { text: '강배·역강배 수치를 높은 쪽 수치로 같게 맞춰요' })));
+    return el('label', { class: 'chk-row ex-eq' }, cb, el('span', {}, '강역강', el('small', { text: '강배·역강배 수치를 높은 쪽 수치로 같게 맞춰요' })));
   }
   function askExtras({ weapon = true, range = false, during = false } = {}) {
     const open = $('#extraDlg');
