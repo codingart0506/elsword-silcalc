@@ -504,6 +504,41 @@
     };
     for (const h of hsHeld) held.append(updItem(h));
     for (const h of hsLive) live.append(updItem(h));
+
+    // 랭킹에 올라간 캐릭터: 숨기기 / 삭제(랭킹·갱신 기록·사진 모두)
+    const all = el('div', { class: 'adm-sec' }, el('h3', { text: '랭킹에 올라간 캐릭터' }),
+      el('p', { class: 'rank-note', text: '삭제하면 랭킹, 갱신 기록, 사진이 모두 지워지고 되돌릴 수 없어요. 다시 올리려면 새로 신청해야 해요.' }));
+    body.append(all);
+    const { data: ps, error: e3 } = await c.from('players').select('id,nickname,cls,cp,hidden,updated_at').order('cp', { ascending: false }).limit(500);
+    if (e3) throw e3;
+    if (!ps.length) all.append(el('p', { class: 'rank-note', text: '아직 올라간 캐릭터가 없어요' }));
+    ps.forEach((p, i) => {
+      const nm = el('span', { class: 'nm', text: `${i + 1}. ${p.nickname}${p.hidden ? ' (숨김)' : ''}` });
+      const hide = el('button', { type: 'button', class: 'btn', text: p.hidden ? '다시 보이기' : '숨기기' });
+      const del = el('button', { type: 'button', class: 'btn danger', text: '삭제' });
+      const item = el('div', { class: 'adm-item adm-plain' }, el('div', { class: 'adm-info' }, nm,
+        el('span', { text: `${p.cls}, 실투력 ${fmtInt(p.cp)}` }),
+        el('small', { text: `${ago(p.updated_at)} 갱신` }),
+        el('div', { class: 'adm-acts' }, hide, del)));
+      hide.onclick = async () => {
+        const nv = !p.hidden;
+        const { error: e } = await c.from('players').update({ hidden: nv }).eq('id', p.id);
+        if (e) { toast(errMsg(e)); return; }
+        p.hidden = nv; hide.textContent = nv ? '다시 보이기' : '숨기기';
+        nm.textContent = `${i + 1}. ${p.nickname}${nv ? ' (숨김)' : ''}`;
+        toast(nv ? '랭킹에서 숨겼어요' : '다시 보이게 했어요');
+      };
+      del.onclick = async () => {
+        const ok = await A.dialog({ title: `${p.nickname} 삭제`, text: '랭킹, 갱신 기록, 사진이 모두 지워지고 되돌릴 수 없어요.', ok: '삭제', danger: true });
+        if (!ok) return;
+        hide.disabled = del.disabled = true;
+        const { data: paths, error: e } = await c.rpc('admin_delete_player', { p_id: p.id });
+        if (e) { toast(errMsg(e)); hide.disabled = del.disabled = false; return; }
+        if (paths && paths.length) { const { error: re } = await c.storage.from('shots').remove(paths); if (re) console.warn(re); }
+        item.remove(); toast(`${p.nickname} 랭킹을 지웠어요`);
+      };
+      all.append(item);
+    });
   }
   $('#btnAdminOut').onclick = async () => { const c = await sb(); await c.auth.signOut(); adminInit(); };
 

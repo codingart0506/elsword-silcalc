@@ -339,6 +339,7 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .adm-info .code { font-size: 15px; color: var(--text); }
 .adm-info .code b { font-size: 18px; letter-spacing: 0.05em; }
 .adm-acts { display: flex; gap: 8px; margin-top: 6px; }
+.adm-item.adm-plain { grid-template-columns: 1fr; }
 .adm-flag { color: #e2780b; font-weight: 600; }
 .adm-hist { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .adm-hist .nm { font-weight: 700; }
