@@ -89,7 +89,8 @@ body.view-rank .minibar, body.view-admin .minibar { display: none; }
 .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--text); color: #fff; padding: 12px 18px; border-radius: 12px; font-size: 14px; font-weight: 600; z-index: 60; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
 .hero-value { font-size: 38px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: 4px; word-break: break-all; }
 .hero-value.err { font-size: 22px; color: var(--up); }
-.hero.empty .hero-value { color: #d1d6db; }
+.hero.empty .hero-value { display: none; } /* 값이 없을 때 회색 줄표를 띄우지 않음 */
+.hero.empty .hero-unit { margin-top: 10px; }
 .hero-unit.warn { color: #e2780b; font-weight: 600; }
 @media (max-width: 480px) { .hero-unit.warn { display: block; } }
 .ocr-table tr.manual-row td:nth-child(3)::before { content: ''; }
