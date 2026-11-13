@@ -843,9 +843,9 @@
   window.SilApp = {
     inputs: () => Object.assign({}, inputs),
     cp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
-    // 랭킹은 모두 같은 기준(강렬:초월 자동)으로 비교
-    rankInputs: () => Object.assign({}, inputs, { L42: false }),
-    rankCp: () => { wb.setInput(SH, 'L42', false); const v = g('C36'); applyInputs(); return typeof v === 'number' ? Math.round(v) : NaN; },
+    // 랭킹도 계산기에 넣은 그대로(강렬:초월 점유율을 직접 넣었으면 그 비율로) 반영
+    rankInputs: () => Object.assign({}, inputs),
+    rankCp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
     customShare: () => inputs.L42 === true,
     missing: () => isEmptySetting(inputs) ? ['세팅'] : ['C12', 'C13'].filter(a => !(Number(g(a)) > 0)).map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력'),
     cls: () => inputs.C6 || '',
