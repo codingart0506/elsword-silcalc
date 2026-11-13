@@ -251,6 +251,15 @@
     for (const a of ['D20', 'D21', 'D22']) if (ATK.includes(inputs[a]) && inputs[a] !== want) { inputs[a] = want; wb.setInput(SH, a, want); ch = true; }
     return ch;
   }
+  // 무기 공격력은 메타모르피나 일부 아이템에서만 계산에 들어감 → 실제로 결과가 바뀔 때만 물어봄
+  function weaponMatters() {
+    const keep = inputs.C13;
+    const at = (v) => { wb.setInput(SH, 'C13', v); const r = wb.get(SH, 'C36'); return typeof r === 'number' ? r : NaN; };
+    const a = at(0), b = at(Math.max(1000, Math.round((Number(g('C12')) || 200000) / 4)));
+    wb.setInput(SH, 'C13', keep == null ? null : keep);
+    if (Number.isNaN(a) || Number.isNaN(b)) return false;
+    return a !== b;
+  }
   function setVal(a, v) {
     inputs[a] = v; wb.setInput(SH, a, v);
     if (a === 'C6') { syncEngraveType(); setTimeout(renderProfiles, 0); }
@@ -284,8 +293,9 @@
     }
     hero.classList.remove('empty');
     const cp = g('C36');
-    setText('#rCP', typeof cp === 'number' ? fmtInt(cp) : String(cp));
-    const missing = ['C12', 'C13'].filter(a => !(Number(g(a)) > 0));
+    const noRange = !(Number(g('C12')) > 0); // 극대화 범위가 없으면 계산값이 의미 없음(음수 등)
+    setText('#rCP', noRange ? '—' : typeof cp === 'number' ? fmtInt(cp) : String(cp));
+    const missing = ['C12', 'C13'].filter(a => !(Number(g(a)) > 0) && (a !== 'C13' || weaponMatters()));
     $('#rCPk').classList.toggle('warn', missing.length > 0);
     setText('#rCPk', missing.length ? `${missing.map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력').join('·')}을 넣어야 정확해요` : korUnit(cp));
     setText('#rClass', label('C6'));
@@ -294,7 +304,7 @@
     const base = baseWb.get(SH, 'C36');
     const dt = $('#deltaText');
     let same = true;
-    if (typeof cp === 'number' && typeof base === 'number') {
+    if (!noRange && typeof cp === 'number' && typeof base === 'number') {
       const d = cp - base; same = Math.abs(d) < 0.5;
       const pct = base ? d / base * 100 : 0;
       dt.className = 'delta-text' + (same ? '' : d > 0 ? ' up' : ' down');
@@ -410,6 +420,7 @@
     $('#btnOcrAll').onclick = () => { const boxes = [...document.querySelectorAll('#ocrBody input[type=checkbox]')]; const all = boxes.every(b => b.checked); boxes.forEach(b => { b.checked = !all; }); };
   }
   const STEP = { 'loading tesseract core': '엔진 불러오는 중', 'initializing tesseract': '엔진 준비 중', 'loading language traineddata': '글자 데이터 불러오는 중', 'initializing api': '준비 중', 'recognizing text': '글자 읽는 중' };
+  let pendingExtras = null; // 적용 버튼을 누른 뒤에 물어볼 값
   async function runOcr() {
     if (!shot) return;
     const prog = $('#ocrProg'), bar = prog.querySelector('.bar'), pt = prog.querySelector('.ptext');
@@ -425,7 +436,7 @@
       try { if (gear && gear.cls) { pt.textContent = '칭호 읽는 중'; res.title = await O.readTitle(shot, gear.cls); } } catch (e) { console.error(e); }
       showOcrResult(res, gear);
       prog.hidden = true;
-      askExtras(gear && gear.cls && gear.cls.match ? gear.cls.match.name : null, !!(res.found && res.found.C12));
+      pendingExtras = { cls: gear && gear.cls && gear.cls.match ? gear.cls.match.name : null, gotRange: !!(res.found && res.found.C12) };
     } catch (e) {
       console.error(e); pt.textContent = '인식 실패: ' + (e.message || e);
       return;
@@ -482,14 +493,16 @@
     const old = $('#extraDlg'); if (old) old.remove();
     if (clsName && !inputs.C6) { setVal('C6', clsName); refresh(); }
     const numIn = (c, ph) => { const v = g(c); return el('input', { type: 'text', inputmode: 'numeric', class: 'num', 'data-cell': c, placeholder: ph, value: Number(v) > 0 ? String(v) : '' }); };
-    const iC13 = numIn('C13', '예: 60000');
     const needRange = !gotRange && !(Number(g('C12')) > 0);
+    const needWeapon = !(Number(g('C13')) > 0) && weaponMatters();
+    if (!needRange && !needWeapon) return;
+    const iC13 = needWeapon ? numIn('C13', '예: 60000') : null;
     const iC12 = needRange ? numIn('C12', '예: 205000') : null;
     const atk = label('AC67') === '마법' ? '마법' : '물리';
     const card = el('div', { class: 'dialog-card extra-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'exTitle' },
-      el('h3', { id: 'exTitle', text: '무기 공격력을 알려주세요' }),
-      el('p', { text: '스크린샷에 안 나오는 값이에요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.' }),
-      el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '극대화 범위가 아닌 무기 자체 수치' })), iC13),
+      el('h3', { id: 'exTitle', text: iC13 ? '무기 공격력을 알려주세요' : '극대화 범위 최댓값을 알려주세요' }),
+      el('p', { text: iC13 ? '이 세팅은 무기 공격력이 계산에 들어가요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.' : '이번 사진에서 못 찾은 값이에요.' }),
+      iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '극대화 범위가 아닌 무기 자체 수치' })), iC13) : null,
       iC12 ? el('label', { class: 'ex-row' }, el('span', {}, `${atk} 공격력 극대화 범위 최댓값`, el('small', { text: `이번 사진에서 못 찾았어요. 다음엔 ${atk} 공격력에 마우스를 올린 채로 찍으면 자동으로 들어가요` })), iC12) : null,
       el('div', { class: 'dlg-actions' },
         el('button', { class: 'btn', onclick: () => wrap.remove(), text: '나중에' }),
@@ -499,7 +512,7 @@
         } })));
     const wrap = el('div', { class: 'dialog', id: 'extraDlg' }, card);
     document.body.append(wrap);
-    setTimeout(() => iC13.focus(), 50);
+    setTimeout(() => (iC13 || iC12).focus(), 50);
   }
 
   // ---------- 일반 악세서리(아이콘) ----------
@@ -580,8 +593,10 @@
     let autoBase = false;
     if (!shared && isEmptySetting(store.bases[store.current] || {}) && !isEmptySetting(inputs)) { store.bases[store.current] = Object.assign({}, inputs); applyBase(); autoBase = true; }
     applyInputs(); refresh(); scheduleAutosave(); renderProfiles();
-    $('#ocrCount').textContent = autoBase ? `${n}개 값을 적용하고 이 세팅을 기준으로 잡았어요` : `${n}개 값을 적용했어요. 위에서 기준 대비 변화를 확인하세요`;
-    document.querySelectorAll('#ocrBody tr').forEach(tr => tr.classList.add('applied'));
+    // 적용이 끝나면 인식 결과 목록은 접어서 화면을 가볍게 유지
+    $('#ocrResult').hidden = true; $('#stage').hidden = true;
+    toast(autoBase ? `${n}개 값을 채우고 기준 세팅으로 잡았어요` : `${n}개 값을 채웠어요`);
+    if (pendingExtras) { const p = pendingExtras; pendingExtras = null; askExtras(p.cls, p.gotRange); }
   }
 
   // ---------- 링크 공유 (주소 #s= 뒤에 세팅을 압축해 담음) ----------

@@ -22,6 +22,7 @@ body {
   background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5; letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
 }
+.nw { white-space: nowrap; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 a { color: var(--blue); text-decoration: none; }
 kbd { font-family: inherit; font-size: 13px; font-weight: 600; padding: 1px 7px; border-radius: 6px; background: #fff; border: 1px solid var(--line); box-shadow: 0 1px 0 var(--line); color: var(--sub); }
@@ -45,6 +46,17 @@ kbd { font-family: inherit; font-size: 13px; font-weight: 600; padding: 1px 7px;
   .in-head { margin-bottom: 18px; }
   .hero-value { font-size: 44px; }
   .drop { padding: 26px 18px 18px; }
+}
+/* 노트북(1366~1600): 옆 여백을 줄이고 왼쪽 칸을 조금 넓힘 */
+@media (min-width: 1360px) {
+  .wrap { max-width: 1480px; grid-template-columns: 450px minmax(0, 1fr); }
+}
+/* 큰 모니터: 가운데로 몰리지 않게 폭을 넓힘 */
+@media (min-width: 1600px) {
+  .wrap { max-width: 1600px; padding: 32px 48px 64px; grid-template-columns: 460px minmax(0, 1fr); gap: 20px 28px; }
+  .main .card { padding: 32px 40px; }
+  .main .rows { column-gap: 56px; }
+  .srow .ctl input { width: 132px; }
 }
 
 /* 머리 */
