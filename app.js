@@ -141,9 +141,14 @@
       for (const [t, l] of [['J26', 'L26'], ['J27', 'L27'], ['J28', 'L28'], ['J29', 'L29'], ['J31', 'L31']]) if (v[t] == null) { v[t] = BLANK[t]; if (!(Number(v[l]) > 0)) v[l] = BLANK[l]; }
       if ((v.J32 == null || v.J32 === '미적용') && (v.L32 == null || v.L32 === '미착용')) { v.J32 = BLANK.J32; v.L32 = BLANK.L32; }
       if (HEALERS.has(v.C6) && v.J21 === BLANK.J21) v.J21 = HEAL_J21;
-      if (v.C6 === '에테르 세이지' && v.J30 === '엑사&네블론 - 순환') v.J30 = BLANK.J30; // 잠깐 넣었던 순환 기본값 되돌림
     }
     store.mig.preset1 = 1;
+  }
+  // 에테르 세이지는 방어구 세트 기본값이 순환
+  const SAGE = '에테르 세이지', SET_CYCLE = '엑사&네블론 - 순환';
+  if (!store.mig.sage2) {
+    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === SAGE && v.J30 === BLANK.J30) v.J30 = SET_CYCLE;
+    store.mig.sage2 = 1;
   }
   if (!store.names) store.names = {}; // 캐릭터별 닉네임(선택)
   const nickOf = (key) => (store.names[key] || '').trim();
@@ -295,13 +300,16 @@
     for (const a of ['D20', 'D21', 'D22']) if (ATK.includes(inputs[a]) && inputs[a] !== want) { inputs[a] = want; wb.setInput(SH, a, want); ch = true; }
     return ch;
   }
-  // 직업이 녹힐로 바뀌면 녹힐 장비 버프를 적용3, 딜러로 바뀌면 적용2 (다른 값을 직접 골라 둔 경우는 그대로)
+  // 직업이 바뀔 때 직업별 기본값으로 (다른 값을 직접 골라 둔 경우는 그대로)
+  //  - 녹힐 직업: 녹힐 장비 버프 적용3, 딜러: 적용2
+  //  - 에테르 세이지: 방어구 세트 순환, 나머지: 연산
   function syncClassDefault(prev) {
-    const now = inputs.C6, h = HEALERS.has(now);
-    if (now === prev || h === HEALERS.has(prev) && prev) return false;
-    const want = h ? HEAL_J21 : BLANK.J21, other = h ? BLANK.J21 : HEAL_J21;
-    if (inputs.J21 !== other) return false;
-    inputs.J21 = want; wb.setInput(SH, 'J21', want); return true;
+    const now = inputs.C6; if (now === prev) return false;
+    let ch = false;
+    const swap = (c, on, val, base) => { const want = on ? val : base, other = on ? base : val; if (inputs[c] === other) { inputs[c] = want; wb.setInput(SH, c, want); ch = true; } };
+    if (HEALERS.has(now) !== HEALERS.has(prev) || !prev) swap('J21', HEALERS.has(now), HEAL_J21, BLANK.J21);
+    if ((now === SAGE) !== (prev === SAGE)) swap('J30', now === SAGE, SET_CYCLE, BLANK.J30);
+    return ch;
   }
   // 강배·역강배 바지: 강렬·초월 스킬 데미지를 높은 쪽으로 같게
   function syncEq() {
