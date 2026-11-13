@@ -91,7 +91,7 @@
     H31: 0, H32: 0, H33: 0, G35: '1세트 또는 미착용',
     L11: '미사용', L12: '미사용', L13: '미사용', L14: '미사용', L15: '미사용',
     J17: '미사용', J18: '미사용', J19: '미사용', J20: '미사용', J21: '미적용', J22: '미적용', J23: '해당사항 없음',
-    L26: 0, L27: 0, L28: 0, L29: 0, J30: '해당사항 없음', L31: 0, J32: '미적용', L32: '미착용',
+    L26: 0, L27: 0, L28: 0, L29: 0, J30: '엑사&네블론 - 연산', L31: 0, J32: '미적용', L32: '미착용',
   });
   const blank = () => Object.assign({}, BLANK);
   const isEmptySetting = (inp) => !inp.C6 || !(Number(inp.C11) > 0);
@@ -105,6 +105,13 @@
   // 예전 기본값(각인 없음)이던 캐릭터는 기본 각인으로
   for (const v of Object.values(store.profiles)) if (v && v.D20 === '해당사항 없음' && v.D21 === '해당사항 없음' && v.D22 === '해당사항 없음' && v.H20 === '해당사항 없음') Object.assign(v, { D20: BLANK.D20, D21: BLANK.D21, D22: BLANK.D22, H20: 0.05, H21: 0.05, H22: 0.05 });
   if (!store.bases) store.bases = {};
+  // 방어구 세트 효과 기본값을 '연산'으로 바꾼 뒤: 예전 기본값(해당사항 없음)이던 캐릭터도 한 번만 맞춰 줌
+  if (!store.mig) store.mig = {};
+  if (!store.mig.setFx) {
+    for (const v of Object.values(store.profiles)) if (v && v.J30 === '해당사항 없음') v.J30 = BLANK.J30;
+    for (const v of Object.values(store.bases)) if (v && v.J30 === '해당사항 없음') v.J30 = BLANK.J30;
+    store.mig.setFx = 1;
+  }
   if (!store.names) store.names = {}; // 캐릭터별 닉네임(선택)
   const nickOf = (key) => (store.names[key] || '').trim();
   let inputs = Object.assign({}, store.profiles[store.current] || {});
@@ -535,6 +542,27 @@
     return el('div', { class: 'ex-row atma-row' }, el('span', {}, '아트마 액세서리'),
       el('div', { class: 'atma-sel' }, sel('J32'), sel('L32')));
   }
+  const pickSel = (c, opts, cur) => {
+    const s = el('select', { 'data-cell': c });
+    for (const o of opts) s.append(el('option', { value: String(o.v ?? o), text: String(o.t ?? o) }));
+    s.value = String(cur);
+    return s;
+  };
+  function setRow() {
+    return el('div', { class: 'ex-row atma-row' }, el('span', {}, '방어구 세트 효과'),
+      el('div', { class: 'atma-sel' }, pickSel('J30', optionsOf('J30') || [], inputs.J30 ?? BLANK.J30)));
+  }
+  function shareRow() {
+    const mode = pickSel('L42', [{ v: 'false', t: '자동' }, { v: 'true', t: '직접 입력' }], inputs.L42 === true ? 'true' : 'false');
+    const num = (c) => el('input', { type: 'text', inputmode: 'numeric', class: 'num share', 'data-cell': c, value: String(g(c) ?? '') });
+    const a = num('I46'), b = num('K46');
+    const sync = () => { const on = mode.value === 'true'; a.disabled = b.disabled = !on; box.classList.toggle('off', !on); };
+    const box = el('div', { class: 'share-in' }, el('span', { text: '강렬' }), a, el('span', { text: ':' }), b, el('span', { text: '초월' }));
+    mode.onchange = sync;
+    const row = el('div', { class: 'ex-row atma-row' }, el('span', {}, '강렬:초월 점유율'), el('div', { class: 'atma-sel' }, mode), box);
+    sync();
+    return row;
+  }
   function askExtras({ weapon = true, range = false, during = false } = {}) {
     const open = $('#extraDlg');
     if (open && !during) {
@@ -549,7 +577,11 @@
     const r12 = range ? rangeRow() : null;
     const save = () => {
       for (const inp of wrap.querySelectorAll('input[data-cell]')) { const t = inp.value.replace(/[,\s]/g, ''); if (t && Number(t) > 0) setVal(inp.getAttribute('data-cell'), Number(t)); }
-      for (const sl of wrap.querySelectorAll('select[data-cell]')) { const c = sl.getAttribute('data-cell'); if (sl.value !== String(inputs[c] ?? '')) setVal(c, parseOpt(c, sl.value)); }
+      for (const sl of wrap.querySelectorAll('select[data-cell]')) {
+        const c = sl.getAttribute('data-cell');
+        if (c === 'L42') { if ((sl.value === 'true') !== (inputs.L42 === true)) setVal('L42', sl.value === 'true'); continue; }
+        if (sl.value !== String(inputs[c] ?? '')) setVal(c, parseOpt(c, sl.value));
+      }
       refresh(); scheduleAutosave(); wrap.remove();
     };
     const card = el('div', { class: 'dialog-card extra-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'exTitle' },
@@ -557,7 +589,9 @@
       el('p', { id: 'exNote', text: iC13 ? `스크린샷에 안 나오는 값이에요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.${during ? ' 그동안 사진을 읽고 있어요.' : ''}` : '이번 사진에서 못 찾은 값이에요.' }),
       iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '극대화 범위가 아닌 무기 자체 수치' })), iC13) : null,
       r12 ? r12[0] : null,
+      iC13 ? setRow() : null,
       iC13 ? atmaRow() : null,
+      iC13 ? shareRow() : null,
       el('div', { class: 'dlg-actions' },
         el('button', { class: 'btn', onclick: () => wrap.remove(), text: '나중에' }),
         el('button', { class: 'btn primary', text: '확인', onclick: save })));
