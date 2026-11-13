@@ -273,6 +273,7 @@
   function renderResults() {
     const hero = $('.hero');
     $('#btnLink').hidden = !CAN_LINK || isEmptySetting(inputs);
+    $('#btnClear').hidden = isEmptySetting(inputs) || !!shared;
     $('#delta').hidden = isEmptySetting(inputs);
     if (isEmptySetting(inputs)) {
       hero.classList.add('empty');
@@ -348,6 +349,12 @@
     $('#btnDelete').onclick = async () => {
       if (!(await dialog({ title: '캐릭터 삭제', text: `"${profileLabel(store.current)}" 세팅을 지울까요?`, ok: '삭제', danger: true }))) return;
       delete store.profiles[store.current]; delete store.bases[store.current]; loadProfile(Object.keys(store.profiles)[0]);
+    };
+    $('#btnClear').onclick = async () => {
+      if (!(await dialog({ title: '세팅 비우기', text: '이 캐릭터의 입력값을 모두 지우고 처음 상태로 돌아가요.', ok: '비우기', danger: true }))) return;
+      inputs = blank(); store.profiles[store.current] = blank(); store.bases[store.current] = blank();
+      persist(); applyInputs(); applyBase(); renderProfiles(); refresh();
+      $('#ocrResult').hidden = true; $('#stage').hidden = true;
     };
     $('#btnPin').onclick = () => { store.bases[store.current] = Object.assign({}, inputs); persist(); applyBase(); refresh(); };
     $('#btnRevert').onclick = () => { inputs = Object.assign({}, store.bases[store.current] || {}); store.profiles[store.current] = Object.assign({}, inputs); persist(); applyInputs(); refresh(); };
