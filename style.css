@@ -265,7 +265,7 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 .views button { font: inherit; font-size: 14px; font-weight: 600; color: var(--sub); background: none; border: 0; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
 .views button[aria-current="page"] { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 body.view-rank .side, body.view-rank .main, body.view-admin .side, body.view-admin .main { display: none !important; }
-body.view-rank .who, body.view-admin .who { visibility: hidden; }
+body.view-rank .who, body.view-admin .who { display: none; }
 .rank-view, .admin-view { grid-column: 1 / -1; }
 @media (min-width: 1024px) { .rank-view, .admin-view { padding: 32px 40px; max-width: 980px; width: 100%; justify-self: center; } }
 
@@ -337,3 +337,8 @@ body.view-rank .who, body.view-admin .who { visibility: hidden; }
   .rk-cp b { font-size: 15px; }
   .apply-card .ex-row { flex-wrap: wrap; }
 }
+
+.chk-row { display: flex; align-items: flex-start; gap: 10px; padding: 4px 0 14px; cursor: pointer; }
+.chk-row input { width: 18px; height: 18px; margin: 2px 0 0; flex: none; accent-color: var(--blue); }
+.chk-row > span { display: flex; flex-direction: column; gap: 2px; font-size: 14px; font-weight: 600; color: var(--text); }
+.chk-row small { font-size: 12px; font-weight: 400; color: var(--mute); }

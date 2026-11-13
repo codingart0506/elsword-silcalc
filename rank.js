@@ -210,7 +210,9 @@
     };
     window.addEventListener('paste', onPaste, true);
     const close = () => { window.removeEventListener('paste', onPaste, true); wrap.remove(); };
-    const send = el('button', { type: 'button', class: 'btn primary', text: '신청하기' });
+    const send = el('button', { type: 'button', class: 'btn primary', text: '신청하기', disabled: '' });
+    const noBuff = el('input', { type: 'checkbox' });
+    noBuff.onchange = () => { send.disabled = !noBuff.checked; };
     const card = el('div', { class: 'dialog-card apply-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'apTitle' },
       el('h3', { id: 'apTitle', text: '랭킹에 올리기' }),
       el('p', { class: 'apply-sum' }, `${A.cls()} 실투력 `, el('b', { text: fmtInt(cp) }), '을(를) 올려요. 관리자가 본인 캐릭터인지 확인한 뒤 랭킹에 보여요.'),
@@ -219,6 +221,7 @@
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
       el('p', { text: '게임 채팅창에 이 코드를 입력한 다음, 채팅이 보이게 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요.' }),
       shotBox, file,
+      el('label', { class: 'chk-row' }, noBuff, el('span', {}, 'PC방 혜택과 지애 버프가 꺼진 상태에서 찍었어요', el('small', { text: 'PC방 혜택이나 지애 버프가 켜진 스크린샷은 랭킹에 올릴 수 없어요. 왼쪽 위 PC방 아이콘이 OFF인지 확인해 주세요.' }))),
       el('div', { class: 'dlg-actions' }, el('button', { type: 'button', class: 'btn', text: '취소', onclick: close }), send));
     const wrap = el('div', { class: 'dialog', id: 'applyDlg' }, card);
     document.body.append(wrap);
@@ -227,6 +230,7 @@
       const n = nick.value.trim();
       if (!n) { toast('닉네임을 적어 주세요'); nick.focus(); return; }
       if (!img) { toast('인증 코드가 보이는 스크린샷을 넣어 주세요'); return; }
+      if (!noBuff.checked) { toast('PC방 혜택과 지애 버프가 꺼져 있는지 확인해 주세요'); return; }
       send.disabled = true; send.textContent = '보내는 중';
       try {
         const c = await sb();
@@ -261,7 +265,7 @@
       return;
     }
     const cp = A.cp(), edited = A.edited();
-    const ok = await A.dialog({ title: '랭킹 갱신', text: `${r.nickname} 실투력을 ${fmtInt(cp)}(으)로 바꿔요.` + (edited ? ' 스크린샷을 적용한 뒤 손으로 고친 값이 있어서 관리자 화면에 따로 표시돼요.' : ''), ok: '갱신' });
+    const ok = await A.dialog({ title: '랭킹 갱신', text: `${r.nickname} 실투력을 ${fmtInt(cp)}(으)로 바꿔요. PC방 혜택과 지애 버프가 꺼진 상태로 찍은 스크린샷일 때만 갱신할 수 있어요.` + (edited ? ' 스크린샷을 적용한 뒤 손으로 고친 값이 있어서 관리자 화면에 따로 표시돼요.' : ''), ok: '버프 없이 찍었어요, 갱신' });
     if (!ok) return;
     try {
       const c = await sb();
@@ -347,6 +351,7 @@
         el('span', { class: 'nm', text: `${a.nickname} (${a.server})` }),
         el('span', { text: `${a.cls}, 실투력 ${fmtInt(a.cp)}` }),
         el('span', { class: 'code' }, '인증 코드 ', el('b', { text: a.verify_code })),
+        el('small', { class: 'adm-flag', text: '채팅의 인증 코드, 닉네임, PC방 아이콘 OFF, 지애 버프 없음을 확인하세요' }),
         el('small', { text: new Date(a.created_at).toLocaleString('ko-KR') }),
         el('div', { class: 'adm-acts' }, ok, no)));
       ok.onclick = async () => {
