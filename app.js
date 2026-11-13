@@ -633,7 +633,7 @@
   }
   function eqRow() {
     const cb = el('input', { type: 'checkbox', id: 'exEq' }); cb.checked = !!inputs._eq;
-    return el('label', { class: 'chk-row ex-eq' }, cb, el('span', {}, '강역강', el('small', { text: '강배·역강배 수치를 높은 쪽 수치로 같게 맞춰요' })));
+    return el('label', { class: 'chk-row ex-eq' }, cb, el('span', {}, '강배 역강배 수치 동일', el('small', { text: '둘 중 높은 쪽 수치로 같게 맞춰요' })));
   }
   function askExtras({ weapon = true, range = false, during = false } = {}) {
     const open = $('#extraDlg');
