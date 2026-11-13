@@ -500,7 +500,7 @@
   function selfTest() {
     const t = new E.Workbook(M); const v = t.get(SH, 'C36'); const exp = M.check['<Main>!C36'];
     const ok = typeof v === 'number' && Math.abs(v - exp) < 1e-6 * Math.abs(exp);
-    $('#selfTest').textContent = ok ? `시트 ${M.meta.version} 기준. 시트 예시 값과 같은 결과가 나와요.` : '시트 예시 값과 계산 결과가 달라요. 제보해 주세요.';
+    $('#selfTest').textContent = ok ? `시트 ${M.meta.version} 기준이며, 시트 예시 값과 같은 결과가 나오는 것을 확인했습니다.` : '시트 예시 값과 계산 결과가 다릅니다. 제보 부탁드립니다.';
   }
   persist();
   applyInputs();
