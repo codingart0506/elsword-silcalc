@@ -413,6 +413,36 @@
   }
 
   // 캐릭터 창 칭호 띠(파란 바탕 흰 글씨): 초상화 위치 기준으로 잘라 따로 읽음
+  // 캐릭터 창 맨 위 칸(Lv 오른쪽)의 캐릭터 이름. 한글·영어·숫자만 남김
+  async function readName(src, por, onProgress) {
+    const k = por.s;
+    const x0 = Math.round(por.x + k * 1.78), x1 = Math.round(por.x + k * 3.72);
+    const y0 = Math.round(por.y + k * 0.05), y1 = Math.round(por.y + k * 0.31);
+    if (x0 < 0 || y0 < 0 || x1 > src.width || y1 > src.height) return '';
+    const w = x1 - x0, h = y1 - y0, sc = Math.max(2, 90 / h);
+    const c = document.createElement('canvas'); c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+    const g = c.getContext('2d', { willReadFrequently: true }); g.imageSmoothingQuality = 'high';
+    g.drawImage(src, x0, y0, w, h, 0, 0, c.width, c.height);
+    const img = g.getImageData(0, 0, c.width, c.height), d = img.data;
+    let dark = 0;
+    for (let i = 0; i < d.length; i += 4) { const v = 255 - Math.min(d[i], d[i + 1], d[i + 2]); if (v > 140) dark++; d[i] = d[i + 1] = d[i + 2] = v > 140 ? 255 : v < 90 ? 0 : v; }
+    // 이름 칸이 아니거나(밝은 바탕) 가려진 경우
+    if (dark < d.length / 4 * 0.5) return '';
+    g.putImageData(img, 0, 0);
+    const clean = (t) => String(t || '').replace(/[^\uAC00-\uD7A3A-Za-z0-9]/g, '');
+    const [A, B] = await getWorkers(onProgress);
+    let t = '';
+    await A.setParameters({ tessedit_pageseg_mode: '7' });
+    try { t = clean((await A.recognize(c)).data.text); }
+    finally { await A.setParameters({ tessedit_pageseg_mode: '6' }); }
+    // 한글이 없으면 영어 이름일 수 있어 영어로 한 번 더
+    if (!/[\uAC00-\uD7A3]/.test(t)) {
+      await B.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789' });
+      try { const e = clean((await B.recognize(c)).data.text); if (e.length >= 2) t = e; }
+      finally { await B.setParameters({ tessedit_pageseg_mode: '11', tessedit_char_whitelist: '0123456789.,%~' }); }
+    }
+    return t.length >= 2 && t.length <= 16 ? t : '';
+  }
   async function readTitle(src, por, onProgress) {
     const [A] = await getWorkers(onProgress);
     const k = por.s;
@@ -507,7 +537,7 @@
     return best;
   }
 
-  const api = { findName, readTitle, findRangeMax, FIELDS, norm, matchField, splitPairs, parseRows, wordsToRows, collectWords, mergeDigitPass, locatePanel, toValue,
+  const api = { findName, readTitle, readName, findRangeMax, FIELDS, norm, matchField, splitPairs, parseRows, wordsToRows, collectWords, mergeDigitPass, locatePanel, toValue,
     preprocess, recognize, getWorkers, startShare, grabFrame, stopShare, sharing, imageFromBlob };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SilOCR = api;

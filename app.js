@@ -535,6 +535,7 @@
       let gear = null;
       try { if (window.SilGear) { pt.textContent = '악세서리 아이콘 보는 중'; gear = window.SilGear.recognize(shot); } } catch (e) { console.error(e); }
       try { if (gear && gear.cls) { pt.textContent = '칭호 읽는 중'; res.title = await O.readTitle(shot, gear.cls); } } catch (e) { console.error(e); }
+      try { if (gear && gear.cls && !shared) { pt.textContent = '캐릭터 이름 읽는 중'; res.name = await O.readName(shot, gear.cls); } } catch (e) { console.error(e); }
       pendingExtras = { gotRange: !!(res.found && res.found.C12) };
       showOcrResult(res, gear);
       prog.hidden = true;
@@ -583,6 +584,15 @@
         el('td', { class: 'gear-pick' }, sel)));
     }
     // 상세 스탯 창에 없는 값: 비어 있으면 여기서 바로 입력
+    // 캐릭터 이름(캐릭터 창 맨 위) → 닉네임
+    if (res.name) {
+      const cur = nickOf(store.current), same = cur === res.name;
+      const inp = el('input', { type: 'text', class: 'nick-in', 'data-nick': '1', maxlength: '20', value: res.name, 'aria-label': '닉네임' });
+      const cb = el('input', { type: 'checkbox', checked: same ? null : 'checked', 'aria-label': '적용' });
+      inp.addEventListener('input', () => { cb.checked = inp.value.trim() !== cur; });
+      body.prepend(el('tr', { class: 'nick-row' + (same ? ' same' : '') },
+        el('td', {}, cb), el('td', { text: '닉네임' }), el('td', { class: 'dim', text: cur }), el('td', {}, inp)));
+    }
     if (gear) showGearRows(gear);
     else lastGear = null;
     const gearN = body.querySelectorAll('tr.gear-row:not(.none):not(.cls-row)').length;
@@ -758,6 +768,8 @@
     document.querySelectorAll('#ocrBody tr').forEach(tr => {
       const cb = tr.querySelector('input[type=checkbox]');
       if (!cb || !cb.checked) return;
+      const nk = tr.querySelector('input[data-nick]');
+      if (nk) { const v = nk.value.trim().slice(0, 20); if (v && v !== nickOf(store.current)) { store.names[store.current] = v; persist(); syncNick(); n++; } }
       tr.querySelectorAll('[data-cell]').forEach(inp => {
         const c = inp.getAttribute('data-cell');
         if (inp.tagName === 'SELECT') { if (inp.value) { inputs[c] = parseOpt(c, inp.value); n++; } return; }

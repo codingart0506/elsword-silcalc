@@ -165,6 +165,7 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 .ocr-table td:nth-child(3)::before { content: '지금 '; }
 .ocr-table td:nth-child(4) { grid-column: 3; grid-row: 1 / span 2; text-align: right; }
 .ocr-table input.num, .ocr-table input.pct { width: 112px; }
+.ocr-table input.nick-in { width: 140px; }
 .ocr-table tr.same td { opacity: .45; }
 .ocr-table tr.applied td { opacity: .4; }
 .ocr-table tr.low td:nth-child(2) { color: #e2780b; }
