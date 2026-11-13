@@ -354,3 +354,4 @@ body.view-rank .who, body.view-admin .who { display: none; }
 @media (max-width: 600px) {
   .rk-detail { grid-template-columns: 1fr; padding: 4px 2px 16px; }
 }
+.rk-btns { display: flex; gap: 8px; flex-wrap: wrap; }

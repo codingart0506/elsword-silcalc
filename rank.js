@@ -7,7 +7,6 @@
   const SB_URL = 'https://qaeheqbuzwxbaujrsktr.supabase.co';
   const SB_KEY = 'sb_publishable_J0YXiKlO-CdW_vK_k5UhXA_mE7kvs1N'; // 공개용 키(브라우저에 넣어도 되는 키)
   const SB_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js';
-  const SERVERS = ['솔레스', '가이아'];
   const $ = (s, r) => (r || document).querySelector(s);
   const { el, toast, fmtInt, korUnit } = A;
 
@@ -73,22 +72,21 @@
 
   // ---------- 랭킹 목록 ----------
   const PAGE = 50;
-  let rkServer = '', rkCls = '', rkCount = 0, rkDone = false, rkBusy = false;
+  let rkCls = '', rkCount = 0, rkDone = false, rkBusy = false;
   async function loadRank(reset) {
     if (rkBusy) return; rkBusy = true;
     const list = $('#rankList'), empty = $('#rankEmpty');
     if (reset) { list.innerHTML = ''; rkCount = 0; rkDone = false; empty.hidden = false; empty.textContent = '불러오는 중이에요'; }
     try {
       const c = await sb();
-      let q = c.from('players').select('id,nickname,server,cls,cp,updated_at,shot_path').order('cp', { ascending: false }).range(rkCount, rkCount + PAGE - 1);
-      if (rkServer) q = q.eq('server', rkServer);
+      let q = c.from('players').select('id,nickname,cls,cp,updated_at,shot_path').order('cp', { ascending: false }).range(rkCount, rkCount + PAGE - 1);
       if (rkCls) q = q.eq('cls', rkCls);
       const { data, error } = await q;
       if (error) throw error;
       renderRows(data, rkCount);
       rkCount += data.length; rkDone = data.length < PAGE;
       empty.hidden = rkCount > 0;
-      if (!rkCount) empty.textContent = (rkServer || rkCls) ? '조건에 맞는 캐릭터가 아직 없어요' : '아직 올라온 캐릭터가 없어요. 계산기에서 "랭킹에 올리기"로 첫 번째가 되어 보세요';
+      if (!rkCount) empty.textContent = rkCls ? `${rkCls} 랭킹에 아직 아무도 없어요` : '아직 올라온 캐릭터가 없어요. 계산기에서 "랭킹에 올리기"로 첫 번째가 되어 보세요';
     } catch (e) {
       empty.hidden = false; empty.textContent = '랭킹을 불러오지 못했어요. ' + errMsg(e);
     }
@@ -96,16 +94,16 @@
     rkBusy = false;
   }
   function renderRows(rows, start) {
-    const mine = new Set(Object.values(A.ranks()).filter(r => r && r.status === 'approved').map(r => String(r.nickname).toLowerCase() + '|' + r.server));
+    const mine = new Set(Object.values(A.ranks()).filter(r => r && r.status === 'approved').map(r => String(r.nickname).toLowerCase()));
     const list = $('#rankList');
     rows.forEach((r, i) => {
-      const li = el('li', { class: mine.has(r.nickname.toLowerCase() + '|' + r.server) ? 'me' : '' });
+      const li = el('li', { class: mine.has(r.nickname.toLowerCase()) ? 'me' : '' });
       li.append(
         el('button', { type: 'button', class: 'rk-row', 'aria-expanded': 'false', onclick: (e) => toggleDetail(li, r, e.currentTarget) },
           el('span', { class: 'rk-no', text: String(start + i + 1) }),
           el('span', { class: 'rk-who' },
             el('span', { class: 'rk-name', text: r.nickname }),
-            el('span', { class: 'rk-meta' }, el('span', { text: r.cls }), el('span', { text: r.server }), el('span', { text: ago(r.updated_at) }))),
+            el('span', { class: 'rk-meta' }, el('span', { text: r.cls }), el('span', { text: ago(r.updated_at) }))),
           el('span', { class: 'rk-cp' }, el('b', { text: fmtInt(r.cp) }), el('small', { text: korUnit(r.cp) }))));
       list.append(li);
     });
@@ -124,7 +122,9 @@
       el('div', { class: 'rk-side' },
         cap,
         el('p', { class: 'rk-cap', text: `실투력 ${fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신` }),
-        el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => openPlayer(r) })));
+        el('div', { class: 'rk-btns' },
+          el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => openPlayer(r) }),
+          rkCls ? null : el('button', { type: 'button', class: 'btn', text: `${r.cls} 랭킹`, onclick: () => showClass(r.cls) }))));
     li.append(box);
     try {
       const c = await sb();
@@ -142,15 +142,20 @@
       A.openShared({ n: r.cls, k: r.nickname, i: data.inputs || {} });
     } catch (e) { toast('세팅을 불러오지 못했어요. ' + errMsg(e)); }
   }
-  $('#rankServer').addEventListener('click', (e) => {
-    const b = e.target.closest('.tab'); if (!b) return;
-    rkServer = b.dataset.v;
-    for (const t of $('#rankServer').querySelectorAll('.tab')) t.classList.toggle('on', t === b);
-    loadRank(true);
-  });
+  // 전체 / 전직별(전직을 고르면 그 전직 안에서의 순위)
   const clsSel = $('#rankCls');
   for (const c of A.classes()) clsSel.append(el('option', { value: c, text: c }));
-  clsSel.onchange = () => { rkCls = clsSel.value; loadRank(true); };
+  function setMode(mode, cls) {
+    for (const t of $('#rankMode').querySelectorAll('.tab')) t.classList.toggle('on', t.dataset.v === mode);
+    clsSel.hidden = mode !== 'cls';
+    if (mode === 'cls') { clsSel.value = cls || A.cls() || clsSel.value || clsSel.options[0].value; rkCls = clsSel.value; }
+    else rkCls = '';
+    $('#rankTitle').textContent = rkCls ? `${rkCls} 랭킹` : '실투력 랭킹';
+    loadRank(true);
+  }
+  function showClass(cls) { setMode('cls', cls); window.scrollTo(0, 0); }
+  $('#rankMode').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) setMode(b.dataset.v); });
+  clsSel.onchange = () => setMode('cls', clsSel.value);
   $('#btnRankMore').onclick = () => loadRank(false);
 
   // ---------- 실투력 카드 아래 랭킹 줄 ----------
@@ -167,7 +172,7 @@
     }
     if (!checked[A.key()]) { checked[A.key()] = true; checkStatus(A.key()); }
     if (r.status === 'pending') {
-      line.append(el('span', { class: 'rk-state' }, '랭킹 승인 기다리는 중', el('small', { text: `${r.nickname}, ${r.server}` })),
+      line.append(el('span', { class: 'rk-state' }, '랭킹 승인 기다리는 중', el('small', { text: r.nickname })),
         el('span', { class: 'acts' }, btn('갱신 코드', showToken, true)));
     } else if (r.status === 'rejected') {
       line.append(el('span', { class: 'rk-state' }, '랭킹 신청이 거절됐어요', r.memo ? el('small', { text: r.memo }) : null),
@@ -175,16 +180,20 @@
     } else {
       const upd = r.upd === 'held' ? `갱신 ${fmtInt(r.updCp)} 확인 기다리는 중`
         : (r.upd === 'rejected' || r.upd === 'reverted') ? `최근 갱신이 반영되지 않았어요${r.updMemo ? `: ${r.updMemo}` : ''}` : '';
-      line.append(el('span', { class: 'rk-state' }, el('span', { class: 'rk-pos', text: r.pos ? `랭킹 ${r.pos}위` : '랭킹 등록됨' }), el('small', { text: `${r.nickname}, 올린 값 ${fmtInt(r.cp)}` }), upd ? el('small', { class: 'rk-upd', text: upd }) : null),
+      const posTxt = r.pos ? `전체 ${r.pos}위` + (r.cpos && r.cls ? `, ${r.cls} ${r.cpos}위` : '') : '랭킹 등록됨';
+      line.append(el('span', { class: 'rk-state' }, el('span', { class: 'rk-pos', text: posTxt }), el('small', { text: `${r.nickname}, 올린 값 ${fmtInt(r.cp)}` }), upd ? el('small', { class: 'rk-upd', text: upd }) : null),
         el('span', { class: 'acts' }, btn('갱신 코드', showToken, true), btn('랭킹 갱신', doUpdate)));
     }
   }
   A.onRefresh(renderLine);
 
-  async function position(c, cp) {
-    const { count, error } = await c.from('players').select('id', { count: 'exact', head: true }).gt('cp', cp);
+  async function position(c, cp, cls) {
+    let q = c.from('players').select('id', { count: 'exact', head: true }).gt('cp', cp);
+    if (cls) q = q.eq('cls', cls);
+    const { count, error } = await q;
     return error ? null : count + 1;
   }
+  async function positions(c, r) { r.pos = await position(c, r.cp); r.cpos = r.cls ? await position(c, r.cp, r.cls) : null; }
   async function checkStatus(key) {
     const r = A.rank(key); if (!r || !r.token) return;
     try {
@@ -194,8 +203,8 @@
       const st = data && data[0];
       if (!st) { A.setRank(null, key); }
       else {
-        Object.assign(r, { status: st.status, nickname: st.nickname, server: st.server, cp: Number(st.cp), memo: st.memo || '', upd: st.upd_status || '', updCp: Number(st.upd_cp) || 0, updMemo: st.upd_memo || '' });
-        if (st.status === 'approved') r.pos = await position(c, r.cp);
+        Object.assign(r, { status: st.status, nickname: st.nickname, cp: Number(st.cp), memo: st.memo || '', upd: st.upd_status || '', updCp: Number(st.upd_cp) || 0, updMemo: st.upd_memo || '' });
+        if (st.status === 'approved') { r.cls = r.cls || A.cls(); await positions(c, r); }
         A.setRank(r, key);
       }
       if (key === A.key()) renderLine();
@@ -216,8 +225,6 @@
     const code = genCode();
     let img = null;
     const nick = el('input', { type: 'text', class: 'nick', maxlength: '20', placeholder: '게임 닉네임', value: A.nick() || (A.rank() || {}).nickname || '' });
-    const srv = el('select', {}, ...SERVERS.map(s => el('option', { value: s, text: s })));
-    const prev = (A.rank() || {}).server; if (prev) srv.value = prev;
     const file = el('input', { type: 'file', accept: 'image/*', hidden: '' });
     const shotBox = el('div', { class: 'apply-shot', tabindex: '0', role: 'button' }, el('span', { text: '여기를 눌러 사진을 고르거나 Ctrl + V로 붙여 넣으세요' }));
     const setImg = async (blob) => {
@@ -244,7 +251,6 @@
       el('h3', { id: 'apTitle', text: '랭킹에 올리기' }),
       el('p', { class: 'apply-sum' }, `${A.cls()} 실투력 `, el('b', { text: fmtInt(cp) }), '을(를) 올려요. 관리자가 본인 캐릭터인지 확인한 뒤 랭킹에 보여요.'),
       el('label', { class: 'ex-row' }, el('span', {}, '닉네임', el('small', { text: '게임 닉네임 그대로' })), nick),
-      el('label', { class: 'ex-row' }, el('span', {}, '서버'), srv),
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
       el('p', { text: '게임 채팅창에 이 코드를 입력한 다음, 채팅이 보이게 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요.' }),
       shotBox, file,
@@ -266,11 +272,11 @@
         if (up.error) throw up.error;
         const token = genToken();
         const { error } = await c.rpc('submit_application', {
-          p_nickname: n, p_server: srv.value, p_cls: A.cls(), p_cp: cp, p_inputs: A.inputs(), p_code: code, p_shot: path, p_token: token,
+          p_nickname: n, p_server: '', p_cls: A.cls(), p_cp: cp, p_inputs: A.inputs(), p_code: code, p_shot: path, p_token: token,
         });
         if (error) throw error;
         if (A.nick() !== n) A.setNick(n);
-        A.setRank({ token, status: 'pending', nickname: n, server: srv.value, cp });
+        A.setRank({ token, status: 'pending', nickname: n, cls: A.cls(), cp });
         checked[A.key()] = true;
         close(); renderLine();
         await A.dialog({ title: '신청했어요', text: '관리자가 스크린샷을 확인하면 랭킹에 올라가요. 아래 갱신 코드는 다른 기기에서 갱신할 때 필요하니 따로 적어 두세요.', area: token, ok: '확인' });
@@ -306,7 +312,7 @@
         Object.assign(r, { upd: 'held', updCp: cp, updMemo: '' }); A.setRank(r); renderLine();
         toast('관리자가 확인하면 랭킹에 반영돼요');
       } else {
-        Object.assign(r, { cp, upd: 'live', updCp: cp, updMemo: '' }); r.pos = await position(c, cp); A.setRank(r); renderLine();
+        Object.assign(r, { cp, cls: A.cls(), upd: 'live', updCp: cp, updMemo: '' }); await positions(c, r); A.setRank(r); renderLine();
         toast(`랭킹을 갱신했어요${r.pos ? ` (${r.pos}위)` : ''}`);
       }
     } catch (e) { toast('갱신하지 못했어요. ' + errMsg(e)); }
@@ -323,7 +329,7 @@
       if (error) throw error;
       const st = data && data[0];
       if (!st) { toast('맞는 코드를 찾지 못했어요'); return; }
-      A.setRank({ token, status: st.status, nickname: st.nickname, server: st.server, cp: Number(st.cp), memo: st.memo || '' });
+      A.setRank({ token, status: st.status, nickname: st.nickname, cls: A.cls(), cp: Number(st.cp), memo: st.memo || '' });
       if (!A.nick()) A.setNick(st.nickname);
       checked[A.key()] = false;
       toast(`${st.nickname} 캐릭터와 연결했어요`);
@@ -372,7 +378,7 @@
     const hist = el('div', { class: 'adm-sec' }, el('h3', { text: '최근 갱신' }));
     body.append(pend, hist);
 
-    const { data: apps, error } = await c.from('applications').select('id,nickname,server,cls,cp,verify_code,shot_path,created_at').eq('status', 'pending').order('created_at');
+    const { data: apps, error } = await c.from('applications').select('id,nickname,cls,cp,verify_code,shot_path,created_at').eq('status', 'pending').order('created_at');
     if (error) throw error;
     if (!apps.length) pend.append(el('p', { class: 'rank-note', text: '기다리는 신청이 없어요' }));
     for (const a of apps) {
@@ -381,7 +387,7 @@
       const ok = el('button', { type: 'button', class: 'btn primary', text: '승인' });
       const no = el('button', { type: 'button', class: 'btn', text: '거절' });
       const item = el('div', { class: 'adm-item' }, img, el('div', { class: 'adm-info' },
-        el('span', { class: 'nm', text: `${a.nickname} (${a.server})` }),
+        el('span', { class: 'nm', text: a.nickname }),
         el('span', { text: `${a.cls}, 실투력 ${fmtInt(a.cp)}` }),
         el('span', { class: 'code' }, '인증 코드 ', el('b', { text: a.verify_code })),
         el('small', { class: 'adm-flag', text: '채팅의 인증 코드, 닉네임, PC방 아이콘 OFF, 지애 버프 없음을 확인하세요' }),
@@ -410,7 +416,7 @@
       el('p', { class: 'rank-note', text: '이미 랭킹에 반영됐어요. 사진을 보고 확인하거나, 이상하면 되돌려요.' }));
     body.insertBefore(held, hist); body.insertBefore(live, hist); hist.remove();
     const { data: hs, error: e2 } = await c.from('cp_history')
-      .select('id,cp,prev_cp,cls,edited,status,created_at,shot_path,player_id,players(nickname,server,hidden)')
+      .select('id,cp,prev_cp,cls,edited,status,created_at,shot_path,player_id,players(nickname,hidden)')
       .in('status', ['held', 'live']).order('created_at', { ascending: false }).limit(60);
     if (e2) throw e2;
     const hsHeld = hs.filter(h => h.status === 'held'), hsLive = hs.filter(h => h.status === 'live');
@@ -434,7 +440,7 @@
       const diff = h.prev_cp ? (h.cp - h.prev_cp) / h.prev_cp * 100 : 0;
       const acts = el('div', { class: 'adm-acts' });
       const item = el('div', { class: 'adm-item' }, img, el('div', { class: 'adm-info' },
-        el('span', { class: 'nm', text: `${p.nickname || '?'} (${p.server || ''})` }),
+        el('span', { class: 'nm', text: p.nickname || '?' }),
         el('span', { text: `${h.cls || ''}, ${h.prev_cp ? fmtInt(h.prev_cp) + ' → ' : ''}${fmtInt(h.cp)}${h.prev_cp ? ` (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%)` : ''}` }),
         h.edited ? el('span', { class: 'adm-flag', text: '스크린샷 적용 뒤 손으로 고친 값 있음' }) : null,
         el('small', { text: ago(h.created_at) }), acts));
