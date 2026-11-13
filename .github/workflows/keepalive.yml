@@ -1,0 +1,15 @@
+name: keep-ranking-db-awake
+# Supabase 무료 플랜은 7일 동안 요청이 적으면 멈춤 → 사흘마다 랭킹을 한 번 읽어 깨워 둠
+on:
+  schedule:
+    - cron: '17 3 */3 * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ping ranking db
+        run: |
+          curl -fsS "https://qaeheqbuzwxbaujrsktr.supabase.co/rest/v1/players?select=id&limit=1" \
+            -H "apikey: sb_publishable_J0YXiKlO-CdW_vK_k5UhXA_mE7kvs1N" > /dev/null
+          echo ok
