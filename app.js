@@ -144,11 +144,16 @@
     }
     store.mig.preset1 = 1;
   }
-  // 에테르 세이지는 방어구 세트 기본값이 순환
-  const SAGE = '에테르 세이지', SET_CYCLE = '엑사&네블론 - 순환';
+  // 에테르 세이지는 방어구 세트 기본값이 순환, 녹힐 직업은 복원
+  const SAGE = '에테르 세이지', SET_CYCLE = '엑사&네블론 - 순환', SET_HEAL = '엑사&네블론 - 복원';
+  const setDefault = (cls) => HEALERS.has(cls) ? SET_HEAL : cls === SAGE ? SET_CYCLE : BLANK.J30;
   if (!store.mig.sage2) {
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === SAGE && v.J30 === BLANK.J30) v.J30 = SET_CYCLE;
     store.mig.sage2 = 1;
+  }
+  if (!store.mig.heal3) {
+    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && HEALERS.has(v.C6) && v.J30 === BLANK.J30) v.J30 = SET_HEAL;
+    store.mig.heal3 = 1;
   }
   // 강역강 체크가 잠깐 강렬·초월 스킬 데미지를 같게 만들던 버전의 흔적: 기준 세팅에 원래 값이 있으면 되돌리고, 강배·역강배를 같게
   if (!store.mig.eqFix) {
@@ -318,7 +323,9 @@
     let ch = false;
     const swap = (c, on, val, base) => { const want = on ? val : base, other = on ? base : val; if (inputs[c] === other) { inputs[c] = want; wb.setInput(SH, c, want); ch = true; } };
     if (HEALERS.has(now) !== HEALERS.has(prev) || !prev) swap('J21', HEALERS.has(now), HEAL_J21, BLANK.J21);
-    if ((now === SAGE) !== (prev === SAGE)) swap('J30', now === SAGE, SET_CYCLE, BLANK.J30);
+    // 방어구 세트: 지금 값이 이전 직업의 기본값일 때만 새 직업 기본값으로
+    const wantSet = setDefault(now);
+    if (inputs.J30 !== wantSet && (inputs.J30 === setDefault(prev) || inputs.J30 == null)) { inputs.J30 = wantSet; wb.setInput(SH, 'J30', wantSet); ch = true; }
     return ch;
   }
   // 강배·역강배 바지: 강배(체력 50% 초과인 적 공격시 데미지 증가)와 역강배(체력 50% 이하인 적 공격시 데미지 증가)를 높은 쪽으로 같게
@@ -625,7 +632,8 @@
   function atmaRow() {
     const sel = (c) => {
       const s = el('select', { 'data-cell': c });
-      for (const o of optionsOf(c) || []) s.append(el('option', { value: String(o), text: String(o) }));
+      // 종류는 '유수의 아트마' → '유수'처럼 짧게(값은 시트 그대로)
+      for (const o of optionsOf(c) || []) s.append(el('option', { value: String(o), text: String(o).replace(/의\s*아트마$/, '') }));
       s.value = String(inputs[c] ?? defaultOf(c) ?? '');
       return s;
     };
@@ -641,18 +649,16 @@
   function setRow() {
     return el('div', { class: 'ex-row atma-row' }, el('span', {}, '방어구 세트 효과'),
       // 보기는 짧게(연산·순환·복원), 값은 시트 그대로
-      el('div', { class: 'atma-sel set-sel' }, pickSel('J30', (optionsOf('J30') || []).map(o => ({ v: o, t: String(o).replace(/^엑사&네블론\s*-\s*/, '') })), inputs.J30 ?? BLANK.J30)));
+      // 보통 연산·순환·복원 중 하나라 그 셋만(다른 값이 들어 있으면 그 값도 남김)
+      el('div', { class: 'atma-sel set-sel' }, pickSel('J30', (optionsOf('J30') || []).filter(o => /^엑사&네블론/.test(o) || o === inputs.J30).map(o => ({ v: o, t: String(o).replace(/^엑사&네블론\s*-\s*/, '') })), inputs.J30 ?? setDefault(inputs.C6))));
   }
+  // 초월:강렬 비율(직접 입력으로 계산). 직접 넣은 적이 없으면 기본 초월 100 : 강렬 0
   function shareRow() {
-    const mode = pickSel('L42', [{ v: 'false', t: '자동' }, { v: 'true', t: '직접 입력' }], inputs.L42 === true ? 'true' : 'false');
-    const num = (c) => el('input', { type: 'text', inputmode: 'numeric', class: 'num share', 'data-cell': c, value: String(g(c) ?? '') });
-    const a = num('I46'), b = num('K46');
-    const sync = () => { const on = mode.value === 'true'; a.disabled = b.disabled = !on; box.classList.toggle('off', !on); };
-    const box = el('div', { class: 'share-in' }, el('span', { text: '강렬' }), a, el('span', { text: ':' }), b, el('span', { text: '초월' }));
-    mode.onchange = sync;
-    const row = el('div', { class: 'ex-row atma-row' }, el('span', {}, '강렬:초월 점유율'), el('div', { class: 'atma-sel' }, mode), box);
-    sync();
-    return row;
+    const custom = inputs.L42 === true;
+    const num = (c, d) => el('input', { type: 'text', inputmode: 'numeric', class: 'num share', 'data-cell': c, value: String(custom ? (g(c) ?? d) : d) });
+    const bravery = num('K46', 100), strength = num('I46', 0);
+    const box = el('div', { class: 'share-in' }, el('span', { text: '초월' }), bravery, el('span', { text: ':' }), strength, el('span', { text: '강렬' }));
+    return el('div', { class: 'ex-row atma-row share-row' }, el('span', {}, '초월:강렬 비율'), box);
   }
   function eqRow() {
     const cb = el('input', { type: 'checkbox', id: 'exEq' }); cb.checked = !!inputs._eq;
@@ -662,7 +668,7 @@
     const open = $('#extraDlg');
     if (open && !during) {
       // 읽는 동안 띄운 창이 아직 열려 있으면 닫지 않고, 빠진 칸만 붙임. 사진으로 바뀐 값(직업에 따른 세트 효과 등)은 안 건드린 칸에 반영
-      for (const sl of open.querySelectorAll('select[data-cell]:not([data-touched])')) { const c = sl.getAttribute('data-cell'); if (c !== 'L42' && inputs[c] != null) sl.value = String(inputs[c]); }
+      for (const sl of open.querySelectorAll('select[data-cell]:not([data-touched])')) { const c = sl.getAttribute('data-cell'); if (inputs[c] != null) sl.value = String(inputs[c]); }
       if (range && !open.querySelector('[data-cell=C12]')) open.querySelector('.dlg-actions').before(rangeRow()[0]);
       const note = open.querySelector('#exNote'); if (note) note.textContent = '사진은 다 읽어서 적용했어요. 사진에 안 나오는 아래 값만 확인해 주세요.';
       return;
@@ -672,18 +678,18 @@
     const iC13 = weapon ? numIn('C13', '예: 60000') : null;
     const r12 = range ? rangeRow() : null;
     const save = () => {
-      // 점유율은 0도 올바른 값(강렬 0 : 초월 100). 단 둘 다 0이면 무시
+      // 비율은 0도 올바른 값(초월 100 : 강렬 0). 단 둘 다 0이면 무시. 넣으면 그 비율로 계산(L42 켬)
       const shareIn = [...wrap.querySelectorAll('input[data-cell=I46], input[data-cell=K46]')];
-      const shareOk = shareIn.length === 2 && shareIn.some(i => Number(i.value.replace(/[,\s]/g, '')) > 0);
+      const shareOk = shareIn.length === 2 && shareIn.every(i => { const t = i.value.replace(/[,\s]/g, ''); return t !== '' && Number(t) >= 0; }) && shareIn.some(i => Number(i.value.replace(/[,\s]/g, '')) > 0);
+      if (shareOk && inputs.L42 !== true) setVal('L42', true);
       for (const inp of wrap.querySelectorAll('input[data-cell]')) {
         const c = inp.getAttribute('data-cell'), t = inp.value.replace(/[,\s]/g, ''), n = Number(t);
         if (!t || !Number.isFinite(n)) continue;
-        if (c === 'I46' || c === 'K46') { if (shareOk && n >= 0 && n !== Number(inputs[c])) setVal(c, n); continue; }
+        if (c === 'I46' || c === 'K46') { if (shareOk && n >= 0 && n !== Number(g(c))) setVal(c, n); continue; }
         if (n > 0) setVal(c, n);
       }
       for (const sl of wrap.querySelectorAll('select[data-cell][data-touched]')) {
         const c = sl.getAttribute('data-cell');
-        if (c === 'L42') { if ((sl.value === 'true') !== (inputs.L42 === true)) setVal('L42', sl.value === 'true'); continue; }
         if (sl.value !== String(inputs[c] ?? '')) setVal(c, parseOpt(c, sl.value));
       }
       const eq = wrap.querySelector('#exEq');

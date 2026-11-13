@@ -135,7 +135,7 @@
   const nf = (v) => String(Math.round(Number(v) * 100) / 100);
   function shareText(i) {
     i = i || {};
-    if (i.L42 === true) return `직접 입력 ${nf(i.I46 ?? 35)} : ${nf(i.K46 ?? 65)} (${i.M46 || '강초뎀 적용 이전'} 기준)`;
+    if (i.L42 === true) return `${nf(i.K46 ?? 65)} : ${nf(i.I46 ?? 35)} (${i.M46 || '강초뎀 적용 이전'} 기준)`;
     return `자동 (${Number(i.C29) > Number(i.C30) ? '강렬' : '초월'} 주력)`;
   }
   async function playerDetail(c, r) {
@@ -179,7 +179,7 @@
     if (box) { box.hidden = false; return; }
     const img = el('img', { alt: `${r.nickname} 실투력 스크린샷` });
     const cap = el('p', { class: 'rk-cap', text: '사진 불러오는 중이에요' });
-    const shareP = el('p', { class: 'rk-cap', text: '강렬:초월 점유율 불러오는 중' });
+    const shareP = el('p', { class: 'rk-cap', text: '초월:강렬 비율 불러오는 중' });
     const shot = el('button', { type: 'button', class: 'rk-shot', 'aria-label': '사진 크게 보기' }, img, watermark());
     shot.onclick = () => { if (img.src) lightbox(img.src, img.alt); };
     box = el('div', { class: 'rk-detail' },
@@ -195,7 +195,7 @@
     try {
       const c = await sb();
       await playerDetail(c, r);
-      shareP.textContent = `강렬:초월 점유율 ${shareText(r.inputs)}`;
+      shareP.textContent = `초월:강렬 비율 ${shareText(r.inputs)}`;
       const u = r.shot_path ? await signed(c, r.shot_path) : null;
       if (u) { img.src = u; cap.textContent = '지금 랭킹 값을 낸 스크린샷이에요. 누르면 크게 보여요.'; }
       else { shot.hidden = true; cap.textContent = '사진이 아직 없어요.'; }
@@ -454,7 +454,7 @@
       const item = el('div', { class: 'adm-item' }, img, el('div', { class: 'adm-info' },
         el('span', { class: 'nm', text: a.nickname }),
         el('span', { text: `${a.cls}, 실투력 ${fmtInt(a.cp)}` }),
-        el('span', { text: `강렬:초월 점유율 ${shareText(a.inputs)}` }),
+        el('span', { text: `초월:강렬 비율 ${shareText(a.inputs)}` }),
         el('span', { class: 'code' }, '인증 코드 ', el('b', { text: a.verify_code })),
         el('small', { class: 'adm-flag', text: '채팅의 인증 코드, 닉네임, PC방 아이콘 OFF, 지애 버프 없음을 확인하세요' }),
         el('small', { text: new Date(a.created_at).toLocaleString('ko-KR') }),
@@ -508,7 +508,7 @@
       const item = el('div', { class: 'adm-item' }, img, el('div', { class: 'adm-info' },
         el('span', { class: 'nm', text: p.nickname || '?' }),
         el('span', { text: `${h.cls || ''}, ${h.prev_cp ? fmtInt(h.prev_cp) + ' → ' : ''}${fmtInt(h.cp)}${h.prev_cp ? ` (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%)` : ''}` }),
-        el('span', { text: `강렬:초월 점유율 ${shareText(h.inputs)}` }),
+        el('span', { text: `초월:강렬 비율 ${shareText(h.inputs)}` }),
         h.edited ? el('span', { class: 'adm-flag', text: '스크린샷 적용 뒤 손으로 고친 값 있음' }) : null,
         el('small', { text: ago(h.created_at) }), acts));
       if (h.status === 'held') {

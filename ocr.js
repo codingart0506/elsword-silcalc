@@ -122,6 +122,35 @@
   const FIELD_OF = {};
   for (const f of FIELDS) if (f.cell) FIELD_OF[f.cell] = f;
 
+  // 체력 조건 세 줄(50% 초과 / 50% 이하 / 100% 이하): 이름의 50%·100%가 깨져 읽혀도 '초과·이하'와 줄 순서로 칸을 정함
+  function parseHpRows(rows) {
+    const cand = [];
+    rows.forEach((r, i) => {
+      const t = String(r.text);
+      if (!/공\s*격|데\s*미\s*지/.test(t)) return;
+      const over = /[초조]\s*[과괴]/.test(t), under = /이\s*[하히]\s*[인일적]/.test(t);
+      if (!over && !under && !/적\s*공\s*격/.test(t)) return;
+      const ms = [...t.matchAll(/(\d{1,3}[.,]\d{2})\s*[%％]?/g)];
+      if (!ms.length) return;
+      const m = ms[ms.length - 1], value = toValue(m[1], true, 'pct');
+      if (value === null || value > 5) return;
+      const head = t.slice(0, m.index);
+      const cell = over && !under ? 'C24' : !under ? null : /1\s*[0Oo]\s*[0Oo]|백/.test(head) ? 'C26' : 'C25';
+      cand.push({ i, cell, value, text: t.trim(), conf: r.conf });
+    });
+    const out = {};
+    // 세 줄이 연달아 있으면 순서대로(초과 → 이하 → 100% 이하)
+    for (let k = 0; k + 2 < cand.length; k++) {
+      const a = cand[k], b = cand[k + 1], c = cand[k + 2];
+      if (b.i - a.i <= 2 && c.i - b.i <= 2) {
+        ['C24', 'C25', 'C26'].forEach((cell, j) => { const x = [a, b, c][j]; out[cell] = Object.assign({}, x, { cell, strong: true }); });
+        return out;
+      }
+    }
+    for (const x of cand) if (x.cell && !out[x.cell]) out[x.cell] = Object.assign({}, x);
+    return out;
+  }
+
   // 행 목록 → 항목별 인식값
   function parseRows(rows) {
     const found = {}, atk = [], guess = [];
@@ -192,6 +221,15 @@
       if (v === null) continue;
       if (g.cell === 'C11') { atk.push({ cell: 'C11', value: v, score: g.score, text: g.row.text.trim(), conf: g.row.conf, label: f.names[0], guessed: true }); continue; }
       found[g.cell] = { cell: g.cell, value: v, score: g.score, text: g.row.text.trim(), conf: g.row.conf, label: f.names[0] || f.cell, guessed: true };
+    }
+    // 체력 조건 세 줄은 따로 한 번 더 확인: 못 찾은 칸은 채우고, 세 줄을 순서로 확실히 찾았으면 그 값을 씀
+    const hp = parseHpRows(rows);
+    for (const cell of ['C24', 'C25', 'C26']) {
+      const h = hp[cell]; if (!h) continue;
+      const cur = found[cell];
+      if (cur && !h.strong) continue;
+      if (cur && cur.value === h.value) continue;
+      found[cell] = { cell, value: h.value, score: cur ? Math.max(cur.score, 0.9) : 0.9, text: h.text, conf: h.conf, label: FIELD_OF[cell].names[0], guessed: !h.strong };
     }
     // 물리·마법 공격력이 둘 다 보이면(둘 다 즐겨찾기) 높은 쪽이 주 공격력
     if (atk.length) {
@@ -537,7 +575,7 @@
     return best;
   }
 
-  const api = { findName, readTitle, readName, findRangeMax, FIELDS, norm, matchField, splitPairs, parseRows, wordsToRows, collectWords, mergeDigitPass, locatePanel, toValue,
+  const api = { parseHpRows, findName, readTitle, readName, findRangeMax, FIELDS, norm, matchField, splitPairs, parseRows, wordsToRows, collectWords, mergeDigitPass, locatePanel, toValue,
     preprocess, recognize, getWorkers, startShare, grabFrame, stopShare, sharing, imageFromBlob };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SilOCR = api;
