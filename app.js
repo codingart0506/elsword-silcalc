@@ -530,7 +530,7 @@
       s.value = String(inputs[c] ?? defaultOf(c) ?? '');
       return s;
     };
-    return el('div', { class: 'ex-row atma-row' }, el('span', {}, '아트마 액세서리', el('small', { text: '사진으로 못 읽는 값이에요. 실투력이 최대 20% 넘게 달라져요' })),
+    return el('div', { class: 'ex-row atma-row' }, el('span', {}, '아트마 액세서리'),
       el('div', { class: 'atma-sel' }, sel('J32'), sel('L32')));
   }
   function askExtras({ weapon = true, range = false, during = false } = {}) {
