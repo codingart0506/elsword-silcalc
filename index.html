@@ -20,10 +20,18 @@
     </div>
   </header>
 
+  <div class="shared" id="sharedBar" hidden>
+    <span id="sharedText"></span>
+    <span class="shared-acts">
+      <button class="txt sm" id="btnSaveShared">내 캐릭터로 저장</button>
+      <button class="txt sm mute" id="btnLeaveShared">내 세팅 보기</button>
+    </span>
+  </div>
+
   <section class="card hero" aria-live="polite">
     <div class="hero-top">
       <span class="hero-label">실질 전투력</span>
-      <span class="hero-class" id="rClass"></span>
+      <span class="hero-right"><span class="hero-class" id="rClass"></span><button class="txt sm" id="btnLink" hidden>링크 복사</button></span>
     </div>
     <div class="hero-value" id="rCP">-</div>
     <div class="hero-unit" id="rCPk"></div>
@@ -89,6 +97,8 @@
     <p>이 사이트는 KOG·넥슨과 관련 없는 비공식 팬 도구입니다. 입력한 값은 이 브라우저에만 저장됩니다.</p>
   </footer>
 </div>
+
+<div class="toast" id="toast" role="status" hidden></div>
 
 <div class="dialog" id="dialog" hidden>
   <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">

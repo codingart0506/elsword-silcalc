@@ -78,16 +78,37 @@
   }
   const kindOf = (a, f) => f && f.k ? f.k : DV[a] && DV[a].type === 'list' ? 'select' : PCT.has(a) ? 'pct' : typeof defaultOf(a) === 'boolean' ? 'check' : 'num';
 
+  const CAN_LINK = !!window.SIL_CDN; // 링크 공유는 직접 호스팅판에서만 (Claude 링크는 주소 뒤 값을 못 넘김)
+  // ---------- 처음 상태: 시트 예시 값 대신 빈 세팅 ----------
+  const STAT_CELLS = 'C11 C12 C13 C14 C15 C17 C18 C19 C20 C21 C22 C24 C25 C26 C27 C29 C30 C31 C32 C33 C34 C35'.split(' ');
+  const BLANK = Object.assign({ C6: '' }, Object.fromEntries(STAT_CELLS.map(a => [a, null])), {
+    H11: 0, H12: 0, H13: 0, H15: '미사용', F17: '해당사항 없음', F18: '해당사항 없음', H17: 0, H18: 0,
+    D20: '해당사항 없음', D21: '해당사항 없음', D22: '해당사항 없음', H20: '해당사항 없음', H21: '해당사항 없음', H22: '해당사항 없음',
+    G24: '미착용', G25: '미착용', G27: '해당사항 없음', G28: '해당사항 없음', G29: '해당사항 없음', G30: '해당사항 없음',
+    H31: 0, H32: 0, H33: 0, G35: '1세트 또는 미착용',
+    L11: '미사용', L12: '미사용', L13: '미사용', L14: '미사용', L15: '미사용',
+    J17: '미사용', J18: '미사용', J19: '미사용', J20: '미사용', J21: '미적용', J22: '미적용', J23: '해당사항 없음',
+    L26: 0, L27: 0, L28: 0, L29: 0, J30: '해당사항 없음', L31: 0, J32: '미적용', L32: '미착용',
+  });
+  const blank = () => Object.assign({}, BLANK);
+  const isEmptySetting = (inp) => !inp.C6 || !(Number(inp.C11) > 0);
+
   // ---------- 상태 / 저장 ----------
   const LS = 'silcalc.v1';
-  let store = { current: '내 캐릭터', profiles: { '내 캐릭터': {} } };
+  let store = { current: '내 캐릭터', profiles: { '내 캐릭터': blank() } };
   try { const s = JSON.parse(localStorage.getItem(LS)); if (s && s.profiles) store = s; } catch (e) { /* 저장소 없음 */ }
+  // 예전 버전에서 손대지 않은 캐릭터(시트 예시 값)는 빈 세팅으로
+  for (const [k, v] of Object.entries(store.profiles)) if (!v || !Object.keys(v).length) { store.profiles[k] = blank(); if (store.bases) delete store.bases[k]; }
   if (!store.bases) store.bases = {};
   let inputs = Object.assign({}, store.profiles[store.current] || {});
   if (!store.bases[store.current]) store.bases[store.current] = Object.assign({}, inputs);
-  // 기준 세팅을 따로 계산해서 지금 값과 비교
+  // 기준 세팅을 따로 계산해서 지금 값과 비교 (공유 링크를 볼 때는 내 세팅이 기준)
   const baseWb = new E.Workbook(M);
-  function applyBase() { baseWb.inputs = {}; for (const [a, v] of Object.entries(store.bases[store.current] || {})) baseWb.inputs[SH + '!' + a] = v; baseWb.invalidate(); }
+  let shared = null; // { n: 이름, i: 입력값 }
+  function applyBase() {
+    const src = shared ? (store.profiles[store.current] || {}) : (store.bases[store.current] || {});
+    baseWb.inputs = {}; for (const [a, v] of Object.entries(src)) baseWb.inputs[SH + '!' + a] = v; baseWb.invalidate();
+  }
   applyBase();
   function persist() { try { localStorage.setItem(LS, JSON.stringify(store)); } catch (e) { /* 무시 */ } }
   function applyInputs() { wb.inputs = {}; for (const [a, v] of Object.entries(inputs)) wb.inputs[SH + '!' + a] = v; wb.invalidate(); }
@@ -114,7 +135,7 @@
       node = el('input', { type: 'checkbox', 'data-cell': a, onchange: () => setVal(a, node.checked) });
     } else {
       node = el('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'data-cell': a, class: k === 'pct' ? 'pct' : 'num',
-        oninput: () => { const v = parseNum(node.value, k); if (v !== null) { node.classList.remove('bad'); setVal(a, v); } else node.classList.add('bad'); },
+        oninput: () => { if (node.value.trim() === '') { node.classList.remove('bad'); setVal(a, null); return; } const v = parseNum(node.value, k); if (v !== null) { node.classList.remove('bad'); setVal(a, v); } else node.classList.add('bad'); },
         onblur: () => syncControl(a) });
     }
     const wrap = k === 'pct' ? el('span', { class: 'pctwrap' }, node, el('span', { class: 'suffix', text: '%' })) : node;
@@ -196,7 +217,10 @@
     }
     if (!opts.some(o => String(o) === String(cur))) {
       const ex = node.querySelector('option[data-extra]'); if (ex) ex.remove();
-      node.append(el('option', { value: String(cur), text: String(cur ?? ''), 'data-extra': '1' }));
+      const empty = cur === null || cur === '' || E.isErr(cur);
+      const o = el('option', { value: empty ? '' : String(cur), text: empty ? (a === 'C6' ? '전직을 고르세요' : '') : String(cur), 'data-extra': '1' });
+      if (empty) node.prepend(o); else node.append(o);
+      if (empty) { node.value = ''; return; }
     }
     node.value = String(cur);
   }
@@ -205,7 +229,7 @@
     const v = g(a);
     if (c.kind === 'select') fillSelect(c.node, a);
     else if (c.kind === 'check') c.node.checked = v === true;
-    else if (document.activeElement !== c.node) { c.node.value = c.kind === 'pct' ? pctIn(v) : (typeof v === 'number' ? String(v) : ''); c.node.classList.remove('bad'); }
+    else if (document.activeElement !== c.node) { const empty = v === null || (a in inputs && inputs[a] === null); c.node.value = empty ? '' : c.kind === 'pct' ? pctIn(v) : (typeof v === 'number' ? String(v) : ''); c.node.placeholder = c.kind === 'pct' ? '0.00' : '0'; c.node.classList.remove('bad'); }
     if (c.row) { const b = baseWb.get(SH, a); c.row.classList.toggle('changed', String(v) !== String(E.isErr(b) ? b.code : b)); }
   }
   function syncLabels() {
@@ -223,7 +247,7 @@
     scheduleAutosave();
   }
   let saveT = 0;
-  function scheduleAutosave() { clearTimeout(saveT); saveT = setTimeout(() => { store.profiles[store.current] = Object.assign({}, inputs); persist(); }, 400); }
+  function scheduleAutosave() { if (shared) return; clearTimeout(saveT); saveT = setTimeout(() => { store.profiles[store.current] = Object.assign({}, inputs); persist(); }, 400); }
   function refresh() {
     let err = null;
     try {
@@ -236,9 +260,22 @@
   }
   function setText(id, t) { const n = $(id); if (n && n.textContent !== t) n.textContent = t; }
   function renderResults() {
+    const hero = $('.hero');
+    $('#btnLink').hidden = !CAN_LINK || isEmptySetting(inputs);
+    $('#delta').hidden = isEmptySetting(inputs);
+    if (isEmptySetting(inputs)) {
+      hero.classList.add('empty');
+      setText('#rCP', '—'); setText('#rCPk', inputs.C6 ? '스크린샷을 넣거나 공격력부터 입력해 주세요' : '스크린샷을 넣거나 전직부터 골라 주세요');
+      setText('#rClass', inputs.C6 || ''); setText('#deltaText', ''); $('#btnPin').hidden = true; $('#btnRevert').hidden = true;
+      const fi = $('#fieldInfo'); if (fi) fi.textContent = '';
+      return;
+    }
+    hero.classList.remove('empty');
     const cp = g('C36');
     setText('#rCP', typeof cp === 'number' ? fmtInt(cp) : String(cp));
-    setText('#rCPk', korUnit(cp));
+    const missing = ['C12', 'C13'].filter(a => !(Number(g(a)) > 0));
+    $('#rCPk').classList.toggle('warn', missing.length > 0);
+    setText('#rCPk', missing.length ? `${missing.map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력').join('·')}을 넣어야 정확해요` : korUnit(cp));
     setText('#rClass', label('C6'));
     const fi = $('#fieldInfo'); if (fi) fi.textContent = `${label('K34')} ${fmtPct(g('L34'), 0)}, ${label('K35')} ${fmtPct(g('L35'), 0)} 적용 중`;
     // 기준 대비
@@ -249,10 +286,12 @@
       const d = cp - base; same = Math.abs(d) < 0.5;
       const pct = base ? d / base * 100 : 0;
       dt.className = 'delta-text' + (same ? '' : d > 0 ? ' up' : ' down');
-      dt.textContent = same ? '기준 세팅과 같아요' : `기준보다 ${d > 0 ? '▲' : '▼'} ${fmtInt(Math.abs(d))} (${d > 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%)`;
-    } else { dt.className = 'delta-text'; dt.textContent = ''; }
+      const ref = shared ? '내 세팅' : '기준';
+      dt.textContent = same ? `${ref}${shared ? '과' : ' 세팅과'} 같아요` : `${ref}보다 ${d > 0 ? '▲' : '▼'} ${fmtInt(Math.abs(d))} (${d > 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%)`;
+    } else { dt.className = 'delta-text'; dt.textContent = shared ? '' : '비교할 기준 세팅이 아직 없어요'; }
+    const noBase = typeof base !== 'number';
     const changed = Object.keys(controls).some(a => controls[a].row && controls[a].row.classList.contains('changed')) || !same;
-    $('#btnPin').hidden = !changed; $('#btnRevert').hidden = !changed;
+    $('#btnPin').hidden = (!changed && !noBase) || !!shared; $('#btnRevert').hidden = !changed || noBase || !!shared;
   }
 
   // ---------- 프로필 ----------
@@ -282,10 +321,10 @@
     });
   }
   function wireProfiles() {
-    $('#profileSel').onchange = (e) => loadProfile(e.target.value);
+    $('#profileSel').onchange = (e) => { if (shared) { shared = null; $('#sharedBar').hidden = true; history.replaceState(null, '', location.pathname); } loadProfile(e.target.value); };
     $('#btnNew').onclick = async () => {
-      const name = (await dialog({ title: '캐릭터 추가', text: '이름을 정해 주세요. 시트 예시 값에서 시작해요.', input: '' }) || '').trim();
-      if (!name) return; if (!store.profiles[name]) store.profiles[name] = {}; loadProfile(name);
+      const name = (await dialog({ title: '캐릭터 추가', text: '이름을 정해 주세요. 빈 세팅에서 시작해요.', input: '' }) || '').trim();
+      if (!name) return; if (!store.profiles[name]) store.profiles[name] = blank(); loadProfile(name);
     };
     $('#btnDelete').onclick = async () => {
       if (!(await dialog({ title: '캐릭터 삭제', text: `"${store.current}" 세팅을 지울까요?`, ok: '삭제', danger: true }))) return;
@@ -398,6 +437,17 @@
         el('td', { class: 'num dim', text: kind === 'pct' ? fmtPct(cur) : fmtInt(cur) }),
         el('td', {}, kind === 'pct' ? el('span', { class: 'pctwrap' }, inp, el('span', { class: 'suffix', text: '%' })) : inp)));
     }
+    // 상세 스탯 창에 없는 값: 비어 있으면 여기서 바로 입력
+    for (const c of ['C12', 'C13']) {
+      if (Number(g(c)) > 0) continue;
+      const cb = el('input', { type: 'checkbox', 'aria-label': '적용' });
+      const inp = el('input', { type: 'text', inputmode: 'decimal', 'data-cell': c, class: 'num', placeholder: '직접 입력', oninput: () => { cb.checked = inp.value.trim() !== ''; } });
+      body.append(el('tr', { class: 'manual-row' },
+        el('td', {}, cb),
+        el('td', {}, label(c === 'C12' ? 'B12' : 'B13'), el('small', { class: 'lowtag', text: ' 창에 없어요' })),
+        el('td', { class: 'dim', text: '비어 있음' }),
+        el('td', {}, inp)));
+    }
     if (gear) showGearRows(gear);
     else lastGear = null;
     const gearN = body.querySelectorAll('tr.gear-row:not(.none):not(.cls-row)').length;
@@ -491,9 +541,68 @@
       const v = parseNum(inp.value, PCT.has(c) ? 'pct' : 'num');
       if (v !== null) { inputs[c] = v; n++; }
     });
+    let autoBase = false;
+    if (!shared && isEmptySetting(store.bases[store.current] || {}) && !isEmptySetting(inputs)) { store.bases[store.current] = Object.assign({}, inputs); applyBase(); autoBase = true; }
     applyInputs(); refresh(); scheduleAutosave();
-    $('#ocrCount').textContent = `${n}개 값을 적용했어요. 위에서 기준 대비 변화를 확인하세요`;
+    $('#ocrCount').textContent = autoBase ? `${n}개 값을 적용하고 이 세팅을 기준으로 잡았어요` : `${n}개 값을 적용했어요. 위에서 기준 대비 변화를 확인하세요`;
     document.querySelectorAll('#ocrBody tr').forEach(tr => tr.classList.add('applied'));
+  }
+
+  // ---------- 링크 공유 (주소 #s= 뒤에 세팅을 압축해 담음) ----------
+  const b64u = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  const unb64u = (t) => { const s = atob(t.replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(s, c => c.charCodeAt(0)); };
+  async function pipe(u8, Stream) { return new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new Stream('deflate-raw'))).arrayBuffer()); }
+  async function packShare(name, inp) {
+    const i = {};
+    for (const [a, v] of Object.entries(inp)) if (String(v) !== String(defaultOf(a))) i[a] = v;
+    const raw = new TextEncoder().encode(JSON.stringify({ v: 1, n: name, i }));
+    if (window.CompressionStream) return 'z' + b64u(await pipe(raw, CompressionStream));
+    return 'j' + b64u(raw);
+  }
+  async function unpackShare(t) {
+    const kind = t[0], body = unb64u(t.slice(1));
+    const raw = kind === 'z' ? await pipe(body, DecompressionStream) : body;
+    const o = JSON.parse(new TextDecoder().decode(raw));
+    if (!o || o.v !== 1 || typeof o.i !== 'object') throw new Error('형식 오류');
+    return o;
+  }
+  function toast(t) { const n = $('#toast'); n.textContent = t; n.hidden = false; clearTimeout(n._t); n._t = setTimeout(() => { n.hidden = true; }, 2200); }
+  function enterShared(o) {
+    shared = { n: String(o.n || '공유된 세팅').slice(0, 30), i: o.i };
+    inputs = Object.assign({}, shared.i);
+    $('#sharedBar').hidden = false;
+    $('#sharedText').textContent = `${shared.n} 세팅을 보고 있어요`;
+    applyInputs(); applyBase(); refresh();
+  }
+  function leaveShared() {
+    shared = null; $('#sharedBar').hidden = true;
+    history.replaceState(null, '', location.pathname + location.search);
+    inputs = Object.assign({}, store.profiles[store.current] || {});
+    applyInputs(); applyBase(); refresh();
+  }
+  function wireShare() {
+    if (!CAN_LINK) return;
+    $('#btnLink').onclick = async () => {
+      const nm = shared ? shared.n : (store.current === '내 캐릭터' ? (inputs.C6 || '공유된') : store.current);
+      const code = await packShare(nm, inputs);
+      const url = location.origin + location.pathname + '#s=' + code;
+      try { await navigator.clipboard.writeText(url); toast('링크를 복사했어요. 받은 사람은 이 세팅 그대로 보게 돼요'); }
+      catch (e) { await dialog({ title: '링크', text: '아래 주소를 복사해서 보내세요.', area: url, ok: '닫기' }); }
+    };
+    $('#btnLeaveShared').onclick = leaveShared;
+    $('#btnSaveShared').onclick = async () => {
+      let name = (await dialog({ title: '내 캐릭터로 저장', text: '저장할 이름을 정해 주세요.', input: shared.n }) || '').trim();
+      if (!name) return;
+      store.profiles[name] = Object.assign({}, inputs); store.bases[name] = Object.assign({}, inputs);
+      shared = null; $('#sharedBar').hidden = true; history.replaceState(null, '', location.pathname + location.search);
+      loadProfile(name); toast(`"${name}"(으)로 저장했어요`);
+    };
+    window.addEventListener('hashchange', () => { if (location.hash.startsWith('#s=')) openHash(); });
+  }
+  async function openHash() {
+    if (!CAN_LINK || !location.hash.startsWith('#s=')) return;
+    try { enterShared(await unpackShare(location.hash.slice(3))); }
+    catch (e) { console.error(e); toast('링크를 열 수 없어요. 주소가 잘렸는지 확인해 주세요'); }
   }
 
   // ---------- 시작 ----------
@@ -504,7 +613,8 @@
   }
   persist();
   applyInputs();
-  renderForms(); renderProfiles(); wireProfiles(); wireSelection(); wireCapture();
+  renderForms(); renderProfiles(); wireProfiles(); wireSelection(); wireCapture(); wireShare();
   refresh();
+  openHash();
   selfTest();
 })();
