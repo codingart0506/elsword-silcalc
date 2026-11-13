@@ -311,18 +311,18 @@
     if ((now === SAGE) !== (prev === SAGE)) swap('J30', now === SAGE, SET_CYCLE, BLANK.J30);
     return ch;
   }
-  // 강배·역강배 바지: 강렬·초월 스킬 데미지를 높은 쪽으로 같게
+  // 강배·역강배 바지: 강배(체력 50% 초과인 적 공격시 데미지 증가)와 역강배(체력 50% 이하인 적 공격시 데미지 증가)를 높은 쪽으로 같게
   function syncEq() {
     if (!inputs._eq) return false;
-    const a = Number(inputs.C29) || 0, b = Number(inputs.C30) || 0, m = Math.max(a, b);
+    const a = Number(inputs.C24) || 0, b = Number(inputs.C25) || 0, m = Math.max(a, b);
     if (!(m > 0) || (a === m && b === m)) return false;
-    inputs.C29 = inputs.C30 = m; wb.setInput(SH, 'C29', m); wb.setInput(SH, 'C30', m); return true;
+    inputs.C24 = inputs.C25 = m; wb.setInput(SH, 'C24', m); wb.setInput(SH, 'C25', m); return true;
   }
   function setVal(a, v) {
     const prev = inputs[a];
     inputs[a] = v; wb.setInput(SH, a, v);
     if (a === 'C6') { syncEngraveType(); syncClassDefault(prev); setTimeout(renderProfiles, 0); }
-    if (inputs._eq && (a === 'C29' || a === 'C30')) { const o = a === 'C29' ? 'C30' : 'C29'; inputs[o] = v; wb.setInput(SH, o, v); }
+    if (inputs._eq && (a === 'C24' || a === 'C25')) { const o = a === 'C24' ? 'C25' : 'C24'; inputs[o] = v; wb.setInput(SH, o, v); }
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; refresh(); });
     scheduleAutosave();
   }
@@ -623,7 +623,7 @@
   }
   function eqRow() {
     const cb = el('input', { type: 'checkbox', id: 'exEq' }); cb.checked = !!inputs._eq;
-    return el('label', { class: 'chk-row ex-eq' }, cb, el('span', {}, '강배·역강배 바지 착용', el('small', { text: '강렬한·초월한 스킬 데미지를 높은 쪽 수치로 같게 맞춰요' })));
+    return el('label', { class: 'chk-row ex-eq' }, cb, el('span', {}, '강배·역강배 바지 착용', el('small', { text: '강배·역강배 수치를 높은 쪽 수치로 같게 맞춰요' })));
   }
   function askExtras({ weapon = true, range = false, during = false } = {}) {
     const open = $('#extraDlg');
@@ -647,9 +647,9 @@
       }
       const eq = wrap.querySelector('#exEq');
       if (eq) {
-        const b29 = inputs.C29, b30 = inputs.C30;
+        const b24 = inputs.C24, b25 = inputs.C25;
         if (eq.checked) inputs._eq = true; else delete inputs._eq;
-        if (syncEq() && ocrSnap && ocrSnap._key === store.current && String(ocrSnap.C29) === String(b29) && String(ocrSnap.C30) === String(b30)) { ocrSnap.C29 = inputs.C29; ocrSnap.C30 = inputs.C30; }
+        if (syncEq() && ocrSnap && ocrSnap._key === store.current && String(ocrSnap.C24) === String(b24) && String(ocrSnap.C25) === String(b25)) { ocrSnap.C24 = inputs.C24; ocrSnap.C25 = inputs.C25; }
       }
       refresh(); scheduleAutosave(); wrap.remove();
     };
