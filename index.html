@@ -107,7 +107,7 @@
   <section class="card rank-view" id="rankView" hidden aria-labelledby="rankTitle">
     <div class="rank-head">
       <h2 id="rankTitle">실투력 랭킹</h2>
-      <div class="rank-filters">
+      <div class="rank-filters" id="rankFilters">
         <div class="seg seg-sm" id="rankMode" role="group" aria-label="랭킹 종류">
           <button type="button" class="tab on" data-v="all">전체</button>
           <button type="button" class="tab" data-v="cls">전직별</button>
@@ -116,12 +116,12 @@
         <select id="rankCls" hidden></select>
       </div>
     </div>
-    <p class="rank-note">관리자가 본인 캐릭터인지 확인한 사람만 올라가요. 이름을 누르면 지금 실투력을 낸 스크린샷과 세팅을 볼 수 있어요.</p>
+    <p class="rank-note">관리자가 본인 캐릭터인지 확인한 사람만 올라가고, 랭킹은 올라간 사람만 볼 수 있어요. 이름을 누르면 지금 실투력을 낸 스크린샷과 세팅을 볼 수 있어요.</p>
     <ol class="rank-list" id="rankList"></ol>
     <p class="rank-empty" id="rankEmpty" hidden></p>
     <div class="rank-foot">
       <button type="button" class="txt sm" id="btnRankMore" hidden>더 보기</button>
-      <button type="button" class="txt sm mute" id="btnLinkCode">다른 기기에서 받은 갱신 코드로 연결</button>
+      <button type="button" class="txt sm" id="btnLinkCode">갱신 코드 입력</button>
     </div>
   </section>
 
@@ -164,6 +164,6 @@
 <script src="icons.js?v=8eccb507"></script>
 <script src="gear.js?v=ceb96c08"></script>
 <script src="app.js?v=6f648c7e"></script>
-<script src="rank.js?v=41551802"></script>
+<script src="rank.js?v=4e74cace"></script>
 </body>
 </html>

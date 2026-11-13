@@ -12,9 +12,21 @@
 
   // ---------- 서버 연결(필요할 때만 불러옴) ----------
   let sbP = null;
+  // 이 브라우저에 저장된 갱신 코드들(승인된 것 먼저, 최대 5개)
+  function viewCodes() {
+    const rs = Object.values(A.ranks()).filter(r => r && r.token);
+    rs.sort((a, b) => (b.status === 'approved') - (a.status === 'approved'));
+    return [...new Set(rs.map(r => r.token))].slice(0, 5).join(',');
+  }
   function sb() {
     if (!sbP) sbP = new Promise((res, rej) => {
-      const make = () => res(window.supabase.createClient(SB_URL, SB_KEY, { auth: { flowType: 'implicit', persistSession: true, detectSessionInUrl: true } }));
+      // 랭킹은 승인된 갱신 코드가 있는 사람만 볼 수 있어서, 갖고 있는 갱신 코드를 요청마다 같이 보냄(서버가 확인)
+      const withCode = (url, opts) => {
+        const t = viewCodes(); if (!t) return fetch(url, opts);
+        const o = Object.assign({}, opts); const h = new Headers(o.headers || {}); h.set('x-sil-token', t); o.headers = h;
+        return fetch(url, o);
+      };
+      const make = () => res(window.supabase.createClient(SB_URL, SB_KEY, { auth: { flowType: 'implicit', persistSession: true, detectSessionInUrl: true }, global: { fetch: withCode } }));
       if (window.supabase && window.supabase.createClient) return make();
       const s = document.createElement('script');
       s.src = SB_JS; s.async = true; s.onload = make;
@@ -79,6 +91,18 @@
     if (reset) { list.innerHTML = ''; rkCount = 0; rkDone = false; empty.hidden = false; empty.textContent = '불러오는 중이에요'; }
     try {
       const c = await sb();
+      if (reset) {
+        const { data: ok, error: ve } = await c.rpc('can_view');
+        if (ve) throw ve;
+        $('#rankFilters').hidden = !ok;
+        if (!ok) {
+          const wait = Object.values(A.ranks()).some(r => r && r.token && r.status === 'pending');
+          empty.hidden = false;
+          empty.textContent = wait ? '신청을 확인하고 있어요. 관리자가 승인하면 랭킹을 볼 수 있어요.'
+            : '랭킹은 랭킹에 올라간 사람만 볼 수 있어요. 계산기에서 "랭킹에 올리기"로 신청해서 승인되면 볼 수 있어요. 다른 기기에서 승인받았다면 아래 "갱신 코드 입력"에 그때 받은 갱신 코드를 넣어 주세요.';
+          rkDone = true; $('#btnRankMore').hidden = true; rkBusy = false; return;
+        }
+      }
       let q = c.from('players').select('id,nickname,cls,cp,updated_at,shot_path').order('cp', { ascending: false }).range(rkCount, rkCount + PAGE - 1);
       if (rkCls) q = q.eq('cls', rkCls);
       const { data, error } = await q;
@@ -313,8 +337,8 @@
       return;
     }
     const cp = A.rankCp(), edited = A.edited();
-    const big = r.cp && cp > r.cp * 1.15;
-    const ok = await A.dialog({ title: '랭킹 갱신', text: `${r.nickname} 실투력을 ${fmtInt(cp)}(으)로 바꿔요. PC방 혜택과 지애 버프가 꺼진 상태로 찍은 스크린샷일 때만 갱신할 수 있어요.` + ((edited || big) ? ` ${edited ? '스크린샷을 적용한 뒤 손으로 고친 값이 있어서' : '15% 넘게 올라서'} 관리자가 확인한 뒤에 랭킹에 반영돼요.` : ''), ok: '버프 없이 찍었어요, 갱신' });
+    const big = r.cp && cp > r.cp;
+    const ok = await A.dialog({ title: '랭킹 갱신', text: `${r.nickname} 실투력을 ${fmtInt(cp)}(으)로 바꿔요. PC방 혜택과 지애 버프가 꺼진 상태로 찍은 스크린샷일 때만 갱신할 수 있어요.` + ((edited || big) ? ` ${edited ? '스크린샷을 적용한 뒤 손으로 고친 값이 있어서' : '실투력이 올라서'} 관리자가 확인한 뒤에 랭킹에 반영돼요.` : ''), ok: '버프 없이 찍었어요, 갱신' });
     if (!ok) return;
     try {
       const c = await sb();
@@ -335,7 +359,7 @@
 
   // ---------- 다른 기기에서 받은 갱신 코드로 연결 ----------
   $('#btnLinkCode').onclick = async () => {
-    const t = await A.dialog({ title: '갱신 코드로 연결', text: '신청할 때 받은 갱신 코드를 넣으면, 계산기에서 지금 고른 캐릭터와 연결돼요.', input: '', ok: '연결' });
+    const t = await A.dialog({ title: '갱신 코드 입력', text: '랭킹 신청을 마쳤을 때 받은 갱신 코드를 넣으면, 이 기기에서도 랭킹을 보고 내 랭킹을 갱신할 수 있어요. 계산기에서 지금 고른 캐릭터에 연결돼요.', input: '', ok: '입력' });
     if (!t) return;
     const token = t.trim().toUpperCase();
     try {
@@ -347,7 +371,7 @@
       A.setRank({ token, status: st.status, nickname: st.nickname, cls: A.cls(), cp: Number(st.cp), memo: st.memo || '' });
       if (!A.nick()) A.setNick(st.nickname);
       checked[A.key()] = false;
-      toast(`${st.nickname} 캐릭터와 연결했어요`);
+      toast(`${st.nickname} 캐릭터에 연결했어요`);
       loadRank(true); renderLine();
     } catch (e) { toast(errMsg(e)); }
   };
@@ -427,9 +451,9 @@
     }
 
     const held = el('div', { class: 'adm-sec' }, el('h3', { text: '확인 기다리는 갱신' }),
-      el('p', { class: 'rank-note', text: '손으로 고친 값이 있거나 15% 넘게 오른 갱신이에요. 반영해야 랭킹에 올라가요.' }));
+      el('p', { class: 'rank-note', text: '실투력이 오른 갱신이나 손으로 고친 값이 있는 갱신이에요. 사진을 보고 반영해야 랭킹에 올라가요.' }));
     const live = el('div', { class: 'adm-sec' }, el('h3', { text: '바로 반영된 갱신' }),
-      el('p', { class: 'rank-note', text: '이미 랭킹에 반영됐어요. 사진을 보고 확인하거나, 이상하면 되돌려요.' }));
+      el('p', { class: 'rank-note', text: '실투력이 그대로거나 내려간 갱신이라 바로 반영됐어요. 사진을 보고 확인하거나, 이상하면 되돌려요.' }));
     body.insertBefore(held, hist); body.insertBefore(live, hist); hist.remove();
     const { data: hs, error: e2 } = await c.from('cp_history')
       .select('id,cp,prev_cp,cls,inputs,edited,status,created_at,shot_path,player_id,players(nickname,hidden)')
