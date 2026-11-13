@@ -36,7 +36,6 @@ kbd { font-family: inherit; font-size: 13px; font-weight: 600; padding: 1px 7px;
   .wrap { max-width: 1240px; padding: 28px 32px 56px; display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: 20px 24px; align-items: start; }
   .head, .shared, .foot { grid-column: 1 / -1; }
   .side { align-self: stretch; }
-  .hero { top: 20px; }
   .head h1 { font-size: 26px; }
   .main .card { padding: 28px 32px; }
   .main .rows { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; }
@@ -69,7 +68,18 @@ kbd { font-family: inherit; font-size: 13px; font-weight: 600; padding: 1px 7px;
 .card h2 { font-size: 18px; font-weight: 700; margin: 0 0 14px; letter-spacing: -0.02em; }
 
 /* 전투력 */
-.hero { position: sticky; top: 8px; z-index: 10; box-shadow: 0 6px 24px rgba(0, 29, 58, .06); }
+.hero { position: relative; }
+/* 실투력 카드가 화면 밖으로 나가면 위에 작게 띄우는 줄 */
+.minibar { position: fixed; top: 10px; left: 50%; transform: translate(-50%, -8px); z-index: 40; display: flex; align-items: baseline; gap: 10px;
+  background: rgba(255, 255, 255, .96); border-radius: 999px; padding: 8px 18px; box-shadow: 0 4px 18px rgba(0, 29, 58, .12);
+  font: inherit; color: var(--text); border: 0; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; white-space: nowrap; }
+.minibar.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.minibar .mb-label { font-size: 13px; color: var(--sub); font-weight: 600; }
+.minibar b { font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.minibar .mb-delta { font-size: 13px; font-weight: 600; color: var(--mute); }
+.minibar .mb-delta.up { color: var(--up); }
+.minibar .mb-delta.down { color: var(--down); }
+body.view-rank .minibar, body.view-admin .minibar { display: none; }
 .hero-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .hero-label { font-size: 15px; color: var(--sub); font-weight: 600; }
 .hero-class { font-size: 13px; color: var(--mute); }
@@ -232,7 +242,7 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
   .drop-btns .btn { flex: 1; padding: 14px 16px; }
   .wrap { padding: 12px 12px 40px; }
   .card { padding: 20px 18px; }
-  .hero { top: 6px; padding: 12px 16px; }
+  .hero { padding: 12px 16px; }
   .hero-value { font-size: 28px; margin-top: 0; }
   .hero-unit { display: none; }
   .delta { margin-top: 8px; padding-top: 8px; }

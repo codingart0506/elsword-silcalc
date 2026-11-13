@@ -272,7 +272,26 @@
     $('#rCP').classList.toggle('err', !!err);
     if (err) $('#rCP').textContent = '계산 오류';
     for (const f of hooks) { try { f(); } catch (e) { console.error(e); } }
+    syncMini();
   }
+  // 실투력 카드가 화면 밖으로 나갔을 때만 위에 작은 줄로 보여 줌(카드 자체는 움직이지 않음)
+  let heroVisible = true;
+  function syncMini() {
+    const bar = $('#miniBar'); if (!bar) return;
+    const show = !heroVisible && !isEmptySetting(inputs) && !$('#rCP').classList.contains('err');
+    bar.classList.toggle('on', show);
+    bar.setAttribute('aria-hidden', String(!show)); bar.tabIndex = show ? 0 : -1;
+    if (!show) return;
+    $('#mbCP').textContent = $('#rCP').textContent;
+    const dt = $('#deltaText'), md = $('#mbDelta');
+    const changed = /[▲▼]/.test(dt.textContent);
+    md.textContent = changed ? dt.textContent.replace(/^.*?([▲▼].*)$/, '$1') : '';
+    md.className = 'mb-delta' + (dt.classList.contains('up') ? ' up' : dt.classList.contains('down') ? ' down' : '');
+  }
+  if (window.IntersectionObserver) {
+    new IntersectionObserver((es) => { heroVisible = es[0].isIntersecting; syncMini(); }, { threshold: 0 }).observe($('.hero'));
+  }
+  $('#miniBar').onclick = () => $('.hero').scrollIntoView({ behavior: 'smooth', block: 'start' });
   function setText(id, t) { const n = $(id); if (n && n.textContent !== t) n.textContent = t; }
   function renderResults() {
     const hero = $('.hero');
@@ -427,6 +446,7 @@
   let pendingExtras = null; // 적용 버튼을 누른 뒤에 물어볼 값
   async function runOcr() {
     if (!shot) return;
+    askExtras({ weapon: true, during: true });
     const prog = $('#ocrProg'), bar = prog.querySelector('.bar'), pt = prog.querySelector('.ptext');
     prog.hidden = false; $('#btnOcr').disabled = true; bar.style.width = '5%'; pt.textContent = '이미지 준비 중';
     try {
@@ -438,9 +458,11 @@
       let gear = null;
       try { if (window.SilGear) { pt.textContent = '악세서리 아이콘 보는 중'; gear = window.SilGear.recognize(shot); } } catch (e) { console.error(e); }
       try { if (gear && gear.cls) { pt.textContent = '칭호 읽는 중'; res.title = await O.readTitle(shot, gear.cls); } } catch (e) { console.error(e); }
+      pendingExtras = { gotRange: !!(res.found && res.found.C12) };
       showOcrResult(res, gear);
       prog.hidden = true;
-      pendingExtras = { cls: gear && gear.cls && gear.cls.match ? gear.cls.match.name : null, gotRange: !!(res.found && res.found.C12) };
+      // 읽은 값은 바로 적용(못 읽었으면 결과 안내만 남김)
+      if (document.querySelector('#ocrBody input[type=checkbox]:checked')) applyOcr();
     } catch (e) {
       console.error(e); pt.textContent = '인식 실패: ' + (e.message || e);
       return;
@@ -493,29 +515,41 @@
   }
 
   // ---------- 사진에 안 나오는 값: 인식 뒤 바로 묻기 ----------
-  function askExtras(clsName, gotRange) {
-    const old = $('#extraDlg'); if (old) old.remove();
-    if (clsName && !inputs.C6) { setVal('C6', clsName); refresh(); }
-    const numIn = (c, ph) => { const v = g(c); return el('input', { type: 'text', inputmode: 'numeric', class: 'num', 'data-cell': c, placeholder: ph, value: Number(v) > 0 ? String(v) : '' }); };
-    const needRange = !gotRange && !(Number(g('C12')) > 0);
-    // 무기 공격력은 사진에 안 나오므로 사진을 넣을 때마다 꼭 확인받음(전에 넣은 값이 있으면 미리 채워 둠)
-    const iC13 = numIn('C13', '예: 60000');
-    const iC12 = needRange ? numIn('C12', '예: 205000') : null;
+  // weapon: 무기 공격력을 물을지(사진에 안 나와서 읽기를 누를 때마다 물음), range: 극대화 범위 최댓값을 못 읽었을 때
+  const numIn = (c, ph) => { const v = g(c); return el('input', { type: 'text', inputmode: 'numeric', class: 'num', 'data-cell': c, placeholder: ph, value: Number(v) > 0 ? String(v) : '' }); };
+  function rangeRow() {
     const atk = label('AC67') === '마법' ? '마법' : '물리';
+    const inp = numIn('C12', '예: 205000');
+    return [el('label', { class: 'ex-row' }, el('span', {}, `${atk} 공격력 극대화 범위 최댓값`, el('small', { text: `이번 사진에서 못 찾았어요. 다음엔 ${atk} 공격력에 마우스를 올린 채로 찍으면 자동으로 들어가요` })), inp), inp];
+  }
+  function askExtras({ weapon = true, range = false, during = false } = {}) {
+    const open = $('#extraDlg');
+    if (open && !during) {
+      // 읽는 동안 띄운 창이 아직 열려 있으면 닫지 않고, 빠진 칸만 붙임
+      if (range && !open.querySelector('[data-cell=C12]')) open.querySelector('.dlg-actions').before(rangeRow()[0]);
+      const note = open.querySelector('#exNote'); if (note) note.textContent = '사진은 다 읽어서 적용했어요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.';
+      return;
+    }
+    if (open) open.remove();
+    if (!weapon && !range) return;
+    const iC13 = weapon ? numIn('C13', '예: 60000') : null;
+    const r12 = range ? rangeRow() : null;
+    const save = () => {
+      for (const inp of wrap.querySelectorAll('input[data-cell]')) { const t = inp.value.replace(/[,\s]/g, ''); if (t && Number(t) > 0) setVal(inp.getAttribute('data-cell'), Number(t)); }
+      refresh(); scheduleAutosave(); wrap.remove();
+    };
     const card = el('div', { class: 'dialog-card extra-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'exTitle' },
-      el('h3', { id: 'exTitle', text: '무기 공격력 수치를 기입하세요' }),
-      el('p', { text: iC13 ? '스크린샷에 안 나오는 값이에요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.' : '이번 사진에서 못 찾은 값이에요.' }),
+      el('h3', { id: 'exTitle', text: iC13 ? '무기 공격력 수치를 기입하세요' : '극대화 범위 최댓값을 기입하세요' }),
+      el('p', { id: 'exNote', text: iC13 ? `스크린샷에 안 나오는 값이에요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.${during ? ' 그동안 사진을 읽고 있어요.' : ''}` : '이번 사진에서 못 찾은 값이에요.' }),
       iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '극대화 범위가 아닌 무기 자체 수치' })), iC13) : null,
-      iC12 ? el('label', { class: 'ex-row' }, el('span', {}, `${atk} 공격력 극대화 범위 최댓값`, el('small', { text: `이번 사진에서 못 찾았어요. 다음엔 ${atk} 공격력에 마우스를 올린 채로 찍으면 자동으로 들어가요` })), iC12) : null,
+      r12 ? r12[0] : null,
       el('div', { class: 'dlg-actions' },
         el('button', { class: 'btn', onclick: () => wrap.remove(), text: '나중에' }),
-        el('button', { class: 'btn primary', text: '확인', onclick: () => {
-          for (const [inp, c] of [[iC13, 'C13'], [iC12, 'C12']]) { if (!inp) continue; const t = inp.value.replace(/[,\s]/g, ''); if (t && Number(t) > 0) setVal(c, Number(t)); }
-          refresh(); scheduleAutosave(); wrap.remove();
-        } })));
+        el('button', { class: 'btn primary', text: '확인', onclick: save })));
     const wrap = el('div', { class: 'dialog', id: 'extraDlg' }, card);
+    wrap.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); save(); } });
     document.body.append(wrap);
-    setTimeout(() => (iC13 || iC12).focus(), 50);
+    setTimeout(() => (iC13 || r12[1]).focus(), 50);
   }
 
   // ---------- 일반 악세서리(아이콘) ----------
@@ -601,7 +635,11 @@
     // 적용이 끝나면 인식 결과 목록은 접어서 화면을 가볍게 유지
     $('#ocrResult').hidden = true; $('#stage').hidden = true;
     toast(autoBase ? `${n}개 값을 채우고 기준 세팅으로 잡았어요` : `${n}개 값을 채웠어요`);
-    if (pendingExtras) { const p = pendingExtras; pendingExtras = null; askExtras(p.cls, p.gotRange); }
+    // 적용 뒤: 무기 공격력을 아직 안 넣었거나 극대화 범위를 못 읽었으면 그것만 다시 물음
+    if (pendingExtras) {
+      const p = pendingExtras; pendingExtras = null;
+      askExtras({ weapon: !(Number(g('C13')) > 0), range: !p.gotRange && !(Number(g('C12')) > 0) });
+    }
   }
 
   // ---------- 링크 공유 (주소 #s= 뒤에 세팅을 압축해 담음) ----------
