@@ -607,7 +607,7 @@
       // 읽는 동안 띄운 창이 아직 열려 있으면 닫지 않고, 빠진 칸만 붙임. 사진으로 바뀐 값(직업에 따른 세트 효과 등)은 안 건드린 칸에 반영
       for (const sl of open.querySelectorAll('select[data-cell]:not([data-touched])')) { const c = sl.getAttribute('data-cell'); if (c !== 'L42' && inputs[c] != null) sl.value = String(inputs[c]); }
       if (range && !open.querySelector('[data-cell=C12]')) open.querySelector('.dlg-actions').before(rangeRow()[0]);
-      const note = open.querySelector('#exNote'); if (note) note.textContent = '사진은 다 읽어서 적용했어요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.';
+      const note = open.querySelector('#exNote'); if (note) note.textContent = '사진은 다 읽어서 적용했어요. 사진에 안 나오는 아래 값만 확인해 주세요.';
       return;
     }
     if (open) open.remove();
@@ -630,9 +630,9 @@
       refresh(); scheduleAutosave(); wrap.remove();
     };
     const card = el('div', { class: 'dialog-card extra-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'exTitle' },
-      el('h3', { id: 'exTitle', text: iC13 ? '무기 공격력 수치를 기입하세요' : '극대화 범위 최댓값을 기입하세요' }),
-      el('p', { id: 'exNote', text: iC13 ? `스크린샷에 안 나오는 값이에요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.${during ? ' 그동안 사진을 읽고 있어요.' : ''}` : '이번 사진에서 못 찾은 값이에요.' }),
-      iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '극대화 범위가 아닌 무기 자체 수치' })), iC13) : null,
+      el('h3', { id: 'exTitle', text: iC13 ? '남은 수치를 직접 기입해 주세요' : '극대화 범위 최댓값을 기입해 주세요' }),
+      el('p', { id: 'exNote', text: iC13 ? `사진에 안 나오는 값이에요.${during ? ' 그동안 사진을 읽고 있어요.' : ''}` : '이번 사진에서 못 찾은 값이에요.' }),
+      iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '무기에 마우스를 올리면 나오는 무기 자체 수치' })), iC13) : null,
       r12 ? r12[0] : null,
       iC13 ? setRow() : null,
       iC13 ? atmaRow() : null,
