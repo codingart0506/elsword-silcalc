@@ -118,6 +118,14 @@
     for (const v of Object.values(store.bases)) if (v && v.J21 === '미적용') v.J21 = BLANK.J21;
     store.mig.healFx = 1;
   }
+  if (!store.mig.sageFx) {
+    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) {
+      if (!v || v.C6 !== '에테르 세이지') continue;
+      if (v.J21 === '적용3-적청엑사 (팟크뎀 10%)') v.J21 = BLANK.J21;
+      if (v.J30 === BLANK.J30) v.J30 = '엑사&네블론 - 순환';
+    }
+    store.mig.sageFx = 1;
+  }
   if (!store.names) store.names = {}; // 캐릭터별 닉네임(선택)
   const nickOf = (key) => (store.names[key] || '').trim();
   let inputs = Object.assign({}, store.profiles[store.current] || {});
@@ -268,16 +276,29 @@
     for (const a of ['D20', 'D21', 'D22']) if (ATK.includes(inputs[a]) && inputs[a] !== want) { inputs[a] = want; wb.setInput(SH, a, want); ch = true; }
     return ch;
   }
-  // 녹힐 장비 버프: 딜러는 적용2(녹엑사), 녹힐인 에테르 세이지는 적용3(적청엑사)이 기본(시트 메모 기준)
-  const HEAL_CLS = '에테르 세이지', HEAL_J21 = '적용3-적청엑사 (팟크뎀 10%)';
-  function syncHealDefault() {
-    const want = inputs.C6 === HEAL_CLS ? HEAL_J21 : BLANK.J21, other = want === HEAL_J21 ? BLANK.J21 : HEAL_J21;
-    if (inputs.J21 === other) { inputs.J21 = want; wb.setInput(SH, 'J21', want); return true; }
-    return false;
+  // 방어구 세트 효과: 기본은 연산, 에테르 세이지만 순환(청엑)이 기본. 직업을 바꿀 때 기본값 그대로일 때만 바꿈
+  const SAGE = '에테르 세이지', SET_CYCLE = '엑사&네블론 - 순환';
+  function syncSetDefault(prev) {
+    const now = inputs.C6;
+    if (now === prev) return false;
+    let want = null;
+    if (now === SAGE && inputs.J30 === BLANK.J30) want = SET_CYCLE;
+    else if (prev === SAGE && now !== SAGE && inputs.J30 === SET_CYCLE) want = BLANK.J30;
+    if (!want) return false;
+    inputs.J30 = want; wb.setInput(SH, 'J30', want); return true;
+  }
+  // 강배·역강배 바지: 강렬·초월 스킬 데미지를 높은 쪽으로 같게
+  function syncEq() {
+    if (!inputs._eq) return false;
+    const a = Number(inputs.C29) || 0, b = Number(inputs.C30) || 0, m = Math.max(a, b);
+    if (!(m > 0) || (a === m && b === m)) return false;
+    inputs.C29 = inputs.C30 = m; wb.setInput(SH, 'C29', m); wb.setInput(SH, 'C30', m); return true;
   }
   function setVal(a, v) {
+    const prev = inputs[a];
     inputs[a] = v; wb.setInput(SH, a, v);
-    if (a === 'C6') { syncEngraveType(); syncHealDefault(); setTimeout(renderProfiles, 0); }
+    if (a === 'C6') { syncEngraveType(); syncSetDefault(prev); setTimeout(renderProfiles, 0); }
+    if (inputs._eq && (a === 'C29' || a === 'C30')) { const o = a === 'C29' ? 'C30' : 'C29'; inputs[o] = v; wb.setInput(SH, o, v); }
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; refresh(); });
     scheduleAutosave();
   }
@@ -576,10 +597,15 @@
     sync();
     return row;
   }
+  function eqRow() {
+    const cb = el('input', { type: 'checkbox', id: 'exEq' }); cb.checked = !!inputs._eq;
+    return el('label', { class: 'chk-row ex-eq' }, cb, el('span', {}, '강배·역강배 바지 착용', el('small', { text: '강렬한·초월한 스킬 데미지를 높은 쪽 수치로 같게 맞춰요' })));
+  }
   function askExtras({ weapon = true, range = false, during = false } = {}) {
     const open = $('#extraDlg');
     if (open && !during) {
-      // 읽는 동안 띄운 창이 아직 열려 있으면 닫지 않고, 빠진 칸만 붙임
+      // 읽는 동안 띄운 창이 아직 열려 있으면 닫지 않고, 빠진 칸만 붙임. 사진으로 바뀐 값(직업에 따른 세트 효과 등)은 안 건드린 칸에 반영
+      for (const sl of open.querySelectorAll('select[data-cell]:not([data-touched])')) { const c = sl.getAttribute('data-cell'); if (c !== 'L42' && inputs[c] != null) sl.value = String(inputs[c]); }
       if (range && !open.querySelector('[data-cell=C12]')) open.querySelector('.dlg-actions').before(rangeRow()[0]);
       const note = open.querySelector('#exNote'); if (note) note.textContent = '사진은 다 읽어서 적용했어요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.';
       return;
@@ -590,10 +616,16 @@
     const r12 = range ? rangeRow() : null;
     const save = () => {
       for (const inp of wrap.querySelectorAll('input[data-cell]')) { const t = inp.value.replace(/[,\s]/g, ''); if (t && Number(t) > 0) setVal(inp.getAttribute('data-cell'), Number(t)); }
-      for (const sl of wrap.querySelectorAll('select[data-cell]')) {
+      for (const sl of wrap.querySelectorAll('select[data-cell][data-touched]')) {
         const c = sl.getAttribute('data-cell');
         if (c === 'L42') { if ((sl.value === 'true') !== (inputs.L42 === true)) setVal('L42', sl.value === 'true'); continue; }
         if (sl.value !== String(inputs[c] ?? '')) setVal(c, parseOpt(c, sl.value));
+      }
+      const eq = wrap.querySelector('#exEq');
+      if (eq) {
+        const b29 = inputs.C29, b30 = inputs.C30;
+        if (eq.checked) inputs._eq = true; else delete inputs._eq;
+        if (syncEq() && ocrSnap && ocrSnap._key === store.current && String(ocrSnap.C29) === String(b29) && String(ocrSnap.C30) === String(b30)) { ocrSnap.C29 = inputs.C29; ocrSnap.C30 = inputs.C30; }
       }
       refresh(); scheduleAutosave(); wrap.remove();
     };
@@ -605,10 +637,12 @@
       iC13 ? setRow() : null,
       iC13 ? atmaRow() : null,
       iC13 ? shareRow() : null,
+      iC13 ? eqRow() : null,
       el('div', { class: 'dlg-actions' },
         el('button', { class: 'btn', onclick: () => wrap.remove(), text: '나중에' }),
         el('button', { class: 'btn primary', text: '확인', onclick: save })));
     const wrap = el('div', { class: 'dialog', id: 'extraDlg' }, card);
+    wrap.addEventListener('change', (e) => { if (e.target.matches('select[data-cell]')) e.target.setAttribute('data-touched', '1'); });
     wrap.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); save(); } });
     document.body.append(wrap);
     setTimeout(() => (iC13 || r12[1]).focus(), 50);
@@ -678,7 +712,7 @@
   }
   let ocrSnap = null, ocrShot = null; // 마지막으로 스크린샷을 적용한 세팅과 그 사진(랭킹 갱신용)
   function applyOcr() {
-    let n = 0;
+    let n = 0; const prevCls = inputs.C6;
     document.querySelectorAll('#ocrBody tr').forEach(tr => {
       const cb = tr.querySelector('input[type=checkbox]');
       if (!cb || !cb.checked) return;
@@ -689,7 +723,7 @@
         if (v !== null) { inputs[c] = v; n++; }
       });
     });
-    applyInputs(); syncEngraveType(); syncHealDefault();
+    applyInputs(); syncEngraveType(); syncSetDefault(prevCls); syncEq();
     let autoBase = false;
     if (!shared && isEmptySetting(store.bases[store.current] || {}) && !isEmptySetting(inputs)) { store.bases[store.current] = Object.assign({}, inputs); applyBase(); autoBase = true; }
     applyInputs(); refresh(); scheduleAutosave(); renderProfiles();
@@ -763,7 +797,7 @@
   }
 
   // ---------- 랭킹 화면(rank.js)과 연결 ----------
-  const SKIP_EDIT = new Set(['C12', 'C13', 'J32', 'L32', 'L42', 'I46', 'K46', 'M46', '_key']); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
+  const SKIP_EDIT = new Set(['C12', 'C13', 'J32', 'L32', 'L42', 'I46', 'K46', 'M46', '_key', '_eq']); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
   window.SilApp = {
     inputs: () => Object.assign({}, inputs),
     cp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
