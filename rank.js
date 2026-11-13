@@ -109,6 +109,19 @@
     });
   }
   // 펼친 줄: 지금 실투력을 낸 스크린샷 + 계산기에서 세팅 보기
+  // 강렬:초월 점유율 설명 (랭킹 상세·관리자 화면)
+  const nf = (v) => String(Math.round(Number(v) * 100) / 100);
+  function shareText(i) {
+    i = i || {};
+    if (i.L42 === true) return `직접 입력 ${nf(i.I46 ?? 35)} : ${nf(i.K46 ?? 65)} (${i.M46 || '강초뎀 적용 이전'} 기준)`;
+    return `자동 (${Number(i.C29) > Number(i.C30) ? '강렬' : '초월'} 주력)`;
+  }
+  async function playerInputs(c, r) {
+    if (r.inputs) return r.inputs;
+    const { data, error } = await c.from('players').select('inputs').eq('id', r.id).single();
+    if (error) throw error;
+    return (r.inputs = data.inputs || {});
+  }
   async function toggleDetail(li, r, btnEl) {
     const open = li.classList.toggle('open');
     btnEl.setAttribute('aria-expanded', String(open));
@@ -117,17 +130,20 @@
     if (box) { box.hidden = false; return; }
     const img = el('img', { alt: `${r.nickname} 실투력 스크린샷` });
     const cap = el('p', { class: 'rk-cap', text: '사진 불러오는 중이에요' });
+    const shareP = el('p', { class: 'rk-cap', text: '강렬:초월 점유율 불러오는 중' });
     box = el('div', { class: 'rk-detail' },
       el('a', { class: 'rk-shot', target: '_blank', rel: 'noopener' }, img),
       el('div', { class: 'rk-side' },
         cap,
         el('p', { class: 'rk-cap', text: `실투력 ${fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신` }),
+        shareP,
         el('div', { class: 'rk-btns' },
           el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => openPlayer(r) }),
           rkCls ? null : el('button', { type: 'button', class: 'btn', text: `${r.cls} 랭킹`, onclick: () => showClass(r.cls) }))));
     li.append(box);
     try {
       const c = await sb();
+      playerInputs(c, r).then(i => { shareP.textContent = `강렬:초월 점유율 ${shareText(i)}`; }).catch(() => { shareP.textContent = ''; });
       const u = r.shot_path ? await signed(c, r.shot_path) : null;
       if (u) { img.src = u; img.parentNode.href = u; cap.textContent = '지금 랭킹 값을 낸 스크린샷이에요. 누르면 크게 보여요.'; }
       else { img.parentNode.hidden = true; cap.textContent = '사진이 아직 없어요.'; }
@@ -136,10 +152,9 @@
   async function openPlayer(r) {
     try {
       const c = await sb();
-      const { data, error } = await c.from('players').select('inputs').eq('id', r.id).single();
-      if (error) throw error;
+      const inputs = await playerInputs(c, r);
       setView('calc');
-      A.openShared({ n: r.cls, k: r.nickname, i: data.inputs || {} });
+      A.openShared({ n: r.cls, k: r.nickname, i: inputs });
     } catch (e) { toast('세팅을 불러오지 못했어요. ' + errMsg(e)); }
   }
   // 전체 / 전직별(전직을 고르면 그 전직 안에서의 순위)
@@ -378,7 +393,7 @@
     const hist = el('div', { class: 'adm-sec' }, el('h3', { text: '최근 갱신' }));
     body.append(pend, hist);
 
-    const { data: apps, error } = await c.from('applications').select('id,nickname,cls,cp,verify_code,shot_path,created_at').eq('status', 'pending').order('created_at');
+    const { data: apps, error } = await c.from('applications').select('id,nickname,cls,cp,inputs,verify_code,shot_path,created_at').eq('status', 'pending').order('created_at');
     if (error) throw error;
     if (!apps.length) pend.append(el('p', { class: 'rank-note', text: '기다리는 신청이 없어요' }));
     for (const a of apps) {
@@ -389,6 +404,7 @@
       const item = el('div', { class: 'adm-item' }, img, el('div', { class: 'adm-info' },
         el('span', { class: 'nm', text: a.nickname }),
         el('span', { text: `${a.cls}, 실투력 ${fmtInt(a.cp)}` }),
+        el('span', { text: `강렬:초월 점유율 ${shareText(a.inputs)}` }),
         el('span', { class: 'code' }, '인증 코드 ', el('b', { text: a.verify_code })),
         el('small', { class: 'adm-flag', text: '채팅의 인증 코드, 닉네임, PC방 아이콘 OFF, 지애 버프 없음을 확인하세요' }),
         el('small', { text: new Date(a.created_at).toLocaleString('ko-KR') }),
@@ -416,7 +432,7 @@
       el('p', { class: 'rank-note', text: '이미 랭킹에 반영됐어요. 사진을 보고 확인하거나, 이상하면 되돌려요.' }));
     body.insertBefore(held, hist); body.insertBefore(live, hist); hist.remove();
     const { data: hs, error: e2 } = await c.from('cp_history')
-      .select('id,cp,prev_cp,cls,edited,status,created_at,shot_path,player_id,players(nickname,hidden)')
+      .select('id,cp,prev_cp,cls,inputs,edited,status,created_at,shot_path,player_id,players(nickname,hidden)')
       .in('status', ['held', 'live']).order('created_at', { ascending: false }).limit(60);
     if (e2) throw e2;
     const hsHeld = hs.filter(h => h.status === 'held'), hsLive = hs.filter(h => h.status === 'live');
@@ -442,6 +458,7 @@
       const item = el('div', { class: 'adm-item' }, img, el('div', { class: 'adm-info' },
         el('span', { class: 'nm', text: p.nickname || '?' }),
         el('span', { text: `${h.cls || ''}, ${h.prev_cp ? fmtInt(h.prev_cp) + ' → ' : ''}${fmtInt(h.cp)}${h.prev_cp ? ` (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%)` : ''}` }),
+        el('span', { text: `강렬:초월 점유율 ${shareText(h.inputs)}` }),
         h.edited ? el('span', { class: 'adm-flag', text: '스크린샷 적용 뒤 손으로 고친 값 있음' }) : null,
         el('small', { text: ago(h.created_at) }), acts));
       if (h.status === 'held') {
