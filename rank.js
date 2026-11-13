@@ -219,7 +219,7 @@
   function openApply() {
     const miss = A.missing();
     if (miss.length) { toast(`${miss.join('·')}부터 채워 주세요`); return; }
-    const cp = A.cp();
+    const cp = A.rankCp();
     if (!(cp > 0)) { toast('실투력이 계산되지 않았어요'); return; }
     const old = $('#applyDlg'); if (old) old.remove();
     const code = genCode();
@@ -249,7 +249,7 @@
     noBuff.onchange = () => { send.disabled = !noBuff.checked; };
     const card = el('div', { class: 'dialog-card apply-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'apTitle' },
       el('h3', { id: 'apTitle', text: '랭킹에 올리기' }),
-      el('p', { class: 'apply-sum' }, `${A.cls()} 실투력 `, el('b', { text: fmtInt(cp) }), '을(를) 올려요. 관리자가 본인 캐릭터인지 확인한 뒤 랭킹에 보여요.'),
+      el('p', { class: 'apply-sum' }, `${A.cls()} 실투력 `, el('b', { text: fmtInt(cp) }), '을(를) 올려요. 관리자가 본인 캐릭터인지 확인한 뒤 랭킹에 보여요.' + (A.customShare() ? ' 랭킹은 강렬:초월 점유율을 자동 기준으로 계산해요.' : '')),
       el('label', { class: 'ex-row' }, el('span', {}, '닉네임', el('small', { text: '게임 닉네임 그대로' })), nick),
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
       el('p', { text: '게임 채팅창에 이 코드를 입력한 다음, 채팅이 보이게 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요.' }),
@@ -272,7 +272,7 @@
         if (up.error) throw up.error;
         const token = genToken();
         const { error } = await c.rpc('submit_application', {
-          p_nickname: n, p_server: '', p_cls: A.cls(), p_cp: cp, p_inputs: A.inputs(), p_code: code, p_shot: path, p_token: token,
+          p_nickname: n, p_server: '', p_cls: A.cls(), p_cp: cp, p_inputs: A.rankInputs(), p_code: code, p_shot: path, p_token: token,
         });
         if (error) throw error;
         if (A.nick() !== n) A.setNick(n);
@@ -297,7 +297,7 @@
       await A.dialog({ title: '스크린샷이 필요해요', text: '랭킹은 스크린샷으로만 갱신할 수 있어요. 지금 세팅으로 스크린샷을 넣고 적용한 다음 다시 눌러 주세요.', ok: '확인' });
       return;
     }
-    const cp = A.cp(), edited = A.edited();
+    const cp = A.rankCp(), edited = A.edited();
     const big = r.cp && cp > r.cp * 1.15;
     const ok = await A.dialog({ title: '랭킹 갱신', text: `${r.nickname} 실투력을 ${fmtInt(cp)}(으)로 바꿔요. PC방 혜택과 지애 버프가 꺼진 상태로 찍은 스크린샷일 때만 갱신할 수 있어요.` + ((edited || big) ? ` ${edited ? '스크린샷을 적용한 뒤 손으로 고친 값이 있어서' : '15% 넘게 올라서'} 관리자가 확인한 뒤에 랭킹에 반영돼요.` : ''), ok: '버프 없이 찍었어요, 갱신' });
     if (!ok) return;
@@ -306,7 +306,7 @@
       const path = `update/${uuid()}.jpg`;
       const up = await c.storage.from('shots').upload(path, await toJpeg(shot), { contentType: 'image/jpeg', upsert: false });
       if (up.error) throw up.error;
-      const { data: res, error } = await c.rpc('update_cp', { p_token: r.token, p_cls: A.cls(), p_cp: cp, p_inputs: A.inputs(), p_shot: path, p_edited: edited });
+      const { data: res, error } = await c.rpc('update_cp', { p_token: r.token, p_cls: A.cls(), p_cp: cp, p_inputs: A.rankInputs(), p_shot: path, p_edited: edited });
       if (error) throw error;
       if (res === 'held') {
         Object.assign(r, { upd: 'held', updCp: cp, updMemo: '' }); A.setRank(r); renderLine();

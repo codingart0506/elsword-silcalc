@@ -60,6 +60,8 @@
       { bar: '장비 종류와 강화', fields: [[{ c: 'J26', lab: 'I26' }, { c: 'L26' }], [{ c: 'J27', lab: 'I27' }, { c: 'L27' }], [{ c: 'J28', lab: 'I28' }, { c: 'L28' }], [{ c: 'J29', lab: 'I29' }, { c: 'L29' }],
         [{ c: 'J31', lab: 'I31' }, { c: 'L31' }], [{ c: 'J32', lab: 'I32' }, { c: 'L32' }], { c: 'J30', t: '방어구 세트 효과' }] },
       { bar: '전투력 출력 기준 필드', fields: [{ c: 'I34', t: '필드' }], extra: 'field' },
+      { bar: '강렬:초월 스킬 점유율', note: '끄면 강렬·초월 스킬 데미지 중 높은 쪽을 주력으로 자동 계산해요. 켜면 아래 비율로 계산하고, 비율만 맞으면 돼요.',
+        fields: [{ c: 'L42', t: '기준 변경하기' }, { c: 'M46', t: '기준' }, { c: 'I46', t: '강렬 스킬 점유율' }, { c: 'K46', t: '초월 스킬 점유율' }] },
     ] },
   ];
 
@@ -714,10 +716,14 @@
   }
 
   // ---------- 랭킹 화면(rank.js)과 연결 ----------
-  const SKIP_EDIT = new Set(['C12', 'C13', '_key']);
+  const SKIP_EDIT = new Set(['C12', 'C13', 'J32', 'L32', 'L42', 'I46', 'K46', 'M46', '_key']); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
   window.SilApp = {
     inputs: () => Object.assign({}, inputs),
     cp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
+    // 랭킹은 모두 같은 기준(강렬:초월 자동)으로 비교
+    rankInputs: () => Object.assign({}, inputs, { L42: false }),
+    rankCp: () => { wb.setInput(SH, 'L42', false); const v = g('C36'); applyInputs(); return typeof v === 'number' ? Math.round(v) : NaN; },
+    customShare: () => inputs.L42 === true,
     missing: () => isEmptySetting(inputs) ? ['세팅'] : ['C12', 'C13'].filter(a => !(Number(g(a)) > 0)).map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력'),
     cls: () => inputs.C6 || '',
     key: () => store.current,
