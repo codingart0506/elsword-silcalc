@@ -649,7 +649,15 @@
     const iC13 = weapon ? numIn('C13', '예: 60000') : null;
     const r12 = range ? rangeRow() : null;
     const save = () => {
-      for (const inp of wrap.querySelectorAll('input[data-cell]')) { const t = inp.value.replace(/[,\s]/g, ''); if (t && Number(t) > 0) setVal(inp.getAttribute('data-cell'), Number(t)); }
+      // 점유율은 0도 올바른 값(강렬 0 : 초월 100). 단 둘 다 0이면 무시
+      const shareIn = [...wrap.querySelectorAll('input[data-cell=I46], input[data-cell=K46]')];
+      const shareOk = shareIn.length === 2 && shareIn.some(i => Number(i.value.replace(/[,\s]/g, '')) > 0);
+      for (const inp of wrap.querySelectorAll('input[data-cell]')) {
+        const c = inp.getAttribute('data-cell'), t = inp.value.replace(/[,\s]/g, ''), n = Number(t);
+        if (!t || !Number.isFinite(n)) continue;
+        if (c === 'I46' || c === 'K46') { if (shareOk && n >= 0 && n !== Number(inputs[c])) setVal(c, n); continue; }
+        if (n > 0) setVal(c, n);
+      }
       for (const sl of wrap.querySelectorAll('select[data-cell][data-touched]')) {
         const c = sl.getAttribute('data-cell');
         if (c === 'L42') { if ((sl.value === 'true') !== (inputs.L42 === true)) setVal('L42', sl.value === 'true'); continue; }
