@@ -27,7 +27,7 @@
     H13: '1. 테네브로스 상의 두 번째 그림자 옵션 / 2. 엑사스케일 복원 세트효과 10%',
     H15: '캐시샵 20000 캐시 업그레이드 이용권',
     L15: '스피릿 챌린저는 "미사용" 선택',
-    J21: '녹힐 캐릭터는 적용3-적청엑사 선택 (디아, 일천, 데메, 오마, 블루헨, 라소, 닉스, 에버리스)',
+    J21: '녹힐 직업(디우스 아에르, 일천, 오버마인드, 데메르시오, 블루헨, 라디언트 소울, 닉스 피에타, 애버리스)은 직업을 고르면 적용3-적청엑사로 바뀌어요.',
     J26: '미착용이면 종류는 아무거나, 강화 수치를 0으로.',
   };
   // 상세 스탯 탭은 게임의 상세 스탯 창과 같은 순서·이름
@@ -85,13 +85,13 @@
   // ---------- 처음 상태: 시트 예시 값 대신 빈 세팅 ----------
   const STAT_CELLS = 'C11 C12 C13 C14 C15 C17 C18 C19 C20 C21 C22 C24 C25 C26 C27 C29 C30 C31 C32 C33 C34 C35'.split(' ');
   const BLANK = Object.assign({ C6: '' }, Object.fromEntries(STAT_CELLS.map(a => [a, null])), {
-    H11: 0, H12: 0, H13: 0, H15: '미사용', F17: '해당사항 없음', F18: '해당사항 없음', H17: 0, H18: 0,
+    H11: 0, H12: 0, H13: 0, H15: '사용', H16: '이상', F17: '격려 재사용 시간 감소', F18: '격려 재사용 시간 감소', H17: 0.15, H18: 0.15,
     D20: '물리 공격력 증가 (%)', D21: '크리티컬 데미지 증가 (%)', D22: '스킬 데미지 증가 (%)', H20: 0.05, H21: 0.05, H22: 0.05,
     G24: '미착용', G25: '미착용', G27: '해당사항 없음', G28: '해당사항 없음', G29: '해당사항 없음', G30: '해당사항 없음',
-    H31: 0, H32: 0, H33: 0, G35: '1세트 또는 미착용',
+    H31: 0, H32: 0, H33: 0, D35: '황색', G35: '5세트',
     L11: '미사용', L12: '미사용', L13: '미사용', L14: '미사용', L15: '미사용',
-    J17: '미사용', J18: '미사용', J19: '미사용', J20: '미사용', J21: '적용2-녹엑사 (팟모스뎀, 팟물마 10%)', J22: '미적용', J23: '해당사항 없음',
-    L26: 0, L27: 0, L28: 0, L29: 0, J30: '엑사&네블론 - 연산', L31: 0, J32: '미적용', L32: '미착용',
+    J17: '엘 하우스(강화)', J18: '천상의 디저트파티', J19: '사용', J20: '투지의 물약', J21: '적용2-녹엑사 (팟모스뎀, 팟물마 10%)', J22: '미적용', J23: '아리엘의 스페셜 기프트 마크',
+    J26: '네블론', J27: '네블론', J28: '네블론', J29: '네블론', L26: 11, L27: 11, L28: 11, L29: 11, J30: '엑사&네블론 - 연산', J31: '사룡무', L31: 12, J32: '유수의 아트마', L32: '유니크',
   });
   const blank = () => Object.assign({}, BLANK);
   const isEmptySetting = (inp) => !inp.C6 || !(Number(inp.C11) > 0);
@@ -118,6 +118,9 @@
     for (const v of Object.values(store.bases)) if (v && v.J21 === '미적용') v.J21 = BLANK.J21;
     store.mig.healFx = 1;
   }
+  // 녹힐 직업은 녹힐 장비 버프가 적용3(적청엑사), 나머지(딜러)는 적용2(녹엑사)
+  const HEALERS = new Set(['디우스 아에르', '일천', '오버마인드', '데메르시오', '블루헨', '라디언트 소울', '닉스 피에타', '애버리스']);
+  const HEAL_J21 = '적용3-적청엑사 (팟크뎀 10%)';
   if (!store.mig.sageFx) {
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) {
       if (!v || v.C6 !== '에테르 세이지') continue;
@@ -125,6 +128,22 @@
       if (v.J30 === BLANK.J30) v.J30 = '엑사&네블론 - 순환';
     }
     store.mig.sageFx = 1;
+  }
+  // 기본값을 엔드 세팅(도핑·펫·원석·아티팩트·장비·아트마)으로 바꾼 뒤: 예전 기본값 그대로인 칸만 한 번 맞춰 줌
+  if (!store.mig.preset1) {
+    const OLD = { J17: '미사용', J18: '미사용', J19: '미사용', J20: '미사용', J23: '해당사항 없음', H15: '미사용' };
+    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) {
+      if (!v) continue;
+      for (const [c, o] of Object.entries(OLD)) if (v[c] === o || v[c] == null) v[c] = BLANK[c];
+      if (v.H16 == null) v.H16 = BLANK.H16;
+      for (const [f, h] of [['F17', 'H17'], ['F18', 'H18']]) if ((v[f] == null || v[f] === '해당사항 없음') && !(Number(v[h]) > 0)) { v[f] = BLANK[f]; v[h] = BLANK[h]; }
+      if (v.D35 == null) { v.D35 = BLANK.D35; if (v.G35 == null || v.G35 === '1세트 또는 미착용') v.G35 = BLANK.G35; }
+      for (const [t, l] of [['J26', 'L26'], ['J27', 'L27'], ['J28', 'L28'], ['J29', 'L29'], ['J31', 'L31']]) if (v[t] == null) { v[t] = BLANK[t]; if (!(Number(v[l]) > 0)) v[l] = BLANK[l]; }
+      if ((v.J32 == null || v.J32 === '미적용') && (v.L32 == null || v.L32 === '미착용')) { v.J32 = BLANK.J32; v.L32 = BLANK.L32; }
+      if (HEALERS.has(v.C6) && v.J21 === BLANK.J21) v.J21 = HEAL_J21;
+      if (v.C6 === '에테르 세이지' && v.J30 === '엑사&네블론 - 순환') v.J30 = BLANK.J30; // 잠깐 넣었던 순환 기본값 되돌림
+    }
+    store.mig.preset1 = 1;
   }
   if (!store.names) store.names = {}; // 캐릭터별 닉네임(선택)
   const nickOf = (key) => (store.names[key] || '').trim();
@@ -276,16 +295,13 @@
     for (const a of ['D20', 'D21', 'D22']) if (ATK.includes(inputs[a]) && inputs[a] !== want) { inputs[a] = want; wb.setInput(SH, a, want); ch = true; }
     return ch;
   }
-  // 방어구 세트 효과: 기본은 연산, 에테르 세이지만 순환(청엑)이 기본. 직업을 바꿀 때 기본값 그대로일 때만 바꿈
-  const SAGE = '에테르 세이지', SET_CYCLE = '엑사&네블론 - 순환';
-  function syncSetDefault(prev) {
-    const now = inputs.C6;
-    if (now === prev) return false;
-    let want = null;
-    if (now === SAGE && inputs.J30 === BLANK.J30) want = SET_CYCLE;
-    else if (prev === SAGE && now !== SAGE && inputs.J30 === SET_CYCLE) want = BLANK.J30;
-    if (!want) return false;
-    inputs.J30 = want; wb.setInput(SH, 'J30', want); return true;
+  // 직업이 녹힐로 바뀌면 녹힐 장비 버프를 적용3, 딜러로 바뀌면 적용2 (다른 값을 직접 골라 둔 경우는 그대로)
+  function syncClassDefault(prev) {
+    const now = inputs.C6, h = HEALERS.has(now);
+    if (now === prev || h === HEALERS.has(prev) && prev) return false;
+    const want = h ? HEAL_J21 : BLANK.J21, other = h ? BLANK.J21 : HEAL_J21;
+    if (inputs.J21 !== other) return false;
+    inputs.J21 = want; wb.setInput(SH, 'J21', want); return true;
   }
   // 강배·역강배 바지: 강렬·초월 스킬 데미지를 높은 쪽으로 같게
   function syncEq() {
@@ -297,7 +313,7 @@
   function setVal(a, v) {
     const prev = inputs[a];
     inputs[a] = v; wb.setInput(SH, a, v);
-    if (a === 'C6') { syncEngraveType(); syncSetDefault(prev); setTimeout(renderProfiles, 0); }
+    if (a === 'C6') { syncEngraveType(); syncClassDefault(prev); setTimeout(renderProfiles, 0); }
     if (inputs._eq && (a === 'C29' || a === 'C30')) { const o = a === 'C29' ? 'C30' : 'C29'; inputs[o] = v; wb.setInput(SH, o, v); }
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; refresh(); });
     scheduleAutosave();
@@ -723,7 +739,7 @@
         if (v !== null) { inputs[c] = v; n++; }
       });
     });
-    applyInputs(); syncEngraveType(); syncSetDefault(prevCls); syncEq();
+    applyInputs(); syncEngraveType(); syncClassDefault(prevCls); syncEq();
     let autoBase = false;
     if (!shared && isEmptySetting(store.bases[store.current] || {}) && !isEmptySetting(inputs)) { store.bases[store.current] = Object.assign({}, inputs); applyBase(); autoBase = true; }
     applyInputs(); refresh(); scheduleAutosave(); renderProfiles();
