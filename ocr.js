@@ -312,7 +312,7 @@
   // src: 원본 캔버스, rect: 사용자가 고른 영역(없으면 자동으로 능력치 창을 찾음)
   async function recognize(src, rect, onProgress) {
     const [A, B] = await getWorkers(onProgress);
-    let used = rect || null, auto = false;
+    let used = rect || null, auto = false, allRows = [];
     if (!used && src.width * src.height > 700 * 500) {
       onProgress && onProgress({ tag: 'kor', status: '능력치 창 찾는 중', progress: 0 });
       const s1 = Math.min(1.5, 2600 / src.width);
@@ -320,7 +320,9 @@
       await A.setParameters({ tessedit_pageseg_mode: '11' });
       try {
         const r0 = await A.recognize(pre1, {}, { blocks: true });
-        const loc = locatePanel(collectWords(r0.data));
+        const w0 = collectWords(r0.data);
+        allRows = wordsToRows(w0);
+        const loc = locatePanel(w0);
         if (loc) {
           const x = Math.max(0, loc.x / s1), y = Math.max(0, loc.y / s1);
           used = { x, y, w: Math.min(src.width - x, loc.w / s1), h: Math.min(src.height - y, loc.h / s1) };
@@ -332,7 +334,26 @@
     const [r1, r2] = await Promise.all([A.recognize(pre, {}, { blocks: true, text: true }), B.recognize(pre, {}, { blocks: true })]);
     const words = mergeDigitPass(collectWords(r1.data), collectWords(r2.data));
     const rows = wordsToRows(words);
-    return { rows, found: parseRows(rows), text: r1.data.text, rect: used, auto };
+    return { rows, allRows, found: parseRows(rows), text: r1.data.text, rect: used, auto };
+  }
+
+  // 캐릭터 창 칭호 띠(파란 바탕 흰 글씨): 초상화 위치 기준으로 잘라 따로 읽음
+  async function readTitle(src, por, onProgress) {
+    const [A] = await getWorkers(onProgress);
+    const k = por.s;
+    const x0 = Math.round(por.x + k * 4.05), x1 = Math.round(por.x + k * 6.2);
+    const y0 = Math.round(por.y + k * 0.8), y1 = Math.round(por.y + k * 1.14);
+    if (x0 < 0 || y0 < 0 || x1 > src.width || y1 > src.height) return '';
+    const w = x1 - x0, h = y1 - y0, sc = Math.max(2, 90 / h);
+    const c = document.createElement('canvas'); c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+    const g = c.getContext('2d', { willReadFrequently: true }); g.imageSmoothingQuality = 'high';
+    g.drawImage(src, x0, y0, w, h, 0, 0, c.width, c.height);
+    const img = g.getImageData(0, 0, c.width, c.height), d = img.data;
+    for (let i = 0; i < d.length; i += 4) { const v = 255 - Math.min(d[i], d[i + 1], d[i + 2]); d[i] = d[i + 1] = d[i + 2] = v > 140 ? 255 : v < 90 ? 0 : v; }
+    g.putImageData(img, 0, 0);
+    await A.setParameters({ tessedit_pageseg_mode: '7' });
+    try { const r = await A.recognize(c); return (r.data.text || '').trim(); }
+    finally { await A.setParameters({ tessedit_pageseg_mode: '6' }); }
   }
 
   // 화면 공유
@@ -380,7 +401,29 @@
     });
   }
 
-  const api = { FIELDS, norm, matchField, splitPairs, parseRows, wordsToRows, collectWords, mergeDigitPass, locatePanel, toValue,
+  // 화면 글자 줄들 중 목록의 이름과 같은 것 찾기 (칭호 이름 등). 짧은 이름은 정확히 같아야 함
+  function findName(rows, names) {
+    let best = null;
+    for (const r of rows) {
+      const t = norm(r.text);
+      for (const n of names) {
+        const k = norm(n); if (k.length < 2) continue;
+        let sc = 0;
+        if (t === k) sc = 1.02;
+        else if (t.includes(k)) sc = 1;
+        else if (k.length >= 4) {
+          for (let L = k.length - 1; L <= k.length + 1; L++) for (let i = 0; i + L <= t.length; i++) {
+            const part = t.slice(i, i + L); const v = 1 - lev(part, k) / Math.max(L, k.length); if (v > sc) sc = v;
+          }
+        }
+        const need = k.length <= 3 ? 1 : 0.8;
+        if (sc >= need && (!best || sc > best.score)) best = { name: n, score: sc, text: r.text };
+      }
+    }
+    return best;
+  }
+
+  const api = { findName, readTitle, FIELDS, norm, matchField, splitPairs, parseRows, wordsToRows, collectWords, mergeDigitPass, locatePanel, toValue,
     preprocess, recognize, getWorkers, startShare, grabFrame, stopShare, sharing, imageFromBlob };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SilOCR = api;

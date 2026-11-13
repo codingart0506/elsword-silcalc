@@ -406,6 +406,7 @@
       if (res.auto && res.rect) { selRect = res.rect; drawSel(); }
       let gear = null;
       try { if (window.SilGear) { pt.textContent = '악세서리 아이콘 보는 중'; gear = window.SilGear.recognize(shot); } } catch (e) { console.error(e); }
+      try { if (gear && gear.cls) { pt.textContent = '칭호 읽는 중'; res.title = await O.readTitle(shot, gear.cls); } } catch (e) { console.error(e); }
       showOcrResult(res, gear);
     } catch (e) {
       console.error(e); pt.textContent = '인식 실패: ' + (e.message || e);
@@ -429,6 +430,25 @@
         el('td', { text: LABEL_OF[c] || label('B' + c.slice(1)) }, low ? el('small', { class: 'lowtag', text: ' 확인 필요' }) : null),
         el('td', { class: 'num dim', text: kind === 'pct' ? fmtPct(cur) : fmtInt(cur) }),
         el('td', {}, kind === 'pct' ? el('span', { class: 'pctwrap' }, inp, el('span', { class: 'suffix', text: '%' })) : inp)));
+    }
+    // 칭호: 캐릭터 창 칭호 띠의 이름 (상시 칭호)
+    const titleText = (res.title || '').replace(/[^\uAC00-\uD7A3A-Za-z0-9 ]/g, '').trim();
+    if ((titleText.match(/[\uAC00-\uD7A3]/g) || []).length >= 2) {
+      res.title = titleText;
+      const titles = (optionsOf('G24') || []).filter(t => t !== '미착용');
+      const tHit = O.findName([{ text: res.title }], titles);
+      const cur = g('G24'), val = tHit ? tHit.name : '미착용';
+      const same = String(cur) === val;
+      const sel = el('select', { 'data-cell': 'G24', 'aria-label': '상시 칭호' });
+      for (const o of optionsOf('G24') || []) sel.append(el('option', { value: String(o), text: String(o) }));
+      sel.value = val;
+      const cb = el('input', { type: 'checkbox', checked: same ? null : 'checked', 'aria-label': '적용' });
+      sel.addEventListener('change', () => { cb.checked = String(g('G24')) !== sel.value; });
+      body.append(el('tr', { class: 'title-row' + (same ? ' same' : '') },
+        el('td', {}, cb),
+        el('td', {}, '상시 칭호', tHit ? null : el('small', { class: 'mutetag', text: ` "${res.title.slice(0, 12)}" · 계산에 안 쓰는 칭호` })),
+        el('td', { class: 'dim', text: String(cur ?? '') }),
+        el('td', { class: 'gear-pick' }, sel)));
     }
     // 상세 스탯 창에 없는 값: 비어 있으면 여기서 바로 입력
     for (const c of ['C12', 'C13']) {
