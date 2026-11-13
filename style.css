@@ -218,3 +218,7 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
   .class-pick select { flex: 1; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.mutetag { color: var(--mute); font-size: 12px; font-weight: 500; }
+.unk-det summary { cursor: pointer; font-size: 13px; color: var(--mute); font-weight: 600; padding: 4px 0; }
+.unk-det[open] summary { margin-bottom: 6px; }

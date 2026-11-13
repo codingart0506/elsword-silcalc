@@ -339,16 +339,34 @@
   let stream = null, video = null;
   async function startShare() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) throw new Error('이 브라우저는 화면 공유를 지원하지 않아요');
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 5, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
+    // 크기를 지정하지 않아야 화면을 줄이거나 늘리지 않고 원래 해상도로 받음
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 5, max: 15 }, resizeMode: 'none', cursor: 'never' }, audio: false });
+    const track = stream.getVideoTracks()[0];
+    // 글자 화질 우선(움직임보다 선명도) → 크롬이 해상도를 낮추지 않게
+    try { track.contentHint = 'text'; } catch (e) { /* 무시 */ }
     video = document.createElement('video'); video.muted = true; video.playsInline = true; video.srcObject = stream;
     await video.play();
-    stream.getVideoTracks()[0].addEventListener('ended', () => { stream = null; root.dispatchEvent && root.dispatchEvent(new Event('sil-share-ended')); });
+    track.addEventListener('ended', () => { stream = null; root.dispatchEvent && root.dispatchEvent(new Event('sil-share-ended')); });
     return stream;
   }
   function sharing() { return !!stream; }
+  const nextFrame = () => new Promise((res) => {
+    if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(() => res());
+    else setTimeout(res, 250);
+  });
   async function grabFrame() {
     if (!video || !stream) throw new Error('화면 공유 중이 아니에요');
     if (video.readyState < 2) await new Promise(r => video.addEventListener('loadeddata', r, { once: true }));
+    // 방금 바뀐 화면이 완전히 들어오도록 새 프레임 두 장을 기다림
+    await nextFrame(); await nextFrame();
+    const track = stream.getVideoTracks()[0];
+    if (root.ImageCapture && track) {
+      try {
+        const bmp = await new root.ImageCapture(track).grabFrame();
+        const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+        c.getContext('2d').drawImage(bmp, 0, 0); return c;
+      } catch (e) { /* 아래 방식으로 */ }
+    }
     const c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight;
     c.getContext('2d').drawImage(video, 0, 0); return c;
   }

@@ -244,6 +244,7 @@
   let raf = 0;
   function setVal(a, v) {
     inputs[a] = v; wb.setInput(SH, a, v);
+    if (a === 'C6') setTimeout(renderProfiles, 0);
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; refresh(); });
     scheduleAutosave();
   }
@@ -296,9 +297,17 @@
   }
 
   // ---------- 프로필 ----------
+  // 캐릭터 이름은 따로 묻지 않고 전직으로 보여줌
+  function profileLabel(key) {
+    const p = key === store.current ? inputs : (store.profiles[key] || {});
+    const keys = Object.keys(store.profiles);
+    const cls = p.C6 || '새 캐릭터';
+    const same = keys.filter(k => ((k === store.current ? inputs : store.profiles[k]) || {}).C6 === p.C6 || (!p.C6 && !((k === store.current ? inputs : store.profiles[k]) || {}).C6));
+    return same.length > 1 ? `${cls} ${same.indexOf(key) + 1}` : cls;
+  }
   function renderProfiles() {
     const s = $('#profileSel'); s.innerHTML = '';
-    for (const name of Object.keys(store.profiles)) s.append(el('option', { value: name, text: name }));
+    for (const name of Object.keys(store.profiles)) s.append(el('option', { value: name, text: profileLabel(name) }));
     s.value = store.current;
     $('#btnDelete').hidden = Object.keys(store.profiles).length <= 1;
   }
@@ -323,12 +332,12 @@
   }
   function wireProfiles() {
     $('#profileSel').onchange = (e) => { if (shared) { shared = null; $('#sharedBar').hidden = true; history.replaceState(null, '', location.pathname); } loadProfile(e.target.value); };
-    $('#btnNew').onclick = async () => {
-      const name = (await dialog({ title: '캐릭터 추가', text: '이름을 정해 주세요. 빈 세팅에서 시작해요.', input: '' }) || '').trim();
-      if (!name) return; if (!store.profiles[name]) store.profiles[name] = blank(); loadProfile(name);
+    $('#btnNew').onclick = () => {
+      const name = 'c' + Date.now().toString(36);
+      store.profiles[name] = blank(); loadProfile(name);
     };
     $('#btnDelete').onclick = async () => {
-      if (!(await dialog({ title: '캐릭터 삭제', text: `"${store.current}" 세팅을 지울까요?`, ok: '삭제', danger: true }))) return;
+      if (!(await dialog({ title: '캐릭터 삭제', text: `"${profileLabel(store.current)}" 세팅을 지울까요?`, ok: '삭제', danger: true }))) return;
       delete store.profiles[store.current]; delete store.bases[store.current]; loadProfile(Object.keys(store.profiles)[0]);
     };
     $('#btnPin').onclick = () => { store.bases[store.current] = Object.assign({}, inputs); persist(); applyBase(); refresh(); };
@@ -364,30 +373,13 @@
     window.addEventListener('resize', draw);
     $('#btnSelAll').onclick = () => { selRect = null; draw(); };
   }
-  function shareMsg(t) { const n = $('#shareMsg'); n.hidden = !t; n.textContent = t || ''; }
   function wireCapture() {
-    const canShare = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
-    if (!canShare) {
-      // 폰: 화면 공유·붙여넣기 대신 사진 고르기가 기본
-      $('#btnShare').hidden = true;
+    const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+    if (mobile) {
       $('.drop-main').textContent = '상세 스탯 창 스크린샷을 골라주세요';
       $('.drop-sub').textContent = 'PC에서 찍은 사진을 폰으로 옮겨 올려도 돼요. 장비창이 같이 찍히면 전직·악세서리도 채워요';
-      document.querySelector('label[for=fileIn]').classList.add('primary');
       document.querySelector('label[for=fileIn]').textContent = '사진 고르기';
     }
-    const setSharing = (on) => { $('#btnShare').hidden = on || !canShare; $('#btnGrab').hidden = !on; $('#btnStop').hidden = !on; };
-    $('#btnShare').onclick = async () => {
-      shareMsg('');
-      try { await O.startShare(); setSharing(true); showShot(await O.grabFrame()); shareMsg('공유 중이에요. 게임에서 상세 스탯 창을 열고 "지금 캡처"를 누르세요.'); }
-      catch (e) {
-        setSharing(false);
-        if (e && e.name === 'NotAllowedError' && !/denied by user|Permission denied$/i.test(e.message || '')) shareMsg('이 주소에서는 화면 공유가 막혀 있어요. PrtSc로 찍은 스크린샷을 Ctrl+V로 붙여넣어 주세요.');
-        else shareMsg(e && e.name === 'NotAllowedError' ? '화면 공유가 취소됐어요.' : '화면 공유를 시작할 수 없어요: ' + (e.message || e));
-      }
-    };
-    $('#btnGrab').onclick = async () => { try { showShot(await O.grabFrame()); } catch (e) { shareMsg(e.message); setSharing(false); } };
-    $('#btnStop').onclick = () => { O.stopShare(); setSharing(false); shareMsg(''); };
-    window.addEventListener('sil-share-ended', () => { setSharing(false); });
     $('#fileIn').onchange = async (e) => { const f = e.target.files[0]; if (f) showShot(await O.imageFromBlob(f)); e.target.value = ''; };
     document.addEventListener('paste', async (e) => {
       const it = [...(e.clipboardData ? e.clipboardData.items : [])].find(i => i.type.startsWith('image/'));
@@ -510,9 +502,11 @@
       const same = String(cur) === sel.value;
       const guess = c && c.match.guess;
       const thumb = c ? el('img', { class: 'gear-ico', src: c.thumb, alt: '', width: '28', height: '28' }) : el('span', { class: 'gear-ico none' });
+      const cb = el('input', { type: 'checkbox', checked: !same && c && !guess ? 'checked' : null, 'aria-label': '적용' });
+      sel.addEventListener('change', () => { cb.checked = String(g(k)) !== sel.value; });
       body.append(el('tr', { class: 'gear-row' + (same ? ' same' : '') + (c ? '' : ' none') + (guess ? ' low' : '') },
-        el('td', {}, el('input', { type: 'checkbox', checked: !same && c && !guess ? 'checked' : null, 'aria-label': '적용' })),
-        el('td', {}, GEAR_NAME[k], c ? (guess ? el('small', { class: 'lowtag', text: ' 확인 필요' }) : null) : el('small', { class: 'lowtag', text: ' 못 찾음' })),
+        el('td', {}, cb),
+        el('td', {}, GEAR_NAME[k], c ? (guess ? el('small', { class: 'lowtag', text: ' 확인 필요' }) : null) : el('small', { class: 'mutetag', text: ' 안 보임 · 직접 선택' })),
         el('td', { class: 'dim', text: String(cur ?? '') }),
         el('td', { class: 'gear-pick' }, thumb, sel)));
     }
@@ -530,7 +524,8 @@
         wrap.append(el('div', { class: 'unk' }, el('img', { src: c.thumb, alt: c.slot + ' 칸 아이콘', width: '36', height: '36' }), sel));
       }
       body.append(el('tr', { class: 'gear-unknown' }, el('td', { colspan: '4' },
-        el('p', { class: 'hint', text: `모르는 아이콘 ${unknown.length}개. 알려주면 이 브라우저가 기억해요. 계산에 쓰는 아이템이 아니면 그냥 두세요.` }), wrap)));
+        el('details', { class: 'unk-det' }, el('summary', { text: `아직 모르는 아이콘 ${unknown.length}개` }),
+          el('p', { class: 'hint', text: '계산에 쓰는 악세(얼굴 상단·하단, 반지, 귀걸이)가 있으면 이름을 골라 주세요. 이 브라우저가 기억해요. 나머지는 그냥 두면 돼요.' }), wrap))));
     }
   }
   function applyOcr() {
@@ -545,7 +540,7 @@
     });
     let autoBase = false;
     if (!shared && isEmptySetting(store.bases[store.current] || {}) && !isEmptySetting(inputs)) { store.bases[store.current] = Object.assign({}, inputs); applyBase(); autoBase = true; }
-    applyInputs(); refresh(); scheduleAutosave();
+    applyInputs(); refresh(); scheduleAutosave(); renderProfiles();
     $('#ocrCount').textContent = autoBase ? `${n}개 값을 적용하고 이 세팅을 기준으로 잡았어요` : `${n}개 값을 적용했어요. 위에서 기준 대비 변화를 확인하세요`;
     document.querySelectorAll('#ocrBody tr').forEach(tr => tr.classList.add('applied'));
   }
@@ -585,19 +580,18 @@
   function wireShare() {
     if (!CAN_LINK) return;
     $('#btnLink').onclick = async () => {
-      const nm = shared ? shared.n : (store.current === '내 캐릭터' ? (inputs.C6 || '공유된') : store.current);
+      const nm = inputs.C6 || '공유된';
       const code = await packShare(nm, inputs);
       const url = location.origin + location.pathname + '#s=' + code;
       try { await navigator.clipboard.writeText(url); toast('링크를 복사했어요. 받은 사람은 이 세팅 그대로 보게 돼요'); }
       catch (e) { await dialog({ title: '링크', text: '아래 주소를 복사해서 보내세요.', area: url, ok: '닫기' }); }
     };
     $('#btnLeaveShared').onclick = leaveShared;
-    $('#btnSaveShared').onclick = async () => {
-      let name = (await dialog({ title: '내 캐릭터로 저장', text: '저장할 이름을 정해 주세요.', input: shared.n }) || '').trim();
-      if (!name) return;
+    $('#btnSaveShared').onclick = () => {
+      const name = 'c' + Date.now().toString(36);
       store.profiles[name] = Object.assign({}, inputs); store.bases[name] = Object.assign({}, inputs);
       shared = null; $('#sharedBar').hidden = true; history.replaceState(null, '', location.pathname + location.search);
-      loadProfile(name); toast(`"${name}"(으)로 저장했어요`);
+      loadProfile(name); toast('내 캐릭터 목록에 저장했어요');
     };
     window.addEventListener('hashchange', () => { if (location.hash.startsWith('#s=')) openHash(); });
   }
