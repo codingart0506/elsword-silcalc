@@ -258,3 +258,82 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 .ocr-table tr.engrave-row td:nth-child(4) { grid-column: 2 / -1; grid-row: 3; justify-content: flex-start; padding-top: 6px; }
 .engrave-row .gear-pick select:first-child { flex: 1; max-width: 260px; }
 .engrave-row .gear-pick select:last-child { width: 110px; }
+
+/* ---------- 화면 전환(계산기 / 랭킹 / 관리) ---------- */
+.brand { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.views { display: flex; gap: 2px; background: #e9ecef; border-radius: 999px; padding: 3px; }
+.views button { font: inherit; font-size: 14px; font-weight: 600; color: var(--sub); background: none; border: 0; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.views button[aria-current="page"] { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+body.view-rank .side, body.view-rank .main, body.view-admin .side, body.view-admin .main { display: none !important; }
+body.view-rank .who, body.view-admin .who { visibility: hidden; }
+.rank-view, .admin-view { grid-column: 1 / -1; }
+@media (min-width: 1024px) { .rank-view, .admin-view { padding: 32px 40px; max-width: 980px; width: 100%; justify-self: center; } }
+
+/* 실투력 카드 안의 랭킹 줄 */
+.rank-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 14px; color: var(--sub); font-weight: 600; }
+.rank-line .rk-state { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.rank-line .rk-pos { color: var(--blue); font-weight: 700; }
+.rank-line small { color: var(--mute); font-weight: 500; font-size: 12px; }
+.rank-line .acts { display: flex; gap: 2px; }
+
+/* 랭킹 목록 */
+.rank-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.rank-head h2 { margin: 0; }
+.rank-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.seg-sm { margin: 0; padding: 3px; }
+.seg-sm .tab { flex: 0 0 auto; padding: 6px 12px; font-size: 13px; }
+.seg .tab.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.rank-filters select { font-size: 14px; padding: 7px 30px 7px 12px; }
+.rank-note { margin: 0 0 12px; font-size: 13px; color: var(--mute); }
+.rank-list { list-style: none; margin: 0; padding: 0; }
+.rank-list li { border-bottom: 1px solid var(--line); }
+.rank-list li:last-child { border-bottom: 0; }
+.rk-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; font: inherit; color: inherit; text-align: left; background: none; border: 0; padding: 12px 6px; border-radius: 12px; cursor: pointer; }
+.rk-row:hover { background: var(--fill); }
+.rk-no { font-size: 17px; font-weight: 700; color: var(--mute); text-align: center; font-variant-numeric: tabular-nums; }
+.rank-list li:nth-child(-n+3) .rk-no { color: var(--blue); }
+.rk-who { display: flex; flex-direction: column; min-width: 0; }
+.rk-name { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-meta { font-size: 13px; color: var(--mute); display: flex; gap: 8px; flex-wrap: wrap; }
+.rk-cp { text-align: right; display: flex; flex-direction: column; }
+.rk-cp b { font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.rk-cp small { font-size: 12px; color: var(--mute); }
+.rank-list li.me .rk-row { background: var(--blue-weak); }
+.rank-empty { text-align: center; color: var(--mute); padding: 40px 0; margin: 0; }
+.rank-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+/* 신청 창 */
+.apply-card { width: min(520px, 100%); }
+.apply-card .ex-row select { width: 130px; }
+.ex-row input.nick { width: 170px; }
+.code-box { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--fill); border-radius: 14px; padding: 14px 16px; margin: 12px 0 8px; }
+.code-box b { font-size: 24px; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+.apply-shot { border: 1.5px dashed #c9d0d8; border-radius: 14px; padding: 14px; text-align: center; font-size: 14px; color: var(--sub); margin-bottom: 12px; cursor: pointer; }
+.apply-shot img { display: block; max-width: 100%; max-height: 200px; margin: 0 auto 8px; border-radius: 8px; }
+.apply-shot.has { border-style: solid; border-color: var(--line); }
+.apply-sum { font-size: 14px; color: var(--sub); margin: 0 0 12px; }
+.apply-sum b { color: var(--text); }
+.token-box { width: 100%; font: inherit; font-size: 17px; font-weight: 700; letter-spacing: 0.04em; text-align: center; background: var(--fill); border: 0; border-radius: 12px; padding: 12px; margin: 6px 0 12px; }
+
+/* 관리 화면 */
+.adm-login { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.adm-login input { flex: 1; min-width: 200px; }
+.adm-sec { margin-top: 24px; }
+.adm-sec h3 { font-size: 16px; margin: 0 0 10px; }
+.adm-item { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.adm-item img { width: 100%; border-radius: 10px; background: var(--fill); cursor: zoom-in; }
+.adm-info { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--sub); }
+.adm-info .nm { font-size: 17px; font-weight: 700; color: var(--text); }
+.adm-info .code { font-size: 15px; color: var(--text); }
+.adm-info .code b { font-size: 18px; letter-spacing: 0.05em; }
+.adm-acts { display: flex; gap: 8px; margin-top: 6px; }
+.adm-flag { color: #e2780b; font-weight: 600; }
+.adm-hist { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.adm-hist .nm { font-weight: 700; }
+.adm-hist small { color: var(--mute); }
+@media (max-width: 600px) {
+  .adm-item { grid-template-columns: 1fr; }
+  .rk-row { grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; padding: 12px 2px; }
+  .rk-cp b { font-size: 15px; }
+  .apply-card .ex-row { flex-wrap: wrap; }
+}

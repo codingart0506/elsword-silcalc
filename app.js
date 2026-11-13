@@ -261,6 +261,7 @@
   }
   let saveT = 0;
   function scheduleAutosave() { if (shared) return; clearTimeout(saveT); saveT = setTimeout(() => { store.profiles[store.current] = Object.assign({}, inputs); persist(); }, 400); }
+  const hooks = []; // 다시 계산할 때마다 부를 함수(랭킹 표시 등)
   function refresh() {
     let err = null;
     try {
@@ -270,6 +271,7 @@
     } catch (e) { err = e; console.error(e); }
     $('#rCP').classList.toggle('err', !!err);
     if (err) $('#rCP').textContent = '계산 오류';
+    for (const f of hooks) { try { f(); } catch (e) { console.error(e); } }
   }
   function setText(id, t) { const n = $(id); if (n && n.textContent !== t) n.textContent = t; }
   function renderResults() {
@@ -360,7 +362,7 @@
     };
     $('#btnDelete').onclick = async () => {
       if (!(await dialog({ title: '캐릭터 삭제', text: `"${profileLabel(store.current)}" 세팅을 지울까요?`, ok: '삭제', danger: true }))) return;
-      delete store.profiles[store.current]; delete store.bases[store.current]; delete store.names[store.current]; loadProfile(Object.keys(store.profiles)[0]);
+      delete store.profiles[store.current]; delete store.bases[store.current]; delete store.names[store.current]; if (store.rank) delete store.rank[store.current]; loadProfile(Object.keys(store.profiles)[0]);
     };
     $('#btnClear').onclick = async () => {
       if (!(await dialog({ title: '세팅 비우기', text: '이 캐릭터의 입력값을 모두 지우고 처음 상태로 돌아가요.', ok: '비우기', danger: true }))) return;
@@ -578,6 +580,7 @@
         el('td', { class: 'gear-pick' }, thumb, sel)));
     }
   }
+  let ocrSnap = null, ocrShot = null; // 마지막으로 스크린샷을 적용한 세팅과 그 사진(랭킹 갱신용)
   function applyOcr() {
     let n = 0;
     document.querySelectorAll('#ocrBody tr').forEach(tr => {
@@ -594,6 +597,7 @@
     let autoBase = false;
     if (!shared && isEmptySetting(store.bases[store.current] || {}) && !isEmptySetting(inputs)) { store.bases[store.current] = Object.assign({}, inputs); applyBase(); autoBase = true; }
     applyInputs(); refresh(); scheduleAutosave(); renderProfiles();
+    ocrSnap = Object.assign({}, inputs); ocrShot = shot; ocrSnap._key = store.current;
     // 적용이 끝나면 인식 결과 목록은 접어서 화면을 가볍게 유지
     $('#ocrResult').hidden = true; $('#stage').hidden = true;
     toast(autoBase ? `${n}개 값을 채우고 기준 세팅으로 잡았어요` : `${n}개 값을 채웠어요`);
@@ -657,6 +661,30 @@
     try { enterShared(await unpackShare(location.hash.slice(3))); }
     catch (e) { console.error(e); toast('링크를 열 수 없어요. 주소가 잘렸는지 확인해 주세요'); }
   }
+
+  // ---------- 랭킹 화면(rank.js)과 연결 ----------
+  const SKIP_EDIT = new Set(['C12', 'C13', '_key']);
+  window.SilApp = {
+    inputs: () => Object.assign({}, inputs),
+    cp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
+    missing: () => isEmptySetting(inputs) ? ['세팅'] : ['C12', 'C13'].filter(a => !(Number(g(a)) > 0)).map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력'),
+    cls: () => inputs.C6 || '',
+    key: () => store.current,
+    nick: () => nickOf(store.current),
+    setNick: (v) => { if (v) store.names[store.current] = v; else delete store.names[store.current]; persist(); syncNick(); renderProfiles(); refresh(); },
+    rank: (k) => ((store.rank || {})[k || store.current]) || null,
+    ranks: () => Object.assign({}, store.rank || {}),
+    setRank: (o, k) => { store.rank = store.rank || {}; const key = k || store.current; if (o) store.rank[key] = o; else delete store.rank[key]; persist(); },
+    // 이번에 넣은 스크린샷으로 채운 세팅인지(같은 캐릭터) + 그 뒤에 손으로 고친 값이 있는지
+    shot: () => (ocrShot && ocrSnap && ocrSnap._key === store.current) ? ocrShot : null,
+    edited: () => !!ocrSnap && Object.keys(Object.assign({}, inputs, ocrSnap)).some(a => !SKIP_EDIT.has(a) && String(inputs[a] ?? '') !== String(ocrSnap[a] ?? '')),
+    isShared: () => !!shared,
+    openShared: (o) => { history.replaceState(null, '', location.pathname + location.search); enterShared(o); },
+    classes: () => (optionsOf('C6') || []).filter(Boolean),
+    onRefresh: (f) => { hooks.push(f); },
+    refresh: () => refresh(),
+    toast, el, fmtInt, korUnit, dialog,
+  };
 
   // ---------- 시작 ----------
   function selfTest() {

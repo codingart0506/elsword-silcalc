@@ -6,12 +6,18 @@
 <title>엘소드 실투력 계산기</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%233182F6%22/%3E%3Cpath d=%22M9 20 L14 14 L18 17 L23 10%22 stroke=%22white%22 stroke-width=%223%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 
-<link rel="stylesheet" href="style.css?v=2820f6cc">
+<link rel="stylesheet" href="style.css?v=0fe8c592">
 </head>
 <body>
 <div class="wrap">
   <header class="head">
-    <h1>실투력 계산기</h1>
+    <div class="brand">
+      <h1>실투력 계산기</h1>
+      <nav class="views" id="views" hidden>
+        <button type="button" data-view="calc" aria-current="page">계산기</button>
+        <button type="button" data-view="rank">랭킹</button>
+      </nav>
+    </div>
     <div class="who">
       <label class="sr" for="profileSel">캐릭터</label>
       <select id="profileSel" class="pill"></select>
@@ -44,6 +50,7 @@
         <button class="txt sm mute" id="btnRevert">기준으로 되돌리기</button>
       </span>
     </div>
+    <div class="rank-line" id="rankLine" hidden></div>
   </section>
 
   <section class="card" id="ocrCard" aria-labelledby="ocrTitle">
@@ -97,10 +104,40 @@
 
   </div>
 
+  <section class="card rank-view" id="rankView" hidden aria-labelledby="rankTitle">
+    <div class="rank-head">
+      <h2 id="rankTitle">실투력 랭킹</h2>
+      <div class="rank-filters">
+        <div class="seg seg-sm" id="rankServer" role="group" aria-label="서버">
+          <button type="button" class="tab on" data-v="">전체</button>
+          <button type="button" class="tab" data-v="솔레스">솔레스</button>
+          <button type="button" class="tab" data-v="가이아">가이아</button>
+        </div>
+        <label class="sr" for="rankCls">전직</label>
+        <select id="rankCls"><option value="">모든 전직</option></select>
+      </div>
+    </div>
+    <p class="rank-note">관리자가 본인 캐릭터인지 확인한 사람만 올라가요. 이름을 누르면 그 사람 세팅을 계산기에서 볼 수 있어요.</p>
+    <ol class="rank-list" id="rankList"></ol>
+    <p class="rank-empty" id="rankEmpty" hidden></p>
+    <div class="rank-foot">
+      <button type="button" class="txt sm" id="btnRankMore" hidden>더 보기</button>
+      <button type="button" class="txt sm mute" id="btnLinkCode">다른 기기에서 받은 갱신 코드로 연결</button>
+    </div>
+  </section>
+
+  <section class="card admin-view" id="adminView" hidden aria-labelledby="adminTitle">
+    <div class="rank-head">
+      <h2 id="adminTitle">랭킹 관리</h2>
+      <button type="button" class="txt sm mute" id="btnAdminOut" hidden>로그아웃</button>
+    </div>
+    <div id="adminBody"></div>
+  </section>
+
   <footer class="foot">
     <p>계산식은 [실질전투력] Actual Combat Power 시트(제작: 마음담은편지)의 수식을 그대로 사용했습니다. 문의와 제보는 <a href="https://discord.gg/A3BJHhWuMZ" target="_blank" rel="noopener">시트 디스코드</a>로 부탁드립니다.</p>
     <p id="selfTest"></p>
-    <p>이 사이트는 KOG·넥슨과 관련 없는 비공식 팬 도구입니다. 입력한 값은 이 브라우저에만 저장됩니다.</p>
+    <p>이 사이트는 KOG·넥슨과 관련 없는 비공식 팬 도구입니다. 입력한 값은 이 브라우저에만 저장되며, 랭킹에 올릴 때만 서버로 보냅니다.</p>
   </footer>
 </div>
 
@@ -126,6 +163,7 @@
 <script src="ocr.js?v=cdc5ba5f"></script>
 <script src="icons.js?v=8eccb507"></script>
 <script src="gear.js?v=ceb96c08"></script>
-<script src="app.js?v=9ef4ae50"></script>
+<script src="app.js?v=4becedce"></script>
+<script src="rank.js?v=81ad0e89"></script>
 </body>
 </html>
