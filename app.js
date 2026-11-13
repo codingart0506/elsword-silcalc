@@ -510,23 +510,6 @@
         el('td', { class: 'dim', text: String(cur ?? '') }),
         el('td', { class: 'gear-pick' }, thumb, sel)));
     }
-    const unknown = gear.cells.filter(c => !c.match);
-    if (unknown.length) {
-      const opts = [''].concat(Object.keys(cat), [IRRELEVANT]);
-      const wrap = el('div', { class: 'unk-list' });
-      for (const c of unknown) {
-        const sel = el('select', { 'aria-label': '이 아이콘은?', onchange: (e) => {
-          const v = e.target.value; if (!v) return;
-          window.SilGear.teachFrom(shot, c, v, 'acc'); c.match = { name: v, d: 0 };
-          showGearRows(lastGear);
-        } });
-        for (const o of opts) sel.append(el('option', { value: o, text: o || '이 아이콘은?' }));
-        wrap.append(el('div', { class: 'unk' }, el('img', { src: c.thumb, alt: c.slot + ' 칸 아이콘', width: '36', height: '36' }), sel));
-      }
-      body.append(el('tr', { class: 'gear-unknown' }, el('td', { colspan: '4' },
-        el('details', { class: 'unk-det' }, el('summary', { text: `아직 모르는 아이콘 ${unknown.length}개` }),
-          el('p', { class: 'hint', text: '계산에 쓰는 악세(얼굴 상단·하단, 반지, 귀걸이)가 있으면 이름을 골라 주세요. 이 브라우저가 기억해요. 나머지는 그냥 두면 돼요.' }), wrap))));
-    }
   }
   function applyOcr() {
     let n = 0;
