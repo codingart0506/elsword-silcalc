@@ -628,7 +628,8 @@
   };
   function setRow() {
     return el('div', { class: 'ex-row atma-row' }, el('span', {}, '방어구 세트 효과'),
-      el('div', { class: 'atma-sel' }, pickSel('J30', optionsOf('J30') || [], inputs.J30 ?? BLANK.J30)));
+      // 보기는 짧게(연산·순환·복원), 값은 시트 그대로
+      el('div', { class: 'atma-sel set-sel' }, pickSel('J30', (optionsOf('J30') || []).map(o => ({ v: o, t: String(o).replace(/^엑사&네블론\s*-\s*/, '') })), inputs.J30 ?? BLANK.J30)));
   }
   function shareRow() {
     const mode = pickSel('L42', [{ v: 'false', t: '자동' }, { v: 'true', t: '직접 입력' }], inputs.L42 === true ? 'true' : 'false');

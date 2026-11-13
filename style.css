@@ -386,6 +386,7 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .atma-sel select { font-size: 14px; padding: 8px 28px 8px 10px; }
 .atma-sel select:first-child { width: 150px; }
 .atma-sel select:last-child { width: 96px; }
+.atma-sel.set-sel select { width: 150px; }
 @media (max-width: 480px) { .atma-row > span { flex-basis: 100%; } .atma-sel { width: 100%; } .atma-sel select:first-child { flex: 1; width: auto; } }
 .share-in { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--sub); font-weight: 600; }
 .share-in input.share { width: 64px; text-align: center; }
