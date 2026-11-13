@@ -85,7 +85,7 @@
   // ---------- 처음 상태: 시트 예시 값 대신 빈 세팅 ----------
   const STAT_CELLS = 'C11 C12 C13 C14 C15 C17 C18 C19 C20 C21 C22 C24 C25 C26 C27 C29 C30 C31 C32 C33 C34 C35'.split(' ');
   const BLANK = Object.assign({ C6: '' }, Object.fromEntries(STAT_CELLS.map(a => [a, null])), {
-    H11: 0, H12: 0, H13: 0, H15: '사용', H16: '이상', F17: '격려 재사용 시간 감소', F18: '격려 재사용 시간 감소', H17: 0.15, H18: 0.15,
+    H11: 0.1, H12: 0, H13: 0, H15: '사용', H16: '이상', F17: '격려 재사용 시간 감소', F18: '격려 재사용 시간 감소', H17: 0.15, H18: 0.15,
     D20: '물리 공격력 증가 (%)', D21: '크리티컬 데미지 증가 (%)', D22: '스킬 데미지 증가 (%)', H20: 0.05, H21: 0.05, H22: 0.05,
     G24: '미착용', G25: '미착용', G27: '해당사항 없음', G28: '해당사항 없음', G29: '해당사항 없음', G30: '해당사항 없음',
     H31: 0, H32: 0, H33: 0, D35: '황색', G35: '5세트',
@@ -151,8 +151,14 @@
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === SAGE && v.J30 === BLANK.J30) v.J30 = SET_CYCLE;
     store.mig.sage2 = 1;
   }
+  // 파티원 크뎀증: 엑사 연산·순환 세트를 입으면 10%가 기본(복원 등은 0)
+  const partyCrit = (set) => /연산|순환/.test(String(set || '')) ? 0.1 : 0;
+  if (!store.mig.pcrit10) {
+    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && !(Number(v.H11) > 0) && partyCrit(v.J30 ?? BLANK.J30) > 0) v.H11 = 0.1;
+    store.mig.pcrit10 = 1;
+  }
   if (!store.mig.heal3) {
-    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && HEALERS.has(v.C6) && v.J30 === BLANK.J30) v.J30 = SET_HEAL;
+    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && HEALERS.has(v.C6) && v.J30 === BLANK.J30) { v.J30 = SET_HEAL; if (Number(v.H11) === 0.1) v.H11 = 0; }
     store.mig.heal3 = 1;
   }
   // 강역강 체크가 잠깐 강렬·초월 스킬 데미지를 같게 만들던 버전의 흔적: 기준 세팅에 원래 값이 있으면 되돌리고, 강배·역강배를 같게
@@ -325,7 +331,7 @@
     if (HEALERS.has(now) !== HEALERS.has(prev) || !prev) swap('J21', HEALERS.has(now), HEAL_J21, BLANK.J21);
     // 방어구 세트: 지금 값이 이전 직업의 기본값일 때만 새 직업 기본값으로
     const wantSet = setDefault(now);
-    if (inputs.J30 !== wantSet && (inputs.J30 === setDefault(prev) || inputs.J30 == null)) { inputs.J30 = wantSet; wb.setInput(SH, 'J30', wantSet); ch = true; }
+    if (inputs.J30 !== wantSet && (inputs.J30 === setDefault(prev) || inputs.J30 == null)) { const old = inputs.J30; inputs.J30 = wantSet; wb.setInput(SH, 'J30', wantSet); syncPartyCrit(old); ch = true; }
     return ch;
   }
   // 강배·역강배 바지: 강배(체력 50% 초과인 적 공격시 데미지 증가)와 역강배(체력 50% 이하인 적 공격시 데미지 증가)를 높은 쪽으로 같게
@@ -335,9 +341,17 @@
     if (!(m > 0) || (a === m && b === m)) return false;
     inputs.C24 = inputs.C25 = m; wb.setInput(SH, 'C24', m); wb.setInput(SH, 'C25', m); return true;
   }
+  // 세트를 바꾸면 파티원 크뎀증도 그 세트 기본값으로(이전 세트 기본값 그대로일 때만)
+  function syncPartyCrit(oldSet) {
+    const want = partyCrit(inputs.J30), was = partyCrit(oldSet);
+    if (want === was) return;
+    const cur = inputs.H11 == null ? 0 : Number(inputs.H11);
+    if (cur === was) { inputs.H11 = want; wb.setInput(SH, 'H11', want); }
+  }
   function setVal(a, v) {
     const prev = inputs[a];
     inputs[a] = v; wb.setInput(SH, a, v);
+    if (a === 'J30') syncPartyCrit(prev);
     if (a === 'C6') { syncEngraveType(); syncClassDefault(prev); setTimeout(renderProfiles, 0); }
     if (inputs._eq && (a === 'C24' || a === 'C25')) { const o = a === 'C24' ? 'C25' : 'C24'; inputs[o] = v; wb.setInput(SH, o, v); }
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; refresh(); });
