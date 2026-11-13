@@ -80,7 +80,7 @@
     if (reset) { list.innerHTML = ''; rkCount = 0; rkDone = false; empty.hidden = false; empty.textContent = '불러오는 중이에요'; }
     try {
       const c = await sb();
-      let q = c.from('players').select('id,nickname,server,cls,cp,updated_at').order('cp', { ascending: false }).range(rkCount, rkCount + PAGE - 1);
+      let q = c.from('players').select('id,nickname,server,cls,cp,updated_at,shot_path').order('cp', { ascending: false }).range(rkCount, rkCount + PAGE - 1);
       if (rkServer) q = q.eq('server', rkServer);
       if (rkCls) q = q.eq('cls', rkCls);
       const { data, error } = await q;
@@ -99,14 +99,39 @@
     const mine = new Set(Object.values(A.ranks()).filter(r => r && r.status === 'approved').map(r => String(r.nickname).toLowerCase() + '|' + r.server));
     const list = $('#rankList');
     rows.forEach((r, i) => {
-      list.append(el('li', { class: mine.has(r.nickname.toLowerCase() + '|' + r.server) ? 'me' : '' },
-        el('button', { type: 'button', class: 'rk-row', title: `${r.nickname} 세팅 보기`, onclick: () => openPlayer(r) },
+      const li = el('li', { class: mine.has(r.nickname.toLowerCase() + '|' + r.server) ? 'me' : '' });
+      li.append(
+        el('button', { type: 'button', class: 'rk-row', 'aria-expanded': 'false', onclick: (e) => toggleDetail(li, r, e.currentTarget) },
           el('span', { class: 'rk-no', text: String(start + i + 1) }),
           el('span', { class: 'rk-who' },
             el('span', { class: 'rk-name', text: r.nickname }),
             el('span', { class: 'rk-meta' }, el('span', { text: r.cls }), el('span', { text: r.server }), el('span', { text: ago(r.updated_at) }))),
-          el('span', { class: 'rk-cp' }, el('b', { text: fmtInt(r.cp) }), el('small', { text: korUnit(r.cp) })))));
+          el('span', { class: 'rk-cp' }, el('b', { text: fmtInt(r.cp) }), el('small', { text: korUnit(r.cp) }))));
+      list.append(li);
     });
+  }
+  // 펼친 줄: 지금 실투력을 낸 스크린샷 + 계산기에서 세팅 보기
+  async function toggleDetail(li, r, btnEl) {
+    const open = li.classList.toggle('open');
+    btnEl.setAttribute('aria-expanded', String(open));
+    let box = li.querySelector('.rk-detail');
+    if (!open) { if (box) box.hidden = true; return; }
+    if (box) { box.hidden = false; return; }
+    const img = el('img', { alt: `${r.nickname} 실투력 스크린샷` });
+    const cap = el('p', { class: 'rk-cap', text: '사진 불러오는 중이에요' });
+    box = el('div', { class: 'rk-detail' },
+      el('a', { class: 'rk-shot', target: '_blank', rel: 'noopener' }, img),
+      el('div', { class: 'rk-side' },
+        cap,
+        el('p', { class: 'rk-cap', text: `실투력 ${fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신` }),
+        el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => openPlayer(r) })));
+    li.append(box);
+    try {
+      const c = await sb();
+      const u = r.shot_path ? await signed(c, r.shot_path) : null;
+      if (u) { img.src = u; img.parentNode.href = u; cap.textContent = '지금 랭킹 값을 낸 스크린샷이에요. 누르면 크게 보여요.'; }
+      else { img.parentNode.hidden = true; cap.textContent = '사진이 아직 없어요.'; }
+    } catch (e) { cap.textContent = '사진을 불러오지 못했어요.'; }
   }
   async function openPlayer(r) {
     try {
@@ -148,7 +173,9 @@
       line.append(el('span', { class: 'rk-state' }, '랭킹 신청이 거절됐어요', r.memo ? el('small', { text: r.memo }) : null),
         el('span', { class: 'acts' }, btn('다시 신청', openApply)));
     } else {
-      line.append(el('span', { class: 'rk-state' }, el('span', { class: 'rk-pos', text: r.pos ? `랭킹 ${r.pos}위` : '랭킹 등록됨' }), el('small', { text: `${r.nickname}, 올린 값 ${fmtInt(r.cp)}` })),
+      const upd = r.upd === 'held' ? `갱신 ${fmtInt(r.updCp)} 확인 기다리는 중`
+        : (r.upd === 'rejected' || r.upd === 'reverted') ? `최근 갱신이 반영되지 않았어요${r.updMemo ? `: ${r.updMemo}` : ''}` : '';
+      line.append(el('span', { class: 'rk-state' }, el('span', { class: 'rk-pos', text: r.pos ? `랭킹 ${r.pos}위` : '랭킹 등록됨' }), el('small', { text: `${r.nickname}, 올린 값 ${fmtInt(r.cp)}` }), upd ? el('small', { class: 'rk-upd', text: upd }) : null),
         el('span', { class: 'acts' }, btn('갱신 코드', showToken, true), btn('랭킹 갱신', doUpdate)));
     }
   }
@@ -167,7 +194,7 @@
       const st = data && data[0];
       if (!st) { A.setRank(null, key); }
       else {
-        Object.assign(r, { status: st.status, nickname: st.nickname, server: st.server, cp: Number(st.cp), memo: st.memo || '' });
+        Object.assign(r, { status: st.status, nickname: st.nickname, server: st.server, cp: Number(st.cp), memo: st.memo || '', upd: st.upd_status || '', updCp: Number(st.upd_cp) || 0, updMemo: st.upd_memo || '' });
         if (st.status === 'approved') r.pos = await position(c, r.cp);
         A.setRank(r, key);
       }
@@ -265,17 +292,23 @@
       return;
     }
     const cp = A.cp(), edited = A.edited();
-    const ok = await A.dialog({ title: '랭킹 갱신', text: `${r.nickname} 실투력을 ${fmtInt(cp)}(으)로 바꿔요. PC방 혜택과 지애 버프가 꺼진 상태로 찍은 스크린샷일 때만 갱신할 수 있어요.` + (edited ? ' 스크린샷을 적용한 뒤 손으로 고친 값이 있어서 관리자 화면에 따로 표시돼요.' : ''), ok: '버프 없이 찍었어요, 갱신' });
+    const big = r.cp && cp > r.cp * 1.15;
+    const ok = await A.dialog({ title: '랭킹 갱신', text: `${r.nickname} 실투력을 ${fmtInt(cp)}(으)로 바꿔요. PC방 혜택과 지애 버프가 꺼진 상태로 찍은 스크린샷일 때만 갱신할 수 있어요.` + ((edited || big) ? ` ${edited ? '스크린샷을 적용한 뒤 손으로 고친 값이 있어서' : '15% 넘게 올라서'} 관리자가 확인한 뒤에 랭킹에 반영돼요.` : ''), ok: '버프 없이 찍었어요, 갱신' });
     if (!ok) return;
     try {
       const c = await sb();
       const path = `update/${uuid()}.jpg`;
       const up = await c.storage.from('shots').upload(path, await toJpeg(shot), { contentType: 'image/jpeg', upsert: false });
       if (up.error) throw up.error;
-      const { error } = await c.rpc('update_cp', { p_token: r.token, p_cls: A.cls(), p_cp: cp, p_inputs: A.inputs(), p_shot: path, p_edited: edited });
+      const { data: res, error } = await c.rpc('update_cp', { p_token: r.token, p_cls: A.cls(), p_cp: cp, p_inputs: A.inputs(), p_shot: path, p_edited: edited });
       if (error) throw error;
-      r.cp = cp; r.pos = await position(c, cp); A.setRank(r); renderLine();
-      toast(`랭킹을 갱신했어요${r.pos ? ` (${r.pos}위)` : ''}`);
+      if (res === 'held') {
+        Object.assign(r, { upd: 'held', updCp: cp, updMemo: '' }); A.setRank(r); renderLine();
+        toast('관리자가 확인하면 랭킹에 반영돼요');
+      } else {
+        Object.assign(r, { cp, upd: 'live', updCp: cp, updMemo: '' }); r.pos = await position(c, cp); A.setRank(r); renderLine();
+        toast(`랭킹을 갱신했어요${r.pos ? ` (${r.pos}위)` : ''}`);
+      }
     } catch (e) { toast('갱신하지 못했어요. ' + errMsg(e)); }
   }
 
@@ -371,28 +404,59 @@
       pend.append(item);
     }
 
+    const held = el('div', { class: 'adm-sec' }, el('h3', { text: '확인 기다리는 갱신' }),
+      el('p', { class: 'rank-note', text: '손으로 고친 값이 있거나 15% 넘게 오른 갱신이에요. 반영해야 랭킹에 올라가요.' }));
+    const live = el('div', { class: 'adm-sec' }, el('h3', { text: '바로 반영된 갱신' }),
+      el('p', { class: 'rank-note', text: '이미 랭킹에 반영됐어요. 사진을 보고 확인하거나, 이상하면 되돌려요.' }));
+    body.insertBefore(held, hist); body.insertBefore(live, hist); hist.remove();
     const { data: hs, error: e2 } = await c.from('cp_history')
-      .select('id,cp,edited,created_at,shot_path,player_id,players(nickname,server,hidden)')
-      .order('created_at', { ascending: false }).limit(30);
+      .select('id,cp,prev_cp,cls,edited,status,created_at,shot_path,player_id,players(nickname,server,hidden)')
+      .in('status', ['held', 'live']).order('created_at', { ascending: false }).limit(60);
     if (e2) throw e2;
-    if (!hs.length) hist.append(el('p', { class: 'rank-note', text: '아직 갱신 기록이 없어요' }));
-    for (const h of hs) {
+    const hsHeld = hs.filter(h => h.status === 'held'), hsLive = hs.filter(h => h.status === 'live');
+    if (!hsHeld.length) held.append(el('p', { class: 'rank-note', text: '확인할 갱신이 없어요' }));
+    if (!hsLive.length) live.append(el('p', { class: 'rank-note', text: '새로 반영된 갱신이 없어요' }));
+    const act = async (h, action, item, done) => {
+      let memo = '';
+      if (action === 'reject' || action === 'revert') {
+        memo = await A.dialog({ title: action === 'reject' ? '반영하지 않기' : '되돌리기', text: '이유를 적으면 그 사람 화면에 보여요. 비워 둬도 돼요.', input: '', ok: action === 'reject' ? '반영 안 함' : '되돌리기' });
+        if (memo === null) return;
+      }
+      for (const b of item.querySelectorAll('button')) b.disabled = true;
+      const { error: e } = await c.rpc('review_update', { p_id: h.id, p_action: action, p_memo: memo || '' });
+      if (e) { toast(errMsg(e)); for (const b of item.querySelectorAll('button')) b.disabled = false; return; }
+      item.remove(); toast(done);
+    };
+    const updItem = (h) => {
       const p = h.players || {};
-      const view = h.shot_path ? el('button', { type: 'button', class: 'txt sm', text: '사진', onclick: async () => { const u = await signed(c, h.shot_path); if (u) window.open(u, '_blank', 'noopener'); } }) : null;
-      const hide = el('button', { type: 'button', class: 'txt sm mute', text: p.hidden ? '다시 보이기' : '숨기기' });
-      hide.onclick = async () => {
-        const nv = !p.hidden;
-        const { error: e } = await c.from('players').update({ hidden: nv }).eq('id', h.player_id);
-        if (e) { toast(errMsg(e)); return; }
-        p.hidden = nv; hide.textContent = nv ? '다시 보이기' : '숨기기';
-        toast(nv ? '랭킹에서 숨겼어요' : '다시 보이게 했어요');
-      };
-      hist.append(el('div', { class: 'adm-hist' },
-        el('span', {}, el('span', { class: 'nm', text: p.nickname || '?' }), ' ', el('small', { text: `${p.server || ''}, ${ago(h.created_at)}` }),
-          h.edited ? el('div', { class: 'adm-flag', text: '스크린샷 적용 뒤 손으로 고친 값 있음' }) : null),
-        el('b', { text: fmtInt(h.cp) }),
-        el('span', {}, view, hide)));
-    }
+      const img = el('img', { alt: `${p.nickname || ''} 갱신 스크린샷` });
+      signed(c, h.shot_path).then(u => { if (u) { img.src = u; img.onclick = () => window.open(u, '_blank', 'noopener'); } });
+      const diff = h.prev_cp ? (h.cp - h.prev_cp) / h.prev_cp * 100 : 0;
+      const acts = el('div', { class: 'adm-acts' });
+      const item = el('div', { class: 'adm-item' }, img, el('div', { class: 'adm-info' },
+        el('span', { class: 'nm', text: `${p.nickname || '?'} (${p.server || ''})` }),
+        el('span', { text: `${h.cls || ''}, ${h.prev_cp ? fmtInt(h.prev_cp) + ' → ' : ''}${fmtInt(h.cp)}${h.prev_cp ? ` (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%)` : ''}` }),
+        h.edited ? el('span', { class: 'adm-flag', text: '스크린샷 적용 뒤 손으로 고친 값 있음' }) : null,
+        el('small', { text: ago(h.created_at) }), acts));
+      if (h.status === 'held') {
+        acts.append(el('button', { type: 'button', class: 'btn primary', text: '반영', onclick: () => act(h, 'approve', item, `${p.nickname} 갱신을 반영했어요`) }),
+          el('button', { type: 'button', class: 'btn', text: '반영 안 함', onclick: () => act(h, 'reject', item, '반영하지 않았어요') }));
+      } else {
+        const hide = el('button', { type: 'button', class: 'btn', text: p.hidden ? '다시 보이기' : '랭킹에서 숨기기' });
+        hide.onclick = async () => {
+          const nv = !p.hidden;
+          const { error: e } = await c.from('players').update({ hidden: nv }).eq('id', h.player_id);
+          if (e) { toast(errMsg(e)); return; }
+          p.hidden = nv; hide.textContent = nv ? '다시 보이기' : '랭킹에서 숨기기';
+          toast(nv ? '랭킹에서 숨겼어요' : '다시 보이게 했어요');
+        };
+        acts.append(el('button', { type: 'button', class: 'btn primary', text: '확인', onclick: () => act(h, 'check', item, '확인했어요') }),
+          el('button', { type: 'button', class: 'btn', text: '되돌리기', onclick: () => act(h, 'revert', item, '이전 값으로 되돌렸어요') }), hide);
+      }
+      return item;
+    };
+    for (const h of hsHeld) held.append(updItem(h));
+    for (const h of hsLive) live.append(updItem(h));
   }
   $('#btnAdminOut').onclick = async () => { const c = await sb(); await c.auth.signOut(); adminInit(); };
 

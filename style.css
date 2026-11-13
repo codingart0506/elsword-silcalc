@@ -342,3 +342,15 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .chk-row input { width: 18px; height: 18px; margin: 2px 0 0; flex: none; accent-color: var(--blue); }
 .chk-row > span { display: flex; flex-direction: column; gap: 2px; font-size: 14px; font-weight: 600; color: var(--text); }
 .chk-row small { font-size: 12px; font-weight: 400; color: var(--mute); }
+/* 랭킹 펼침: 스크린샷 */
+.rank-list li.open .rk-row { background: var(--fill); }
+.rank-list li.me.open .rk-row { background: var(--blue-weak); }
+.rk-detail { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; padding: 12px 6px 18px 62px; align-items: start; }
+.rk-shot { display: block; border-radius: 12px; overflow: hidden; background: var(--fill); }
+.rk-shot img { display: block; width: 100%; min-height: 120px; }
+.rk-side { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.rk-cap { margin: 0; font-size: 13px; color: var(--sub); }
+.rk-upd { color: #e2780b !important; }
+@media (max-width: 600px) {
+  .rk-detail { grid-template-columns: 1fr; padding: 4px 2px 16px; }
+}
