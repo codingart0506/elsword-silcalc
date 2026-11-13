@@ -366,3 +366,9 @@ body.view-rank .who, body.view-admin .who { display: none; }
   .rk-detail { grid-template-columns: 1fr; padding: 4px 2px 16px; }
 }
 .rk-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.atma-row { flex-wrap: wrap; }
+.atma-sel { display: flex; gap: 6px; }
+.atma-sel select { font-size: 14px; padding: 8px 28px 8px 10px; }
+.atma-sel select:first-child { width: 150px; }
+.atma-sel select:last-child { width: 96px; }
+@media (max-width: 480px) { .atma-row > span { flex-basis: 100%; } .atma-sel { width: 100%; } .atma-sel select:first-child { flex: 1; width: auto; } }

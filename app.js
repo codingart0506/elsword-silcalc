@@ -522,6 +522,17 @@
     const inp = numIn('C12', '예: 205000');
     return [el('label', { class: 'ex-row' }, el('span', {}, `${atk} 공격력 극대화 범위 최댓값`, el('small', { text: `이번 사진에서 못 찾았어요. 다음엔 ${atk} 공격력에 마우스를 올린 채로 찍으면 자동으로 들어가요` })), inp), inp];
   }
+  // 아트마 액세서리: 사진으로는 못 읽고 실투력에 크게 들어가는 값(종류·등급)
+  function atmaRow() {
+    const sel = (c) => {
+      const s = el('select', { 'data-cell': c });
+      for (const o of optionsOf(c) || []) s.append(el('option', { value: String(o), text: String(o) }));
+      s.value = String(inputs[c] ?? defaultOf(c) ?? '');
+      return s;
+    };
+    return el('div', { class: 'ex-row atma-row' }, el('span', {}, '아트마 액세서리', el('small', { text: '사진으로 못 읽는 값이에요. 실투력이 최대 20% 넘게 달라져요' })),
+      el('div', { class: 'atma-sel' }, sel('J32'), sel('L32')));
+  }
   function askExtras({ weapon = true, range = false, during = false } = {}) {
     const open = $('#extraDlg');
     if (open && !during) {
@@ -536,6 +547,7 @@
     const r12 = range ? rangeRow() : null;
     const save = () => {
       for (const inp of wrap.querySelectorAll('input[data-cell]')) { const t = inp.value.replace(/[,\s]/g, ''); if (t && Number(t) > 0) setVal(inp.getAttribute('data-cell'), Number(t)); }
+      for (const sl of wrap.querySelectorAll('select[data-cell]')) { const c = sl.getAttribute('data-cell'); if (sl.value !== String(inputs[c] ?? '')) setVal(c, parseOpt(c, sl.value)); }
       refresh(); scheduleAutosave(); wrap.remove();
     };
     const card = el('div', { class: 'dialog-card extra-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'exTitle' },
@@ -543,6 +555,7 @@
       el('p', { id: 'exNote', text: iC13 ? `스크린샷에 안 나오는 값이에요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.${during ? ' 그동안 사진을 읽고 있어요.' : ''}` : '이번 사진에서 못 찾은 값이에요.' }),
       iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '극대화 범위가 아닌 무기 자체 수치' })), iC13) : null,
       r12 ? r12[0] : null,
+      iC13 ? atmaRow() : null,
       el('div', { class: 'dlg-actions' },
         el('button', { class: 'btn', onclick: () => wrap.remove(), text: '나중에' }),
         el('button', { class: 'btn primary', text: '확인', onclick: save })));
