@@ -729,7 +729,8 @@
       sel.value = c.match ? c.match.name : '';
       const cb = el('input', { type: 'checkbox', 'aria-label': '적용' });
       const same = c.match && String(cur) === c.match.name;
-      cb.checked = !!(c.match && !c.match.guess && !same);
+      // 확실하면 적용. '확인 필요'(비슷한 후보)라도 지금 전직이 비어 있으면 일단 적용(전직이 없으면 계산이 안 됨)
+      cb.checked = !!(c.match && !same && (!c.match.guess || !cur));
       sel.addEventListener('change', () => {
         if (!sel.value) return;
         if (!c.match || c.match.name !== sel.value) { window.SilGear.teachFrom(shot, c, sel.value, 'cls'); c.match = { name: sel.value, d: 0 }; }
