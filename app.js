@@ -90,7 +90,7 @@
     G24: '미착용', G25: '미착용', G27: '해당사항 없음', G28: '해당사항 없음', G29: '해당사항 없음', G30: '해당사항 없음',
     H31: 0, H32: 0, H33: 0, G35: '1세트 또는 미착용',
     L11: '미사용', L12: '미사용', L13: '미사용', L14: '미사용', L15: '미사용',
-    J17: '미사용', J18: '미사용', J19: '미사용', J20: '미사용', J21: '미적용', J22: '미적용', J23: '해당사항 없음',
+    J17: '미사용', J18: '미사용', J19: '미사용', J20: '미사용', J21: '적용2-녹엑사 (팟모스뎀, 팟물마 10%)', J22: '미적용', J23: '해당사항 없음',
     L26: 0, L27: 0, L28: 0, L29: 0, J30: '엑사&네블론 - 연산', L31: 0, J32: '미적용', L32: '미착용',
   });
   const blank = () => Object.assign({}, BLANK);
@@ -111,6 +111,12 @@
     for (const v of Object.values(store.profiles)) if (v && v.J30 === '해당사항 없음') v.J30 = BLANK.J30;
     for (const v of Object.values(store.bases)) if (v && v.J30 === '해당사항 없음') v.J30 = BLANK.J30;
     store.mig.setFx = 1;
+  }
+  // 녹힐 장비 버프 기본값을 '적용2(녹엑사)'로 바꾼 뒤: 예전 기본값(미적용)이던 캐릭터도 한 번만 맞춰 줌
+  if (!store.mig.healFx) {
+    for (const v of Object.values(store.profiles)) if (v && v.J21 === '미적용') v.J21 = BLANK.J21;
+    for (const v of Object.values(store.bases)) if (v && v.J21 === '미적용') v.J21 = BLANK.J21;
+    store.mig.healFx = 1;
   }
   if (!store.names) store.names = {}; // 캐릭터별 닉네임(선택)
   const nickOf = (key) => (store.names[key] || '').trim();
@@ -262,9 +268,16 @@
     for (const a of ['D20', 'D21', 'D22']) if (ATK.includes(inputs[a]) && inputs[a] !== want) { inputs[a] = want; wb.setInput(SH, a, want); ch = true; }
     return ch;
   }
+  // 녹힐 장비 버프: 딜러는 적용2(녹엑사), 녹힐인 에테르 세이지는 적용3(적청엑사)이 기본(시트 메모 기준)
+  const HEAL_CLS = '에테르 세이지', HEAL_J21 = '적용3-적청엑사 (팟크뎀 10%)';
+  function syncHealDefault() {
+    const want = inputs.C6 === HEAL_CLS ? HEAL_J21 : BLANK.J21, other = want === HEAL_J21 ? BLANK.J21 : HEAL_J21;
+    if (inputs.J21 === other) { inputs.J21 = want; wb.setInput(SH, 'J21', want); return true; }
+    return false;
+  }
   function setVal(a, v) {
     inputs[a] = v; wb.setInput(SH, a, v);
-    if (a === 'C6') { syncEngraveType(); setTimeout(renderProfiles, 0); }
+    if (a === 'C6') { syncEngraveType(); syncHealDefault(); setTimeout(renderProfiles, 0); }
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; refresh(); });
     scheduleAutosave();
   }
@@ -676,7 +689,7 @@
         if (v !== null) { inputs[c] = v; n++; }
       });
     });
-    applyInputs(); syncEngraveType();
+    applyInputs(); syncEngraveType(); syncHealDefault();
     let autoBase = false;
     if (!shared && isEmptySetting(store.bases[store.current] || {}) && !isEmptySetting(inputs)) { store.bases[store.current] = Object.assign({}, inputs); applyBase(); autoBase = true; }
     applyInputs(); refresh(); scheduleAutosave(); renderProfiles();
