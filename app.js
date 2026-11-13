@@ -386,7 +386,7 @@
     const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
     if (mobile) {
       $('.drop-main').textContent = '상세 스탯 창 스크린샷을 골라주세요';
-      $('.drop-sub').textContent = 'PC에서 찍은 사진을 폰으로 옮겨 올려도 돼요. 장비창이 같이 찍히면 전직·악세서리도 채워요';
+      $('.drop-sub').textContent = 'PC에서 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 찍은 사진이면 한 장으로 다 채워요';
       document.querySelector('label[for=fileIn]').textContent = '사진 고르기';
     }
     $('#fileIn').onchange = async (e) => { const f = e.target.files[0]; if (f) showShot(await O.imageFromBlob(f)); e.target.value = ''; };
@@ -418,7 +418,7 @@
       try { if (gear && gear.cls) { pt.textContent = '칭호 읽는 중'; res.title = await O.readTitle(shot, gear.cls); } } catch (e) { console.error(e); }
       showOcrResult(res, gear);
       prog.hidden = true;
-      askExtras(gear && gear.cls && gear.cls.match ? gear.cls.match.name : null);
+      askExtras(gear && gear.cls && gear.cls.match ? gear.cls.match.name : null, !!(res.found && res.found.C12));
     } catch (e) {
       console.error(e); pt.textContent = '인식 실패: ' + (e.message || e);
       return;
@@ -444,10 +444,10 @@
     }
     // 칭호: 캐릭터 창 칭호 띠의 이름 (상시 칭호)
     const titleText = (res.title || '').replace(/[^\uAC00-\uD7A3A-Za-z0-9 ]/g, '').trim();
-    if ((titleText.match(/[\uAC00-\uD7A3]/g) || []).length >= 2) {
+    const titles = (optionsOf('G24') || []).filter(t => t !== '미착용');
+    const tHit = titleText ? O.findName([{ text: titleText }], titles) : null;
+    if (tHit || (titleText.match(/[\uAC00-\uD7A3]/g) || []).length >= 2) {
       res.title = titleText;
-      const titles = (optionsOf('G24') || []).filter(t => t !== '미착용');
-      const tHit = O.findName([{ text: res.title }], titles);
       const cur = g('G24'), val = tHit ? tHit.name : '미착용';
       const same = String(cur) === val;
       const sel = el('select', { 'data-cell': 'G24', 'aria-label': '상시 칭호' });
@@ -471,34 +471,28 @@
   }
 
   // ---------- 사진에 안 나오는 값: 인식 뒤 바로 묻기 ----------
-  function askExtras(clsName) {
+  function askExtras(clsName, gotRange) {
     const old = $('#extraDlg'); if (old) old.remove();
     if (clsName && !inputs.C6) { setVal('C6', clsName); refresh(); }
     const numIn = (c, ph) => { const v = g(c); return el('input', { type: 'text', inputmode: 'numeric', class: 'num', 'data-cell': c, placeholder: ph, value: Number(v) > 0 ? String(v) : '' }); };
-    const iC12 = numIn('C12', '예: 205000'), iC13 = numIn('C13', '예: 60000');
-    const rows = [];
-    const engr = [20, 21, 22].map(i => {
-      const mk = (cell) => { const sel = el('select', { 'data-cell': cell }); for (const x of optionsOf(cell) || []) sel.append(el('option', { value: String(x), text: typeof x === 'number' ? fmtPct(x, x * 1000 % 10 ? 1 : 0) : String(x).replace(' (%)', '') })); sel.value = String(g(cell)); return sel; };
-      return [mk('D' + i), mk('H' + i)];
-    });
+    const iC13 = numIn('C13', '예: 60000');
+    const needRange = !gotRange && !(Number(g('C12')) > 0);
+    const iC12 = needRange ? numIn('C12', '예: 205000') : null;
     const atk = label('AC67') === '마법' ? '마법' : '물리';
     const card = el('div', { class: 'dialog-card extra-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'exTitle' },
-      el('h3', { id: 'exTitle', text: '사진에 안 나오는 값' }),
-      el('p', { text: '게임에서 마우스를 올려야 보이는 값이에요. 모르면 비워 두고 넘어가도 돼요.' }),
-      el('label', { class: 'ex-row' }, el('span', {}, `${atk} 공격력 극대화 범위 최댓값`, el('small', { text: `상세 스탯의 ${atk} 공격력에 마우스를 올리면 나오는 "12345 ~ 67890" 중 오른쪽 숫자` })), iC12),
-      el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '무기에 마우스를 올리면 나오는 무기 자체 공격력' })), iC13),
-      el('div', { class: 'ex-sub', text: '금빛 각인석 · 기본은 공격력·크뎀·스뎀 5%' }),
-      ...engr.map(([o, v], k) => el('div', { class: 'ex-row eng' }, el('span', { text: `${k + 1}` }), o, v)),
+      el('h3', { id: 'exTitle', text: '무기 공격력을 알려주세요' }),
+      el('p', { text: '스크린샷에 안 나오는 값이에요. 무기에 마우스를 올리면 나오는 무기 자체 공격력을 넣어 주세요.' }),
+      el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '극대화 범위가 아닌 무기 자체 수치' })), iC13),
+      iC12 ? el('label', { class: 'ex-row' }, el('span', {}, `${atk} 공격력 극대화 범위 최댓값`, el('small', { text: `이번 사진에서 못 찾았어요. 다음엔 ${atk} 공격력에 마우스를 올린 채로 찍으면 자동으로 들어가요` })), iC12) : null,
       el('div', { class: 'dlg-actions' },
         el('button', { class: 'btn', onclick: () => wrap.remove(), text: '나중에' }),
         el('button', { class: 'btn primary', text: '확인', onclick: () => {
-          for (const [inp, c] of [[iC12, 'C12'], [iC13, 'C13']]) { const t = inp.value.replace(/[,\s]/g, ''); if (t && Number(t) > 0) setVal(c, Number(t)); }
-          for (const [o, v] of engr) { setVal(o.dataset.cell, parseOpt(o.dataset.cell, o.value)); setVal(v.dataset.cell, parseOpt(v.dataset.cell, v.value)); }
-          syncEngraveType(); refresh(); scheduleAutosave(); wrap.remove();
+          for (const [inp, c] of [[iC13, 'C13'], [iC12, 'C12']]) { if (!inp) continue; const t = inp.value.replace(/[,\s]/g, ''); if (t && Number(t) > 0) setVal(c, Number(t)); }
+          refresh(); scheduleAutosave(); wrap.remove();
         } })));
     const wrap = el('div', { class: 'dialog', id: 'extraDlg' }, card);
     document.body.append(wrap);
-    setTimeout(() => (Number(g('C12')) > 0 ? iC13 : iC12).focus(), 50);
+    setTimeout(() => iC13.focus(), 50);
   }
 
   // ---------- 일반 악세서리(아이콘) ----------

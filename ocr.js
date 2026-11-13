@@ -334,7 +334,28 @@
     const [r1, r2] = await Promise.all([A.recognize(pre, {}, { blocks: true, text: true }), B.recognize(pre, {}, { blocks: true })]);
     const words = mergeDigitPass(collectWords(r1.data), collectWords(r2.data));
     const rows = wordsToRows(words);
-    return { rows, allRows, found: parseRows(rows), text: r1.data.text, rect: used, auto };
+    const found = parseRows(rows);
+    const rng = findRangeMax(rows) || findRangeMax(allRows);
+    if (rng) found.C12 = { cell: 'C12', value: rng.value, score: 1, conf: 90, text: rng.text, label: '극대화 범위 최댓값' };
+    else delete found.C12;
+    return { rows, allRows, found, text: r1.data.text, rect: used, auto };
+  }
+
+  // 공격력에 마우스를 올리면 뜨는 툴팁: "[물리 공격력 범위] 162558~198673" → 오른쪽(최댓값)
+  function findRangeMax(rows) {
+    const RE = /(\d[\d,.]{3,})\s*[~∼〜\-]\s*(\d[\d,.]{3,})/;
+    for (let i = 0; i < rows.length; i++) {
+      if (!/범\s*위/.test(rows[i].text)) continue;
+      for (const r of [rows[i], rows[i + 1], rows[i + 2]]) {
+        if (!r) continue;
+        const m = RE.exec(r.text);
+        if (m) {
+          const a = parseInt(m[1].replace(/[,.]/g, ''), 10), b = parseInt(m[2].replace(/[,.]/g, ''), 10);
+          if (b >= a && b > 0) return { value: b, text: rows[i].text.trim() + ' ' + (r === rows[i] ? '' : r.text.trim()) };
+        }
+      }
+    }
+    return null;
   }
 
   // 캐릭터 창 칭호 띠(파란 바탕 흰 글씨): 초상화 위치 기준으로 잘라 따로 읽음
@@ -351,9 +372,18 @@
     const img = g.getImageData(0, 0, c.width, c.height), d = img.data;
     for (let i = 0; i < d.length; i += 4) { const v = 255 - Math.min(d[i], d[i + 1], d[i + 2]); d[i] = d[i + 1] = d[i + 2] = v > 140 ? 255 : v < 90 ? 0 : v; }
     g.putImageData(img, 0, 0);
+    let t = '';
     await A.setParameters({ tessedit_pageseg_mode: '7' });
-    try { const r = await A.recognize(c); return (r.data.text || '').trim(); }
+    try { t = ((await A.recognize(c)).data.text || '').trim(); }
     finally { await A.setParameters({ tessedit_pageseg_mode: '6' }); }
+    // 한글이 거의 없으면 영어 칭호(Dogma 등)일 수 있어 영어로 한 번 더
+    if ((t.match(/[\uAC00-\uD7A3]/g) || []).length < 2) {
+      const [, B] = await getWorkers(onProgress);
+      await B.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '' });
+      try { const e = ((await B.recognize(c)).data.text || '').trim(); if (/[A-Za-z]{3,}/.test(e)) t = e; }
+      finally { await B.setParameters({ tessedit_pageseg_mode: '11', tessedit_char_whitelist: '0123456789.,%~' }); }
+    }
+    return t;
   }
 
   // 화면 공유
@@ -423,7 +453,7 @@
     return best;
   }
 
-  const api = { findName, readTitle, FIELDS, norm, matchField, splitPairs, parseRows, wordsToRows, collectWords, mergeDigitPass, locatePanel, toValue,
+  const api = { findName, readTitle, findRangeMax, FIELDS, norm, matchField, splitPairs, parseRows, wordsToRows, collectWords, mergeDigitPass, locatePanel, toValue,
     preprocess, recognize, getWorkers, startShare, grabFrame, stopShare, sharing, imageFromBlob };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SilOCR = api;
