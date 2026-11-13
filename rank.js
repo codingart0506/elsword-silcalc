@@ -280,10 +280,19 @@
     A.dialog({ title: '갱신 코드', text: '다른 기기나 브라우저에서 갱신할 때 이 코드가 필요해요. 다른 사람에게 알려 주지 마세요.', area: r.token, ok: '닫기' });
   }
 
+  // 피시방·지애·랜미 버프를 켠 세팅은 랭킹에 올리지 않음(서버에도 안 보냄)
+  function buffBlocked() {
+    const bf = A.rankBuffs ? A.rankBuffs() : [];
+    if (!bf.length) return false;
+    A.dialog({ title: '랭킹에 올릴 수 없어요', text: `${bf.join(', ')}이(가) 켜져 있어요. 피시방·지애·랜미 버프를 켠 세팅은 랭킹에 올릴 수 없어요. 세팅의 스킬·장비 탭 '도핑'에서 미적용으로 바꾼 뒤 다시 눌러 주세요.`, ok: '확인' });
+    return true;
+  }
+
   // ---------- 랭킹 신청 ----------
   function openApply() {
     const miss = A.missing();
     if (miss.length) { toast(`${miss.join('·')}부터 채워 주세요`); return; }
+    if (buffBlocked()) return;
     const cp = A.rankCp();
     if (!(cp > 0)) { toast('실투력이 계산되지 않았어요'); return; }
     const old = $('#applyDlg'); if (old) old.remove();
@@ -329,6 +338,7 @@
       if (!n) { toast('닉네임을 적어 주세요'); nick.focus(); return; }
       if (!img) { toast('인증 코드가 보이는 스크린샷을 넣어 주세요'); return; }
       if (!noBuff.checked) { toast('PC방 혜택과 지애 버프가 꺼져 있는지 확인해 주세요'); return; }
+      if (buffBlocked()) return;
       send.disabled = true; send.textContent = '보내는 중';
       try {
         const c = await sb();
@@ -357,6 +367,7 @@
     const r = A.rank(); if (!r) return;
     const miss = A.missing();
     if (miss.length) { toast(`${miss.join('·')}부터 채워 주세요`); return; }
+    if (buffBlocked()) return;
     const shot = A.shot();
     if (!shot) {
       await A.dialog({ title: '스크린샷이 필요해요', text: '랭킹은 스크린샷으로만 갱신할 수 있어요. 지금 세팅으로 스크린샷을 넣고 적용한 다음 다시 눌러 주세요.', ok: '확인' });
