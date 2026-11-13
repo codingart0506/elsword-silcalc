@@ -103,9 +103,7 @@
           rkDone = true; $('#btnRankMore').hidden = true; rkBusy = false; return;
         }
       }
-      let q = c.from('players').select('id,nickname,cls,cp,updated_at,shot_path').order('cp', { ascending: false }).range(rkCount, rkCount + PAGE - 1);
-      if (rkCls) q = q.eq('cls', rkCls);
-      const { data, error } = await q;
+      const { data, error } = await c.rpc('rank_list', { p_cls: rkCls || null, p_offset: rkCount, p_limit: PAGE });
       if (error) throw error;
       renderRows(data, rkCount);
       rkCount += data.length; rkDone = data.length < PAGE;
@@ -140,11 +138,38 @@
     if (i.L42 === true) return `직접 입력 ${nf(i.I46 ?? 35)} : ${nf(i.K46 ?? 65)} (${i.M46 || '강초뎀 적용 이전'} 기준)`;
     return `자동 (${Number(i.C29) > Number(i.C30) ? '강렬' : '초월'} 주력)`;
   }
-  async function playerInputs(c, r) {
-    if (r.inputs) return r.inputs;
-    const { data, error } = await c.from('players').select('inputs').eq('id', r.id).single();
+  async function playerDetail(c, r) {
+    if (r.inputs) return r;
+    const { data, error } = await c.rpc('rank_detail', { p_id: r.id });
     if (error) throw error;
-    return (r.inputs = data.inputs || {});
+    const d = (data && data[0]) || {};
+    r.inputs = d.inputs || {}; r.shot_path = d.shot_path || null;
+    return r;
+  }
+  async function playerInputs(c, r) { return (await playerDetail(c, r)).inputs; }
+  // 보는 사람 표시(워터마크): 캡처가 퍼지면 누가 봤는지 알 수 있게
+  function viewerName() {
+    const rs = Object.values(A.ranks()).filter(x => x && x.token && x.status === 'approved');
+    const cur = A.rank && A.rank(A.key());
+    const me = (cur && cur.status === 'approved' && cur.nickname) || (rs[0] && rs[0].nickname);
+    return me || '관리자';
+  }
+  function stamp() {
+    const d = new Date(), z = (n) => String(n).padStart(2, '0');
+    return `${viewerName()}  ${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`;
+  }
+  function watermark() {
+    const t = stamp(), w = el('div', { class: 'wm', 'aria-hidden': 'true' });
+    for (let i = 0; i < 24; i++) w.append(el('span', { text: t }));
+    return w;
+  }
+  function lightbox(src, alt) {
+    const box = el('div', { class: 'lb', role: 'dialog', 'aria-label': alt },
+      el('div', { class: 'lb-in' }, el('img', { src, alt }), watermark()));
+    const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    box.onclick = close; document.addEventListener('keydown', onKey);
+    document.body.append(box);
   }
   async function toggleDetail(li, r, btnEl) {
     const open = li.classList.toggle('open');
@@ -155,8 +180,10 @@
     const img = el('img', { alt: `${r.nickname} 실투력 스크린샷` });
     const cap = el('p', { class: 'rk-cap', text: '사진 불러오는 중이에요' });
     const shareP = el('p', { class: 'rk-cap', text: '강렬:초월 점유율 불러오는 중' });
+    const shot = el('button', { type: 'button', class: 'rk-shot', 'aria-label': '사진 크게 보기' }, img, watermark());
+    shot.onclick = () => { if (img.src) lightbox(img.src, img.alt); };
     box = el('div', { class: 'rk-detail' },
-      el('a', { class: 'rk-shot', target: '_blank', rel: 'noopener' }, img),
+      shot,
       el('div', { class: 'rk-side' },
         cap,
         el('p', { class: 'rk-cap', text: `실투력 ${fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신` }),
@@ -167,10 +194,11 @@
     li.append(box);
     try {
       const c = await sb();
-      playerInputs(c, r).then(i => { shareP.textContent = `강렬:초월 점유율 ${shareText(i)}`; }).catch(() => { shareP.textContent = ''; });
+      await playerDetail(c, r);
+      shareP.textContent = `강렬:초월 점유율 ${shareText(r.inputs)}`;
       const u = r.shot_path ? await signed(c, r.shot_path) : null;
-      if (u) { img.src = u; img.parentNode.href = u; cap.textContent = '지금 랭킹 값을 낸 스크린샷이에요. 누르면 크게 보여요.'; }
-      else { img.parentNode.hidden = true; cap.textContent = '사진이 아직 없어요.'; }
+      if (u) { img.src = u; cap.textContent = '지금 랭킹 값을 낸 스크린샷이에요. 누르면 크게 보여요.'; }
+      else { shot.hidden = true; cap.textContent = '사진이 아직 없어요.'; }
     } catch (e) { cap.textContent = '사진을 불러오지 못했어요.'; }
   }
   async function openPlayer(r) {
@@ -226,13 +254,11 @@
   }
   A.onRefresh(renderLine);
 
-  async function position(c, cp, cls) {
-    let q = c.from('players').select('id', { count: 'exact', head: true }).gt('cp', cp);
-    if (cls) q = q.eq('cls', cls);
-    const { count, error } = await q;
-    return error ? null : count + 1;
+  async function positions(c, r) {
+    const { data, error } = await c.rpc('rank_pos', { p_cp: r.cp, p_cls: r.cls || null });
+    const d = !error && data && data[0];
+    r.pos = d ? d.overall : null; r.cpos = d ? d.in_cls : null;
   }
-  async function positions(c, r) { r.pos = await position(c, r.cp); r.cpos = r.cls ? await position(c, r.cp, r.cls) : null; }
   async function checkStatus(key) {
     const r = A.rank(key); if (!r || !r.token) return;
     try {
@@ -505,9 +531,35 @@
     for (const h of hsHeld) held.append(updItem(h));
     for (const h of hsLive) live.append(updItem(h));
 
+    // 열람 기록: 누가 언제 무엇을 봤는지(IP 포함). 이상하면 그 사람을 아래에서 숨기면 랭킹도 못 봐요
+    const logs = el('div', { class: 'adm-sec' }, el('h3', { text: '열람 기록' }),
+      el('p', { class: 'rank-note', text: '랭킹 목록과 상세(사진·세팅)를 본 기록이에요. 최근 300개, 180일 지나면 지워져요. 이름을 누르면 그 사람 기록만 보여요.' }));
+    body.append(logs);
+    const { data: lg, error: e4 } = await c.from('view_log').select('at,viewer,viewer_nick,kind,target_nick,ip,ua').order('at', { ascending: false }).limit(300);
+    if (e4) throw e4;
+    const logBox = el('div', { class: 'adm-logs' });
+    let only = null;
+    const kindText = (l) => l.kind === 'detail' ? `${l.target_nick || '지워진 캐릭터'} 상세` : l.kind === 'list' ? '전체 랭킹' : `${l.kind.slice(5)} 랭킹`;
+    const drawLogs = () => {
+      logBox.textContent = '';
+      const rows = only ? lg.filter(l => l.viewer === only) : lg;
+      if (only) logBox.append(el('button', { type: 'button', class: 'txt sm', text: '전체 기록 보기', onclick: () => { only = null; drawLogs(); } }));
+      if (!rows.length) logBox.append(el('p', { class: 'rank-note', text: '아직 기록이 없어요' }));
+      const cnt = {};
+      for (const l of lg) if (l.kind === 'detail' && Date.now() - new Date(l.at) < 864e5) cnt[l.viewer] = (cnt[l.viewer] || 0) + 1;
+      for (const l of rows) {
+        const many = cnt[l.viewer] >= 30;
+        logBox.append(el('div', { class: 'adm-log' + (many ? ' many' : '') },
+          el('button', { type: 'button', class: 'txt sm nm', text: l.viewer_nick || '지워진 캐릭터', onclick: () => { only = l.viewer; drawLogs(); } }),
+          el('span', { text: kindText(l) }),
+          el('small', { text: `${ago(l.at)}${l.ip ? ', ' + l.ip : ''}${many ? ', 하루 상세 ' + cnt[l.viewer] + '번' : ''}` })));
+      }
+    };
+    drawLogs(); logs.append(logBox);
+
     // 랭킹에 올라간 캐릭터: 숨기기 / 삭제(랭킹·갱신 기록·사진 모두)
     const all = el('div', { class: 'adm-sec' }, el('h3', { text: '랭킹에 올라간 캐릭터' }),
-      el('p', { class: 'rank-note', text: '삭제하면 랭킹, 갱신 기록, 사진이 모두 지워지고 되돌릴 수 없어요. 다시 올리려면 새로 신청해야 해요.' }));
+      el('p', { class: 'rank-note', text: '숨기면 랭킹에서 빠지고 그 사람은 랭킹도 못 봐요(분탕 차단). 삭제하면 랭킹, 갱신 기록, 사진이 모두 지워지고 되돌릴 수 없어요.' }));
     body.append(all);
     const { data: ps, error: e3 } = await c.from('players').select('id,nickname,cls,cp,hidden,updated_at').order('cp', { ascending: false }).limit(500);
     if (e3) throw e3;
