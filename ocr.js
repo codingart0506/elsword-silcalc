@@ -186,7 +186,11 @@
         digits.forEach((b, i) => { if (boxOverlap(a, b) > 0.5) { ov.push(b); used.add(i); } });
         if (ov.length) {
           ov.sort((x, y) => x.bbox.x0 - y.bbox.x0);
-          out.push(Object.assign({}, a, { text: ov.map(b => b.text).join(''), confidence: Math.min(...ov.map(b => b.confidence)) }));
+          const t2 = ov.map(b => b.text).join('');
+          // 살펴보기 창의 ▲▼ 화살표를 숫자 전용 인식이 '4' 따위로 읽는 경우: 1차가 깔끔하면 1차를 믿음
+          const d1 = a.text.replace(/\D/g, ''), d2 = t2.replace(/\D/g, '');
+          if (/^[\d.,]+%?$/.test(a.text) && d2.length > d1.length && d2.startsWith(d1)) { out.push(a); continue; }
+          out.push(Object.assign({}, a, { text: t2, confidence: Math.min(...ov.map(b => b.confidence)) }));
           continue;
         }
       }

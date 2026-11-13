@@ -44,7 +44,7 @@
       { bar: '보조', fields: [{ c: 'C35', t: '동작속도' }] },
       { bar: '창에 없는 값', note: '상세 스탯 창에 안 나와서 직접 입력해요', single: true, fields: [{ c: 'C12', lab: 'B12' }, { c: 'C13', lab: 'B13' }, { c: 'C27', t: '테네브로스 3옵 (HP n% 이하 적에게 n% 데미지)' }] },
     ] },
-    { id: 'buff', name: '버프와 아이템', groups: [
+    { id: 'buff', name: '버프·아이템', groups: [
       { bar: '파티 버프', note: '파티원 것 말고 본인이 입은 아이템 효과만', fields: [{ c: 'H11', lab: 'D11' }, { c: 'H12', lab: 'D12' }, { c: 'H13', lab: 'D13' }] },
       { bar: '펫', note: '포만도 80% 이상, 친밀도 100%일 때 특별한 격려 효과', fields: [{ c: 'H15', lab: 'D15' }, { c: 'H16', lab: 'D16' }] },
       { bar: '비전의 원석', fields: [[{ c: 'F17' }, { c: 'H17' }], [{ c: 'F18' }, { c: 'H18' }]] },
@@ -54,15 +54,12 @@
       { bar: '카트리지', fields: [{ c: 'H31', lab: 'D31' }, { c: 'H32', lab: 'D32' }, { c: 'H33', lab: 'D33' }] },
       { bar: '아티팩트', fields: [[{ c: 'D35' }, { c: 'G35' }]] },
     ] },
-    { id: 'gear', name: '스킬과 장비', groups: [
+    { id: 'gear', name: '스킬·장비', groups: [
       { bar: '캐릭터 버프 스킬', fields: [{ c: 'L11', lab: 'I11' }, { c: 'L12', lab: 'I12' }, { c: 'L13', lab: 'I13' }, { c: 'L14', lab: 'I14' }, { c: 'L15', lab: 'I15' }] },
       { bar: '도핑', fields: [{ c: 'J17', lab: 'I17' }, { c: 'J18', lab: 'I18' }, { c: 'J19', lab: 'I19' }, { c: 'J20', lab: 'I20' }, { c: 'J21', lab: 'I21' }, { c: 'J22', lab: 'I22' }, { c: 'J23', lab: 'I23' }] },
       { bar: '장비 종류와 강화', fields: [[{ c: 'J26', lab: 'I26' }, { c: 'L26' }], [{ c: 'J27', lab: 'I27' }, { c: 'L27' }], [{ c: 'J28', lab: 'I28' }, { c: 'L28' }], [{ c: 'J29', lab: 'I29' }, { c: 'L29' }],
         [{ c: 'J31', lab: 'I31' }, { c: 'L31' }], [{ c: 'J32', lab: 'I32' }, { c: 'L32' }], { c: 'J30', t: '방어구 세트 효과' }] },
       { bar: '전투력 출력 기준 필드', fields: [{ c: 'I34', t: '필드' }], extra: 'field' },
-    ] },
-    { id: 'share', name: '점유율', groups: [
-      { bar: '강렬 : 초월 스킬 점유율', note: '기본값을 쓰려면 체크를 끄세요. 비율만 맞춰도 돼요.', fields: [{ c: 'L42', lab: 'J42', k: 'check' }, { c: 'I46', t: '강렬 스킬 점유율', k: 'num' }, { c: 'K46', t: '초월 스킬 점유율', k: 'num' }, { c: 'M46', t: '기준' }], extra: 'share' },
     ] },
   ];
 
@@ -85,8 +82,13 @@
   const LS = 'silcalc.v1';
   let store = { current: '내 캐릭터', profiles: { '내 캐릭터': {} } };
   try { const s = JSON.parse(localStorage.getItem(LS)); if (s && s.profiles) store = s; } catch (e) { /* 저장소 없음 */ }
+  if (!store.bases) store.bases = {};
   let inputs = Object.assign({}, store.profiles[store.current] || {});
-  let dirty = false;
+  if (!store.bases[store.current]) store.bases[store.current] = Object.assign({}, inputs);
+  // 기준 세팅을 따로 계산해서 지금 값과 비교
+  const baseWb = new E.Workbook(M);
+  function applyBase() { baseWb.inputs = {}; for (const [a, v] of Object.entries(store.bases[store.current] || {})) baseWb.inputs[SH + '!' + a] = v; baseWb.invalidate(); }
+  applyBase();
   function persist() { try { localStorage.setItem(LS, JSON.stringify(store)); } catch (e) { /* 무시 */ } }
   function applyInputs() { wb.inputs = {}; for (const [a, v] of Object.entries(inputs)) wb.inputs[SH + '!' + a] = v; wb.invalidate(); }
 
@@ -163,14 +165,12 @@
       const pane = el('div', { class: 'pane' + (tab.pairs ? ' pairs' : ' blocks'), role: 'tabpanel', id: 'pane-' + tab.id, 'aria-labelledby': 'tab-' + tab.id });
       for (const gr of tab.groups) {
         const g = el('div', { class: 'grp' + (gr.single ? ' single' : '') });
-        if (gr.bar) g.append(el('div', { class: 'sbar' + (gr.red ? ' red' : '') }, gr.bar));
-        if (gr.sub) g.append(el('div', { class: 'ssub' }, el('span', { class: 'star', 'aria-hidden': 'true', text: '★' }), gr.sub));
+        if (gr.bar || gr.sub) g.append(el('p', { class: 'gtitle', text: gr.bar || gr.sub }));
         if (gr.note) g.append(el('p', { class: 'gnote', text: gr.note }));
         const list = el('div', { class: 'rows' });
         for (const f of gr.fields) list.append(fieldRow(f));
         g.append(list);
         if (gr.extra === 'field') g.append(el('div', { class: 'extra', id: 'fieldInfo' }));
-        if (gr.extra === 'share') g.append(el('div', { class: 'extra', id: 'shareInfo' }));
         pane.append(g);
       }
       root.append(pane);
@@ -206,7 +206,7 @@
     if (c.kind === 'select') fillSelect(c.node, a);
     else if (c.kind === 'check') c.node.checked = v === true;
     else if (document.activeElement !== c.node) { c.node.value = c.kind === 'pct' ? pctIn(v) : (typeof v === 'number' ? String(v) : ''); c.node.classList.remove('bad'); }
-    if (c.row) c.row.classList.toggle('changed', a in inputs && String(inputs[a]) !== String(defaultOf(a)));
+    if (c.row) { const b = baseWb.get(SH, a); c.row.classList.toggle('changed', String(v) !== String(E.isErr(b) ? b.code : b)); }
   }
   function syncLabels() {
     document.querySelectorAll('[data-labcell]').forEach(n => { const t = label(n.getAttribute('data-labcell')); if (n.textContent !== t) n.textContent = t; });
@@ -218,13 +218,12 @@
   // ---------- 값 변경 / 재계산 ----------
   let raf = 0;
   function setVal(a, v) {
-    inputs[a] = v; dirty = true; wb.setInput(SH, a, v);
+    inputs[a] = v; wb.setInput(SH, a, v);
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; refresh(); });
     scheduleAutosave();
   }
   let saveT = 0;
-  function scheduleAutosave() { clearTimeout(saveT); saveT = setTimeout(() => { store.profiles[store.current] = Object.assign({}, inputs); persist(); dirty = false; updateSaveBtn(); }, 600); updateSaveBtn(); }
-  function updateSaveBtn() { $('#btnSave').textContent = dirty ? '저장 중' : '저장됨'; }
+  function scheduleAutosave() { clearTimeout(saveT); saveT = setTimeout(() => { store.profiles[store.current] = Object.assign({}, inputs); persist(); }, 400); }
   function refresh() {
     let err = null;
     try {
@@ -240,43 +239,20 @@
     const cp = g('C36');
     setText('#rCP', typeof cp === 'number' ? fmtInt(cp) : String(cp));
     setText('#rCPk', korUnit(cp));
-    setText('#rClass', label('C6') + ' (' + label('AC67') + ')');
-    fillSelect($('#selP12'), 'P12'); fillSelect($('#selQ15'), 'Q15');
-    const y = g('Y12'), z = g('Z15');
-    setText('#rY12', typeof y === 'number' ? y.toFixed(2) : String(y));
-    setText('#rZ15', typeof z === 'number' ? fmtPct(z) : String(z));
-    setText('#rAJ28', fmtPct(g('AJ28'))); setText('#rAJ29', fmtPct(g('AJ29')));
-    setText('#rAG30', label('AG30')); setText('#rAJ30', fmtPct(g('AJ30'), 1));
-    $('#rAG30').className = 'val ' + (label('AG30') === '가능' ? 'ok' : 'no');
+    setText('#rClass', label('C6'));
     const fi = $('#fieldInfo'); if (fi) fi.textContent = `${label('K34')} ${fmtPct(g('L34'), 0)}, ${label('K35')} ${fmtPct(g('L35'), 0)} 적용 중`;
-    const si = $('#shareInfo'); if (si) si.textContent = `기본값은 강렬 ${fmtPct(g('I45'), 0)}, 초월 ${fmtPct(g('K45'), 0)} (${label('M45')})`;
-    renderRaid();
-  }
-  function renderRaid() {
-    const root = $('#raid');
-    const blocks = [['S', 18], ['V', 18], ['Y', 18], ['S', 25], ['V', 25], ['Y', 25]];
-    if (!root._built) {
-      root.innerHTML = '';
-      for (const [c, r] of blocks) {
-        const sel = el('select', { 'data-cell': c + r, 'aria-label': '던전 선택', onchange: (e) => setVal(c + r, e.target.value) });
-        root.append(el('div', { class: 'raid-item' }, sel,
-          el('div', { class: 'raid-vals' },
-            el('span', {}, '실질 체력 ', el('b', { 'data-out': c + (r + 1) }), '억'),
-            el('span', {}, '10분컷 ', el('b', { 'data-out': c + (r + 3) })),
-            el('span', { class: 'time' }, el('b', { 'data-out': c + (r + 5) })))));
-      }
-      root._built = true;
-    }
-    root.querySelectorAll('select[data-cell]').forEach(s => fillSelect(s, s.getAttribute('data-cell')));
-    const cp = g('C36');
-    root.querySelectorAll('[data-out]').forEach(n => {
-      const a = n.getAttribute('data-out'), v = g(a), row = +a.slice(1);
-      let t;
-      if (row === 19 || row === 26) t = typeof v === 'number' ? v.toLocaleString('ko-KR', { maximumFractionDigits: 1 }) : String(v ?? '-');
-      else if (row === 21 || row === 28) { t = typeof v === 'number' ? korUnit(v) || fmtInt(v) : String(v ?? '-'); n.classList.toggle('ok', typeof cp === 'number' && typeof v === 'number' && cp >= v); n.classList.toggle('no', typeof cp === 'number' && typeof v === 'number' && cp < v); }
-      else t = String(v ?? '-').replace('분 소요 예상', '분 예상');
-      if (n.textContent !== t) n.textContent = t;
-    });
+    // 기준 대비
+    const base = baseWb.get(SH, 'C36');
+    const dt = $('#deltaText');
+    let same = true;
+    if (typeof cp === 'number' && typeof base === 'number') {
+      const d = cp - base; same = Math.abs(d) < 0.5;
+      const pct = base ? d / base * 100 : 0;
+      dt.className = 'delta-text' + (same ? '' : d > 0 ? ' up' : ' down');
+      dt.textContent = same ? '기준 세팅과 같아요' : `기준보다 ${d > 0 ? '▲' : '▼'} ${fmtInt(Math.abs(d))} (${d > 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%)`;
+    } else { dt.className = 'delta-text'; dt.textContent = ''; }
+    const changed = Object.keys(controls).some(a => controls[a].row && controls[a].row.classList.contains('changed')) || !same;
+    $('#btnPin').hidden = !changed; $('#btnRevert').hidden = !changed;
   }
 
   // ---------- 프로필 ----------
@@ -284,10 +260,12 @@
     const s = $('#profileSel'); s.innerHTML = '';
     for (const name of Object.keys(store.profiles)) s.append(el('option', { value: name, text: name }));
     s.value = store.current;
+    $('#btnDelete').hidden = Object.keys(store.profiles).length <= 1;
   }
   function loadProfile(name) {
-    store.current = name; inputs = Object.assign({}, store.profiles[name] || {}); persist();
-    applyInputs(); renderProfiles(); refresh(); dirty = false; updateSaveBtn();
+    store.current = name; inputs = Object.assign({}, store.profiles[name] || {});
+    if (!store.bases[name]) store.bases[name] = Object.assign({}, inputs);
+    persist(); applyInputs(); applyBase(); renderProfiles(); refresh();
   }
   function dialog({ title, text, input, area, ok = '확인', danger }) {
     return new Promise((resolve) => {
@@ -305,39 +283,16 @@
   }
   function wireProfiles() {
     $('#profileSel').onchange = (e) => loadProfile(e.target.value);
-    $('#btnSave').onclick = () => { store.profiles[store.current] = Object.assign({}, inputs); persist(); dirty = false; updateSaveBtn(); };
     $('#btnNew').onclick = async () => {
-      const name = (await dialog({ title: '새 캐릭터', text: '이름을 입력하세요. 예시 값에서 시작해요.', input: '' }) || '').trim();
+      const name = (await dialog({ title: '캐릭터 추가', text: '이름을 정해 주세요. 시트 예시 값에서 시작해요.', input: '' }) || '').trim();
       if (!name) return; if (!store.profiles[name]) store.profiles[name] = {}; loadProfile(name);
     };
-    const menu = $('#moreMenu');
-    $('#btnMore').onclick = (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; $('#btnMore').setAttribute('aria-expanded', String(!menu.hidden)); };
-    document.addEventListener('click', () => { menu.hidden = true; });
-    $('#btnRename').onclick = async () => {
-      const name = (await dialog({ title: '이름 바꾸기', input: store.current }) || '').trim();
-      if (!name || name === store.current) return;
-      store.profiles[name] = store.profiles[store.current]; delete store.profiles[store.current]; loadProfile(name);
-    };
-    $('#btnExport').onclick = async () => {
-      const txt = JSON.stringify({ app: 'silcalc', version: M.meta.version, name: store.current, inputs });
-      let copied = false; try { await navigator.clipboard.writeText(txt); copied = true; } catch (e) { /* 막힘 */ }
-      await dialog({ title: '설정 내보내기', text: copied ? '클립보드에 복사했어요. 아래 내용을 저장해 두거나 다른 기기에 붙여넣으세요.' : '아래 내용을 복사해 두세요.', area: txt, ok: '닫기' });
-    };
-    $('#btnImport').onclick = async () => {
-      const txt = await dialog({ title: '설정 가져오기', text: '내보내기로 복사한 내용을 붙여넣으세요. 현재 캐릭터에 덮어써요.', area: '' });
-      if (!txt) return;
-      try { const o = JSON.parse(txt); if (!o.inputs) throw 0; inputs = o.inputs; store.profiles[store.current] = Object.assign({}, inputs); persist(); applyInputs(); refresh(); }
-      catch (e) { await dialog({ title: '가져오기 실패', text: '형식이 올바르지 않아요.', ok: '닫기' }); }
-    };
-    $('#btnReset').onclick = async () => {
-      if (!(await dialog({ title: '예시 값으로 되돌리기', text: '현재 캐릭터의 입력을 모두 지우고 시트 예시 값으로 돌아가요.', ok: '되돌리기', danger: true }))) return;
-      inputs = {}; store.profiles[store.current] = {}; persist(); applyInputs(); refresh();
-    };
     $('#btnDelete').onclick = async () => {
-      if (Object.keys(store.profiles).length <= 1) { await dialog({ title: '삭제할 수 없어요', text: '캐릭터가 하나뿐이에요.', ok: '닫기' }); return; }
-      if (!(await dialog({ title: '캐릭터 삭제', text: `"${store.current}"을(를) 삭제할까요?`, ok: '삭제', danger: true }))) return;
-      delete store.profiles[store.current]; loadProfile(Object.keys(store.profiles)[0]);
+      if (!(await dialog({ title: '캐릭터 삭제', text: `"${store.current}" 세팅을 지울까요?`, ok: '삭제', danger: true }))) return;
+      delete store.profiles[store.current]; delete store.bases[store.current]; loadProfile(Object.keys(store.profiles)[0]);
     };
+    $('#btnPin').onclick = () => { store.bases[store.current] = Object.assign({}, inputs); persist(); applyBase(); refresh(); };
+    $('#btnRevert').onclick = () => { inputs = Object.assign({}, store.bases[store.current] || {}); store.profiles[store.current] = Object.assign({}, inputs); persist(); applyInputs(); refresh(); };
   }
 
   // ---------- 화면인식 ----------
@@ -372,7 +327,14 @@
   function shareMsg(t) { const n = $('#shareMsg'); n.hidden = !t; n.textContent = t || ''; }
   function wireCapture() {
     const canShare = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
-    if (!canShare) $('#btnShare').hidden = true;
+    if (!canShare) {
+      // 폰: 화면 공유·붙여넣기 대신 사진 고르기가 기본
+      $('#btnShare').hidden = true;
+      $('.drop-main').textContent = '상세 스탯 창 스크린샷을 골라주세요';
+      $('.drop-sub').textContent = 'PC에서 찍은 사진을 폰으로 옮겨 올려도 돼요. 장비창이 같이 찍히면 전직·악세서리도 채워요';
+      document.querySelector('label[for=fileIn]').classList.add('primary');
+      document.querySelector('label[for=fileIn]').textContent = '사진 고르기';
+    }
     const setSharing = (on) => { $('#btnShare').hidden = on || !canShare; $('#btnGrab').hidden = !on; $('#btnStop').hidden = !on; };
     $('#btnShare').onclick = async () => {
       shareMsg('');
@@ -392,9 +354,9 @@
       if (it) { e.preventDefault(); showShot(await O.imageFromBlob(it.getAsFile())); }
     });
     const card = $('#ocrCard');
-    card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('drop'); });
-    card.addEventListener('dragleave', () => card.classList.remove('drop'));
-    card.addEventListener('drop', async (e) => { e.preventDefault(); card.classList.remove('drop'); const f = [...e.dataTransfer.files].find(f => f.type.startsWith('image/')); if (f) showShot(await O.imageFromBlob(f)); });
+    card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('drop-on'); });
+    card.addEventListener('dragleave', () => card.classList.remove('drop-on'));
+    card.addEventListener('drop', async (e) => { e.preventDefault(); card.classList.remove('drop-on'); const f = [...e.dataTransfer.files].find(f => f.type.startsWith('image/')); if (f) showShot(await O.imageFromBlob(f)); });
     $('#btnOcr').onclick = runOcr;
     $('#btnApply').onclick = applyOcr;
     $('#btnOcrAll').onclick = () => { const boxes = [...document.querySelectorAll('#ocrBody input[type=checkbox]')]; const all = boxes.every(b => b.checked); boxes.forEach(b => { b.checked = !all; }); };
@@ -403,7 +365,7 @@
   async function runOcr() {
     if (!shot) return;
     const prog = $('#ocrProg'), bar = prog.querySelector('.bar'), pt = prog.querySelector('.ptext');
-    prog.hidden = false; $('#btnOcr').disabled = true; bar.style.width = '5%'; pt.textContent = '이미지 다듬는 중';
+    prog.hidden = false; $('#btnOcr').disabled = true; bar.style.width = '5%'; pt.textContent = '이미지 준비 중';
     try {
       const res = await O.recognize(shot, selRect, (m) => {
         if (m.status) pt.textContent = (STEP[m.status] || m.status) + (m.tag === 'eng' ? ' (숫자)' : '');
@@ -423,7 +385,7 @@
   function showOcrResult(res, gear) {
     const body = $('#ocrBody'); body.innerHTML = '';
     const found = res.found; const cells = O.FIELDS.map(f => f.cell).filter(c => found[c]);
-    $('#ocrCount').textContent = cells.length ? `${cells.length}개 항목을 읽었어요` + (res.auto ? ' (노란 틀이 찾은 창)' : '') : '항목을 못 찾았어요. 상세 스탯 창만 드래그로 골라서 다시 해 보세요.';
+    $('#ocrCount').textContent = cells.length ? `${cells.length}개 항목을 읽었어요` : '항목을 못 찾았어요. 상세 스탯 창 부분만 드래그로 골라서 다시 읽어 보세요.';
     for (const c of cells) {
       const f = found[c], kind = PCT.has(c) ? 'pct' : 'num';
       const cur = g(c);
@@ -441,7 +403,6 @@
     const gearN = body.querySelectorAll('tr.gear-row:not(.none):not(.cls-row)').length;
     if (gear && gear.cls && gear.cls.match) $('#ocrCount').textContent += ', 전직';
     if (gearN) $('#ocrCount').textContent += `, 악세서리 ${gearN}개`;
-    $('#ocrRaw').textContent = res.rows.map(r => r.text).join('\n');
     $('#ocrResult').hidden = false;
   }
 
@@ -530,8 +491,8 @@
       const v = parseNum(inp.value, PCT.has(c) ? 'pct' : 'num');
       if (v !== null) { inputs[c] = v; n++; }
     });
-    applyInputs(); refresh(); scheduleAutosave(); dirty = true;
-    $('#ocrCount').textContent = `${n}개 값을 적용했어요`;
+    applyInputs(); refresh(); scheduleAutosave();
+    $('#ocrCount').textContent = `${n}개 값을 적용했어요. 위에서 기준 대비 변화를 확인하세요`;
     document.querySelectorAll('#ocrBody tr').forEach(tr => tr.classList.add('applied'));
   }
 
@@ -539,12 +500,11 @@
   function selfTest() {
     const t = new E.Workbook(M); const v = t.get(SH, 'C36'); const exp = M.check['<Main>!C36'];
     const ok = typeof v === 'number' && Math.abs(v - exp) < 1e-6 * Math.abs(exp);
-    $('#selfTest').textContent = ok ? `시트 ${M.meta.version}의 수식 ${M.meta.formulas.toLocaleString()}개를 쓰고, 시트 예시 값과 같은 결과가 나오는 걸 확인했어요.` : '시트 예시 값과 계산 결과가 달라요. 제보해 주세요.';
+    $('#selfTest').textContent = ok ? `시트 ${M.meta.version} 기준. 시트 예시 값과 같은 결과가 나와요.` : '시트 예시 값과 계산 결과가 달라요. 제보해 주세요.';
   }
-  $('#ver').textContent = M.meta.version;
+  persist();
   applyInputs();
   renderForms(); renderProfiles(); wireProfiles(); wireSelection(); wireCapture();
-  ['#selP12', '#selQ15'].forEach(s => $(s).addEventListener('change', (e) => setVal(e.target.getAttribute('data-cell'), e.target.value)));
-  refresh(); dirty = false; updateSaveBtn();
+  refresh();
   selfTest();
 })();
