@@ -30,11 +30,13 @@
   ];
 
   // ---------- 문자열 정규화 / 유사도 ----------
+  const NUMKO = { '10': '십', '20': '이십', '30': '삼십', '40': '사십', '50': '오십', '60': '육십', '70': '칠십', '80': '팔십', '90': '구십', '100': '백' };
+  const hpTok = (t) => String(t).replace(/(체력|HP|hp)\s*(\d)\s*(\d)?\s*(\d)?\s*[%％]\s*(초\s*과|이\s*하)/g, (m, a, d1, d2, d3, w) => '체력' + (NUMKO[d1 + (d2 || '') + (d3 || '')] || (d1 + (d2 || '') + (d3 || ''))) + w.replace(/\s/g, ''));
+  const HPRE = /체력(십|이십|삼십|사십|오십|육십|칠십|팔십|구십|백|\d+)(초과|이하)/;
   function norm(s) {
     return String(s)
       .replace(/대미지/g, '데미지')
-      .replace(/(체력|HP|hp)\s*5\s*0\s*[%％]\s*(초과|이하)/g, (m, a, b) => '체력오십' + b)
-      .replace(/(HP|hp|체력)\s*1\s*0\s*0\s*[%％]\s*이하/g, '체력백이하')
+      .replace(/(체력|HP|hp)\s*(\d)\s*(\d)?\s*(\d)?\s*[%％]\s*(초\s*과|이\s*하)/g, (m, a, d1, d2, d3, w) => '체력' + (NUMKO[d1 + (d2 || '') + (d3 || '')] || (d1 + (d2 || '') + (d3 || ''))) + w.replace(/\s/g, ''))
       .replace(/[\s:：·•.,'"`|_\-–—()\[\]{}<>]/g, '')
       .replace(/[^가-힣A-Za-z0-9/]/g, '')
       .toUpperCase();
@@ -65,8 +67,11 @@
   const NORM_NAMES = FIELDS.map(f => ({ f, names: f.names.map(norm) }));
   function matchField(label) {
     const s = norm(label);
+    const ls = HPRE.exec(s);
     let best = null;
     for (const { f, names } of NORM_NAMES) for (const nm of names) {
+      const ns = HPRE.exec(nm);
+      if ((ls || ns) && (!ls || !ns || ls[0] !== ns[0])) continue;
       const sc = suffixScore(s, nm);
       const need = nm.length <= 3 ? 0.99 : nm.length <= 5 ? 0.75 : 0.68;
       if (sc >= need && (!best || sc > best.score)) best = { field: f, score: sc };
@@ -94,9 +99,7 @@
   // 한 줄 텍스트 → [{label, raw, pct, rangeMax}]
   function splitPairs(text) {
     // 라벨 내부 숫자(50%, 100%)는 미리 치환해 숫자로 오인하지 않게 함
-    const t = String(text)
-      .replace(/(체력|HP|hp)\s*5\s*0\s*[%％]\s*(초과|이하)/g, (m, a, b) => '체력오십' + b)
-      .replace(/(HP|hp|체력)\s*1\s*0\s*0\s*[%％]\s*이하/g, '체력백이하');
+    const t = hpTok(text);
     const out = []; let last = 0; let m;
     NUM_RE.lastIndex = 0;
     while ((m = NUM_RE.exec(t))) {

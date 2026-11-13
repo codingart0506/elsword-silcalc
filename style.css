@@ -28,6 +28,24 @@ kbd { font-family: inherit; font-size: 13px; font-weight: 600; padding: 1px 7px;
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 .wrap { max-width: 600px; margin: 0 auto; padding: 20px 16px 48px; display: flex; flex-direction: column; gap: 12px; }
+.side, .main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* PC: 왼쪽에 전투력·스크린샷, 오른쪽에 세팅 */
+@media (min-width: 1024px) {
+  .wrap { max-width: 1240px; padding: 28px 32px 56px; display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: 20px 24px; align-items: start; }
+  .head, .shared, .foot { grid-column: 1 / -1; }
+  .side { align-self: stretch; }
+  .hero { top: 20px; }
+  .head h1 { font-size: 26px; }
+  .main .card { padding: 28px 32px; }
+  .main .rows { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; }
+  .main .grp .rows .srow { border-bottom: 1px solid var(--line); }
+  .main .grp { padding-top: 20px; }
+  .seg { max-width: 520px; }
+  .in-head { margin-bottom: 18px; }
+  .hero-value { font-size: 44px; }
+  .drop { padding: 26px 18px 18px; }
+}
 
 /* 머리 */
 .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 4px 8px; flex-wrap: wrap; }

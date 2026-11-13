@@ -154,14 +154,66 @@
     if (!ranked.length) return null;
     return { name: ranked[0][0], d: ranked[0][1], second: ranked[1] ? ranked[1][1] : Infinity };
   }
-  // 장비창 배치상 초상화는 초록 칸 격자 기준으로 정해진 자리에 있음(캐릭터·살펴보기 창 공통)
-  function portraitRect(grid) {
-    const k = grid.pitch / 39.0, c0 = grid.cells[0];
-    return { x: Math.round(c0.x - 516 * k), y: Math.round(c0.y - 245 * k), s: Math.round(90 * k) };
+  // 캐릭터·살펴보기 창 왼쪽 위 전직 일러스트: 얇은 금색 테두리 사각형을 찾음
+  const isGold = (r, g, b) => r > 150 && g > 110 && b < 140 && r - b > 70 && g - b > 40;
+  function findPortrait(canvas) {
+    const W = canvas.width, H = canvas.height;
+    const d = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+    const m = new Uint8Array(W * H), dk = new Uint8Array(W * H);
+    for (let i = 0, j = 0; i < W * H; i++, j += 4) {
+      m[i] = isGold(d[j], d[j + 1], d[j + 2]) ? 1 : 0;
+      dk[i] = Math.max(d[j], d[j + 1], d[j + 2]) < 60 ? 1 : 0;
+    }
+    const minL = Math.max(24, Math.round(H * 0.035)), GAP = 2;
+    const cand = [];
+    for (let x = 0; x < W; x++) {
+      let best = 0, bs = 0, st = -1, last = -10;
+      for (let y = 0; y < H; y++) {
+        if (!m[y * W + x]) continue;
+        if (st < 0 || y - last > GAP + 1) st = y;
+        last = y;
+        if (last - st + 1 > best) { best = last - st + 1; bs = st; }
+      }
+      if (best >= minL) cand.push({ x, s: bs, e: bs + best, L: best });
+    }
+    const tol = Math.max(4, Math.round(H * 0.005));
+    const colFrac = (arr, x, y0, y1) => { if (x < 0 || x >= W || y1 <= y0) return 0; let c = 0; for (let y = y0; y < y1; y++) c += arr[y * W + x]; return c / (y1 - y0); };
+    const rowFrac = (arr, y, x0, x1) => { if (y < 0 || y >= H || x1 <= x0) return 0; let c = 0; for (let x = x0; x < x1; x++) c += arr[y * W + x]; return c / (x1 - x0); };
+    let found = null;
+    for (let i = 0; i < cand.length; i++) for (let k = i + 1; k < cand.length; k++) {
+      const a = cand[i], b = cand[k], dd = b.x - a.x;
+      if (dd < minL) continue;
+      if (Math.abs(a.e - b.e) > tol) continue;
+      const Lm = Math.max(a.L, b.L);
+      if (Lm < 0.6 * dd || Lm > 1.1 * dd) continue;
+      const e = Math.max(a.e, b.e), top = e - dd;
+      if (top < 0) continue;
+      // 아래 테두리도 금색
+      let hit = 0;
+      for (let x = a.x; x <= b.x; x++) { for (let y = Math.max(0, e - tol - 1); y <= Math.min(H - 1, e); y++) if (m[y * W + x]) { hit++; break; } }
+      if (hit < 0.7 * (dd + 1)) continue;
+      const q = dd >> 2;
+      // 안쪽은 금색이 거의 없어야 함
+      let g = 0, n = 0;
+      for (let y = top + q; y < e - q; y += 2) for (let x = a.x + q; x < b.x - q; x += 2) { n++; g += m[y * W + x]; }
+      if (n && g / n > 0.3) continue;
+      // 테두리 바깥 검은 선 (왼쪽·오른쪽·아래)
+      const kk = Math.max(2, Math.round(dd * 0.04));
+      let dl = 0, dr = 0, db = 0;
+      for (let t = 1; t <= kk; t++) {
+        dl = Math.max(dl, colFrac(dk, a.x - t, top + q, e - q));
+        dr = Math.max(dr, colFrac(dk, b.x + t, top + q, e - q));
+        db = Math.max(db, rowFrac(dk, e + t, a.x + q, b.x - q));
+      }
+      if (Math.min(dl, dr, db) < 0.6) continue;
+      const sc = dd * 1000 + a.L + b.L;
+      if (!found || sc > found.sc) found = { sc, x: a.x, y: top, s: dd };
+    }
+    return found ? { x: found.x, y: found.y, s: found.s } : null;
   }
-  function recognizeClass(canvas, grid) {
-    const r = portraitRect(grid);
-    if (r.x < 0 || r.y < 0 || r.x + r.s > canvas.width || r.y + r.s > canvas.height) return null;
+  function recognizeClass(canvas) {
+    const r = findPortrait(canvas);
+    if (!r) return null;
     const lib = library('cls');
     const best = lib.length ? bestMatch(canvas, r, lib, NOMASK, 4) : null;
     let match = null;
@@ -172,8 +224,10 @@
   const CLS_MATCH = 16;
 
   function recognize(canvas) {
+    let cls = null;
+    try { cls = recognizeClass(canvas); } catch (e) { /* 초상화 없음 */ }
     const grid = detectGrid(canvas);
-    if (!grid) return null;
+    if (!grid) return cls ? { grid: null, cells: [], cls } : null;
     const lib = library('acc');
     const cells = grid.cells.map(c => {
       const best = lib.length ? bestMatch(canvas, c, lib) : null;
@@ -183,12 +237,10 @@
       else if (best && best.d <= GUESS && best.second - best.d >= 6) match = Object.assign({ guess: true }, best);
       return Object.assign({}, c, { f: featureOf(canvas, c), thumb: thumbOf(canvas, c, 40), match, nearest: best });
     });
-    let cls = null;
-    try { cls = recognizeClass(canvas, grid); } catch (e) { /* 초상화 없음 */ }
     return { grid, cells, cls };
   }
 
-  const api = { detectGrid, featureOf, dist, bestMatch, recognize, recognizeClass, portraitRect, teach, teachFrom, library, bytesToB64, b64ToBytes, N, MATCH };
+  const api = { detectGrid, featureOf, dist, bestMatch, recognize, recognizeClass, findPortrait, teach, teachFrom, library, bytesToB64, b64ToBytes, N, MATCH };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SilGear = api;
 })(typeof window !== 'undefined' ? window : globalThis);

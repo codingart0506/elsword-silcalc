@@ -67,7 +67,8 @@
   const DV = {};
   for (const d of M.validations) for (const a of d.cells) DV[a] = d;
   const g = (a) => { const v = wb.get(SH, a); return E.isErr(v) ? v.code : v; };
-  const label = (a) => { const v = g(a); return v == null ? '' : String(v).trim(); };
+  const LABEL_FALLBACK = { B11: '공격력', B12: '공격력 극대화 범위 내 최댓값', B13: '무기 공격력 (스탯창 X)' };
+  const label = (a) => { const v = g(a); if (v == null || v === '' || String(v).startsWith('#')) return LABEL_FALLBACK[a] || ''; return String(v).trim(); };
   const defaultOf = (a) => { const d = M.sheets[SH][a]; return d && 'v' in d ? d.v : null; };
   function optionsOf(a) {
     const d = DV[a]; if (!d || d.type !== 'list') return null;
@@ -499,6 +500,7 @@
       if (!c.match) body.append(el('tr', { class: 'gear-unknown' }, el('td', { colspan: '4' },
         el('p', { class: 'hint', text: '처음 보는 초상화예요. 전직을 한 번 골라주면 이 브라우저가 다음부터 알아봐요.' }))));
     }
+    if (!gear.grid) return;
     body.append(el('tr', { class: 'gear-head' }, el('td', { colspan: '4' }, '일반 악세서리 (장비창 아이콘)')));
     for (const k of GEAR_CELLS) {
       const c = pick[k], cur = g(k);
