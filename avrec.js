@@ -168,7 +168,8 @@
       fixedChecks, currentFixedDisplays, coolOn, coolMode, coolTarget, maxCoolByPart,
       fiveSetStats: db.fiveSetStats, fiveSetList, fiveSetFixed, current5set,
       eliosFixedParts, eliosK: eliosFixedParts.length, eliosEffect3: effOf(ELIOS_SET_NAME, 3), eliosEffect4: effOf(ELIOS_SET_NAME, 4),
-      eliosPartStats, eliosDisplayByPart, eligibleSets, ownedFilterOn: !!owned,
+      eliosPartStats, eliosDisplayByPart, eligibleSets, ownedFilterOn: !!owned, mustSets: (opt.mustSets || []).filter(Boolean),
+      keepRatio: opt.keepRatio != null ? Number(opt.keepRatio) : 1, _bestScore: -Infinity, // 기본은 모든 조합(상한으로 건너뛰기) — 시트처럼 상위 30%만 보려면 keepRatio 0.3
       _setPartInfo: new Map(), _setEffect: new Map()
     };
     const fiveSets = fiveSetFixed ? (current5set ? [current5set] : fiveSetList) : fiveSetList;
@@ -213,6 +214,7 @@
     const recs = [], sets = ctx.eligibleSets;
     for (let i = 0; i < sets.length; i++) for (let j = i + 1; j < sets.length; j++) for (let q = j + 1; q < sets.length; q++) {
       const set1 = sets[i], set2 = sets[j], set3 = sets[q];
+      if (ctx.mustSets.length && !ctx.mustSets.every(m => m === set1 || m === set2 || m === set3)) continue;
       const pA = ctx.setToParts.get(set1), pB = ctx.setToParts.get(set2), pC = ctx.setToParts.get(set3);
       if (!comboFeasible(pA, pB, pC)) continue;
       const iA = getSetPartInfo(ctx, set1), iB = getSetPartInfo(ctx, set2), iC = getSetPartInfo(ctx, set3);
@@ -266,9 +268,16 @@
       });
     }
     scored.sort((x, y) => y.score - x.score);
-    const top = scored.slice(0, scored.length < 10 ? scored.length : Math.ceil(scored.length * TOP_KEEP_RATIO));
+    // 모든 조합 비교(keepRatio 1): 버리지 않고 전부 보되, 남은 3부위에 '부위별 각 스탯 최댓값'을 다 넣어도 지금 1등을 못 넘는 조합은 건너뜀(결과는 전부 계산한 것과 같음)
+    const exact = ctx.keepRatio >= 1;
+    const top = exact ? scored : scored.slice(0, scored.length < 10 ? scored.length : Math.ceil(scored.length * ctx.keepRatio));
     const finals = [], ZERO = emptySums();
+    const maxVec = exact ? partMaxVec(ctx) : null;
     for (const it of top) {
+      if (exact && ctx._bestScore > -Infinity) {
+        let ub = it.addArr; for (const p of it.rec.remain) ub = addArrPlus(ub, maxVec.get(p));
+        if (computeScore(ctx.baseStat, ub, ctx.envDebuff, ctx.baseCritReal) <= ctx._bestScore) continue;
+      }
       const rec = it.rec, spd = {};
       for (let q = 0; q < 9; q++) spd[rec.parts[q]] = rec.displays[q];
       let ok = true;
@@ -286,9 +295,23 @@
             if (ctx.coolOn && (atLeast ? tc < T : tc !== T)) continue;
             const sc = computeScore(ctx.baseStat, addArrPlus(ab, z.s), ctx.envDebuff, ctx.baseCritReal);
             if (sc > bs) { bs = sc; bA = x.d; bB = y.d; bC = z.d; bCool = tc; } } } }
-      if (bs > -Infinity) finals.push({ rec, best: [bA, bB, bC], finalScore: bs, score9: it.score, coolReal: bCool });
+      if (bs > -Infinity) { finals.push({ rec, best: [bA, bB, bC], finalScore: bs, score9: it.score, coolReal: bCool }); if (bs > ctx._bestScore) ctx._bestScore = bs; }
     }
     return finals;
+  }
+  // 부위마다 후보 아이템들의 스탯별 최댓값(고정한 부위는 그 아이템 그대로) — 점수 상한 계산용
+  function partMaxVec(ctx) {
+    if (ctx._maxVec) return ctx._maxVec;
+    const m = new Map();
+    for (const part of ALL_PARTS) {
+      const v = emptySums();
+      let list = [...(ctx.partCandidates.get(part) || [])];
+      if (ctx.fixedChecks[part]) list = list.filter(d => d === ctx.currentFixedDisplays[part]);
+      let first = true;
+      for (const d of list) { const st = ctx.statsByDisplay.get(d); if (!st) continue; for (const k of TARGET_STATS) { const x = st[k] || 0; v[k] = first ? x : Math.max(v[k], x); } first = false; }
+      m.set(part, v);
+    }
+    return (ctx._maxVec = m);
   }
   function runEliosBuild(ctx, fiveSets, P) {
     const fixedEP = ctx.eliosFixedParts.slice(), autoCount = P - fixedEP.length; if (autoCount < 0) return null;
@@ -302,6 +325,7 @@
       const os = ctx.eligibleSets;
       for (let i = 0; i < os.length; i++) for (let j = i + 1; j < os.length; j++) {
         const s2 = os[i], s3 = os[j];
+        if (ctx.mustSets.length && !ctx.mustSets.every(m => m === ELIOS_SET_NAME || m === s2 || m === s3)) continue;
         const ps2 = (ctx.setToParts.get(s2) || []).filter(p => !epSet.has(p)), ps3 = (ctx.setToParts.get(s3) || []).filter(p => !epSet.has(p));
         if (ps2.length < 3 || ps3.length < 3) continue;
         const i2 = getSetPartInfo(ctx, s2), i3 = getSetPartInfo(ctx, s3), e2 = getSetEffect(ctx, s2), e3 = getSetEffect(ctx, s3);
