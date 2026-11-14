@@ -328,7 +328,7 @@
     const key = opts.join('\u0001');
     if (node._key !== key) {
       node.innerHTML = '';
-      for (const o of opts) node.append(el('option', { value: String(o), text: typeof o === 'number' && PCT.has(a) ? fmtPct(o, 0) : optText(a, o) }));
+      for (const o of opts) node.append(el('option', { value: String(o), text: typeof o === 'number' && PCT.has(a) ? +(o * 100).toFixed(2) + '%' : optText(a, o) }));
       node._key = key;
     }
     if (!opts.some(o => String(o) === String(cur))) {
