@@ -706,6 +706,13 @@
     return el('div', { class: 'ex-row atma-row' }, el('span', {}, '아트마 액세서리'),
       el('div', { class: 'atma-sel' }, sel('J32'), sel('L32')));
   }
+  // 스위칭 칭호(버프로 켜는 칭호)는 사진에 안 나와서 무기 공격력과 같이 물어봄
+  function titleRow() {
+    const s = el('select', { 'data-cell': 'G25' });
+    for (const o of optionsOf('G25') || []) s.append(el('option', { value: String(o), text: String(o) }));
+    s.value = String(inputs.G25 ?? defaultOf('G25') ?? '');
+    return el('label', { class: 'ex-row' }, el('span', {}, '스위칭 칭호', el('small', { text: '압도·콘체르토처럼 버프로 켜는 칭호. 사진에는 상시 칭호만 나와요' })), s);
+  }
   const pickSel = (c, opts, cur) => {
     const s = el('select', { 'data-cell': c });
     for (const o of opts) s.append(el('option', { value: String(o.v ?? o), text: String(o.t ?? o) }));
@@ -770,6 +777,7 @@
       el('h3', { id: 'exTitle', text: iC13 ? '남은 수치를 직접 기입해 주세요' : '극대화 범위 최댓값을 기입해 주세요' }),
       el('p', { id: 'exNote', text: iC13 ? `사진에 안 나오는 값이에요.${during ? ' 그동안 사진을 읽고 있어요.' : ''}` : '이번 사진에서 못 찾은 값이에요.' }),
       iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '무기에 마우스를 올리면 나오는 무기 자체 수치' })), iC13) : null,
+      iC13 ? titleRow() : null,
       r12 ? r12[0] : null,
       iC13 ? setRow() : null,
       iC13 ? atmaRow() : null,

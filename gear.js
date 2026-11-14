@@ -41,9 +41,18 @@
     for (let i = 0, j = 0; i < W * H; i++, j += 4) mask[i] = isGreen(d[j], d[j + 1], d[j + 2]) ? 1 : 0;
     const sq = components(mask, W, H).filter(c => c.w >= 14 && c.h >= 14 && c.w <= 120 && c.h <= 120 && Math.abs(c.w - c.h) < 0.3 * Math.max(c.w, c.h) && c.area > 0.25 * c.w * c.h);
     if (sq.length < 3) return null;
-    const sizes = sq.map(c => Math.max(c.w, c.h)).sort((a, b) => a - b);
-    const s = sizes[(sizes.length * 0.6) | 0];
-    const full = sq.filter(c => Math.max(c.w, c.h) > s * 0.8);
+    // 칸 크기 후보: 비슷한 크기끼리 묶어 3개 이상인 묶음마다 시도(고해상도 화면은 작은 초록 조각이 많아 한 값으로 고르면 틀림)
+    const sizeGroups = cluster(sq.map(c => Math.max(c.w, c.h)), 3).filter(g => g.n >= 3).sort((a, b) => b.v - a.v);
+    let out = null;
+    for (const sg of sizeGroups) {
+      const r = gridOfSize(sq, sg.v, mask, W, H);
+      // 실제로 찾은 초록 칸이 가장 많은 크기(빈 행을 채워 넣은 칸 수가 아니라)
+      if (r && (!out || r.hits > out.hits)) out = r;
+    }
+    return out;
+  }
+  function gridOfSize(sq, s, mask, W, H) {
+    const full = sq.filter(c => Math.max(c.w, c.h) > s * 0.8 && Math.max(c.w, c.h) < s * 1.25);
     const tol = Math.max(2, s * 0.15);
     const xs = cluster(full.map(c => c.x), tol);
     // 간격이 칸 크기의 1.0~1.25배인 이웃한 두 열 중 칸이 가장 많은 쌍
@@ -81,7 +90,8 @@
     }
     const cells = [];
     for (let r = 0; r < rows; r++) for (const [ci, x] of [[0, best.a], [1, best.b]]) cells.push({ x: Math.round(x), y: Math.round(y0 + r * P), s: Math.round(s), slot: (ci ? '우' : '좌') + (r + 1) });
-    return { cells, size: s, pitch: P };
+    const hits = inCols.filter(c => c.y >= y0 - tol && c.y <= y0 + (rows - 1) * P + tol).length;
+    return { cells, size: s, pitch: P, hits };
   }
 
   function featureOf(canvas, c) {
