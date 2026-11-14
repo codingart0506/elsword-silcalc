@@ -209,14 +209,15 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 .grp .rows .srow:last-child { border-bottom: 0; }
 .srow .lab { flex: 1; font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 6px; }
 .srow .ctl { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
-/* 보기 글자가 잘리지 않게: 단일 칸은 넉넉히, 칸이 모자라면 줄을 바꿔 컨트롤을 아래로 */
-.srow { flex-wrap: wrap; }
-.srow .lab { min-width: 110px; }
-.srow .ctl { margin-left: auto; max-width: 100%; }
-.srow .ctl select { max-width: min(300px, 100%); }
+/* 보기 글자가 잘리지 않게: 상자는 글자만큼 넓히고(최대 300px), 모자라면 이름 쪽이 두 줄로 */
+.srow .lab { flex: 1 1 auto; min-width: 64px; }
+.srow .ctl { flex: 0 1 auto; min-width: 0; margin-left: auto; }
+.srow .ctl select { max-width: min(300px, 100%); min-width: 0; }
 /* 종류 + 수치 두 칸 줄(원석·각인석 등): 종류 칸이 남는 폭을 씀 */
 .srow.multi .ctl { flex: 1 1 auto; justify-content: flex-start; margin-left: 0; }
-.srow.multi .ctl select:first-child { flex: 1 1 auto; min-width: 0; max-width: 240px; }
+.srow.multi:has(> .lab) .ctl { flex: 0 1 auto; justify-content: flex-end; margin-left: auto; }
+.srow.multi .ctl select:first-child { flex: 0 1 auto; min-width: 0; max-width: 240px; }
+.srow.multi .ctl select + select { max-width: 124px; }
 .srow.changed .lab::after { content: ''; width: 6px; height: 6px; background: var(--blue); border-radius: 50%; flex: none; }
 .srow.muted { display: none; }
 .srow.spacer { display: none; }

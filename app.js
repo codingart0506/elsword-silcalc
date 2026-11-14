@@ -4,18 +4,18 @@
   const E = window.SilEngine, O = window.SilOCR, M = window.SIL_MODEL;
   const SH = '<Main>';
   // 원본 시트의 'Items Simulator'(상세스펙 시뮬레이터)에만 있던 피시방 버프·지애 버프를 메인 입력처럼 쓰게 함
-  // <Main>!ZB1(피시방), ZB2(특수)를 새로 두고 <교체 정보>의 '메인기준' 체크칸이 이 값을 보게 연결
-  const EXTRA_BUFF = {
-    ZB1: { t: '피시방 버프', rows: [['HE14', '피방벞'], ['HE15', '에너지드링크'], ['HE16', '피방 + 에너지드링크'], ['HE17', '미적용']] },
-    // 랜미벞(HM15~HM20)은 안 씀: 시트 값(FALSE) 그대로
-    ZB2: { t: '지애 버프', rows: [['HM14', '지애벞'], ['HM21', '미적용']] },
-  };
+  // 피시방 버프·에너지드링크·지애 버프는 켜고 끄는 체크칸: <Main>!ZB1(피방벞), ZB3(에너지드링크), ZB2(지애벞)
+  // <교체 정보>의 '메인기준' 체크칸(HE14~HE17, HM14·HM21)이 이 값을 보게 연결. 랜미벞(HM15~HM20)은 안 씀
+  const EXTRA_BUFF = { ZB1: '피시방 버프', ZB3: '에너지드링크', ZB2: '지애 버프' };
   if (!M.sheets[SH].ZB1) {
-    for (const [cell, d] of Object.entries(EXTRA_BUFF)) {
-      M.sheets[SH][cell] = { v: '미적용' };
-      for (const [a, o] of d.rows) M.sheets['<교체 정보>'][a] = { f: `'<Main>'!$${cell.slice(0, 2)}$${cell.slice(2)}="${o}"` };
-      M.validations.push({ cells: [cell], type: 'list', options: ['미적용'].concat(d.rows.map(r => r[1]).filter(o => o !== '미적용')) });
-    }
+    const S = M.sheets['<교체 정보>'], Z = (c) => `'<Main>'!$ZB$${c.slice(2)}`;
+    for (const c of Object.keys(EXTRA_BUFF)) M.sheets[SH][c] = { v: false };
+    S.HE14 = { f: `AND(${Z('ZB1')}=TRUE,${Z('ZB3')}<>TRUE)` };
+    S.HE15 = { f: `AND(${Z('ZB1')}<>TRUE,${Z('ZB3')}=TRUE)` };
+    S.HE16 = { f: `AND(${Z('ZB1')}=TRUE,${Z('ZB3')}=TRUE)` };
+    S.HE17 = { f: `AND(${Z('ZB1')}<>TRUE,${Z('ZB3')}<>TRUE)` };
+    S.HM14 = { f: `${Z('ZB2')}=TRUE` };
+    S.HM21 = { f: `${Z('ZB2')}<>TRUE` };
   }
   const wb = new E.Workbook(M);
   const $ = (s, r) => (r || document).querySelector(s);
@@ -40,10 +40,11 @@
     H12: '1. 테네브로스 장갑 두 번째 그림자 옵션 / 2. 홍예항마 2세트 10% / 3. 엑사스케일 복원 세트효과 (유강강초 회로 × 0.8%)',
     H13: '1. 테네브로스 상의 두 번째 그림자 옵션 / 2. 엑사스케일 복원 세트효과 10%',
     H15: '캐시샵 20000 캐시 업그레이드 이용권',
-    ZB1: '피방벞은 최종 데미지 5%, 에너지드링크는 크리·극대 5%와 최종 데미지 5%. 켜 두면 랭킹에 올릴 수 없어요.',
-    ZB2: '지애벞은 최종 데미지 5%. 켜 두면 랭킹에 올릴 수 없어요.',
+    ZB1: '최종 데미지 5%. 켜면 랭킹에 올릴 수 없어요.',
+    ZB3: '피시방 에너지드링크(가동 중일 때): 크리·극대 5%, 최종 데미지 5%. 켜면 랭킹에 올릴 수 없어요.',
+    ZB2: '최종 데미지 5%. 켜면 랭킹에 올릴 수 없어요.',
     L15: '스피릿 챌린저는 "미사용" 선택',
-    J21: '녹힐 직업(디우스 아에르, 일천, 오버마인드, 데메르시오, 블루헨, 라디언트 소울, 닉스 피에타, 애버리스)은 직업을 고르면 적용3-적청엑사로 바뀌어요.',
+    J21: '적용1-녹테네: 팟모스뎀·팟크뎀 10% / 적용2-녹엑사: 팟모스뎀·팟물마 10% / 적용3-적청엑사: 팟크뎀 10%. 녹힐 직업(디우스 아에르, 일천, 오버마인드, 데메르시오, 블루헨, 라디언트 소울, 닉스 피에타, 애버리스)은 직업을 고르면 적용3-적청엑사로 바뀌어요.',
     J26: '미착용이면 종류는 아무거나, 강화 수치를 0으로.',
   };
   // 상세 스탯 탭은 게임의 상세 스탯 창과 같은 순서·이름
@@ -73,7 +74,7 @@
     { id: 'gear', name: '스킬·장비', groups: [
       { bar: '캐릭터 버프 스킬', fields: [{ c: 'L11', lab: 'I11' }, { c: 'L12', lab: 'I12' }, { c: 'L13', lab: 'I13' }, { c: 'L14', lab: 'I14' }, { c: 'L15', lab: 'I15' }] },
       { bar: '도핑', fields: [{ c: 'J17', lab: 'I17' }, { c: 'J18', lab: 'I18' }, { c: 'J19', lab: 'I19' }, { c: 'J20', lab: 'I20' }, { c: 'J21', lab: 'I21' }, { c: 'J22', lab: 'I22' }, { c: 'J23', lab: 'I23' },
-        { c: 'ZB1', t: '피시방 버프' }, { c: 'ZB2', t: '지애 버프' }] },
+        { c: 'ZB1', t: '피시방 버프' }, { c: 'ZB3', t: '에너지드링크' }, { c: 'ZB2', t: '지애 버프' }] },
       { bar: '장비 종류와 강화', fields: [[{ c: 'J26', lab: 'I26' }, { c: 'L26' }], [{ c: 'J27', lab: 'I27' }, { c: 'L27' }], [{ c: 'J28', lab: 'I28' }, { c: 'L28' }], [{ c: 'J29', lab: 'I29' }, { c: 'L29' }],
         [{ c: 'J31', lab: 'I31' }, { c: 'L31' }], [{ c: 'J32', lab: 'I32' }, { c: 'L32' }], { c: 'J30', t: '방어구 세트 효과' }] },
       { bar: '전투력 출력 기준 필드', fields: [{ c: 'I34', t: '필드' }], extra: 'field' },
@@ -102,7 +103,7 @@
   // ---------- 처음 상태: 시트 예시 값 대신 빈 세팅 ----------
   const STAT_CELLS = 'C11 C12 C13 C14 C15 C17 C18 C19 C20 C21 C22 C24 C25 C26 C27 C29 C30 C31 C32 C33 C34 C35'.split(' ');
   const BLANK = Object.assign({ C6: '' }, Object.fromEntries(STAT_CELLS.map(a => [a, null])), {
-    H11: 0.1, H12: 0, H13: 0, ZB1: '미적용', ZB2: '미적용', H15: '사용', H16: '이상', F17: '격려 재사용 시간 감소', F18: '격려 재사용 시간 감소', H17: 0.15, H18: 0.15,
+    H11: 0.1, H12: 0, H13: 0, ZB1: false, ZB2: false, ZB3: false, H15: '사용', H16: '이상', F17: '격려 재사용 시간 감소', F18: '격려 재사용 시간 감소', H17: 0.15, H18: 0.15,
     D20: '물리 공격력 증가 (%)', D21: '크리티컬 데미지 증가 (%)', D22: '스킬 데미지 증가 (%)', H20: 0.05, H21: 0.05, H22: 0.05,
     G24: '미착용', G25: '미착용', G27: '해당사항 없음', G28: '해당사항 없음', G29: '해당사항 없음', G30: '해당사항 없음',
     H31: 0, H32: 0, H33: 0, D35: '황색', G35: '5세트',
@@ -163,6 +164,7 @@
   }
   // 에테르 세이지는 방어구 세트 기본값이 순환, 녹힐 직업은 복원
   const SAGE = '에테르 세이지', SET_CYCLE = '엑사&네블론 - 순환', SET_HEAL = '엑사&네블론 - 복원';
+  const AZOTH = '로드 아조트';
   const setDefault = (cls) => HEALERS.has(cls) ? SET_HEAL : cls === SAGE ? SET_CYCLE : BLANK.J30;
   if (!store.mig.sage2) {
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === SAGE && v.J30 === BLANK.J30) v.J30 = SET_CYCLE;
@@ -174,10 +176,15 @@
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && !(Number(v.H11) > 0) && partyCrit(v.J30 ?? BLANK.J30) > 0) v.H11 = 0.1;
     store.mig.pcrit10 = 1;
   }
-  // 랜미벞 보기를 뺀 뒤: 잠깐 골라 둔 '지애 + 랜미'는 지애벞으로, '랜미벞'만은 미적용으로
+  // 예전 선택 상자 값(글자) → 체크칸(true/false): '피방 + 에너지드링크'는 두 칸 다, '지애 + 랜미'는 지애만
   for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) {
-    if (!v || typeof v.ZB2 !== 'string' || !/랜미/.test(v.ZB2)) continue;
-    v.ZB2 = /지애/.test(v.ZB2) ? '지애벞' : '미적용';
+    if (!v) continue;
+    if (typeof v.ZB1 === 'string') { const t = v.ZB1; v.ZB1 = /피방/.test(t); v.ZB3 = /에너지/.test(t); }
+    if (typeof v.ZB2 === 'string') v.ZB2 = /지애/.test(v.ZB2);
+  }
+  if (!store.mig.azoth1) {
+    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === AZOTH && v.L11 !== '사용') v.L11 = '사용';
+    store.mig.azoth1 = 1;
   }
   if (!store.mig.heal3) {
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && HEALERS.has(v.C6) && v.J30 === BLANK.J30) { v.J30 = SET_HEAL; if (Number(v.H11) === 0.1) v.H11 = 0; }
@@ -306,6 +313,10 @@
   function optText(a, o) {
     const s = String(o);
     if (/^D2[0-2]$/.test(a)) return s.replace(/\s*\(%\)$/, '').replace('보스에게 입히는 피해 증가', '보스 피해 증가');
+    if (a === 'J21') return s.replace(/\s*\(.*\)$/, '');          // 효과는 ? 도움말에
+    if (a === 'J32') return s.replace(/의\s*아트마$/, '');          // '유수의 아트마' → '유수'
+    if (a === 'J30') return s.replace(/^엑사&네블론\s*-\s*/, '');    // '엑사&네블론 - 연산' → '연산'
+    if (a === 'G35' && s === '1세트 또는 미착용') return '1세트·미착용';
     return s;
   }
   function fillSelect(node, a) {
@@ -361,6 +372,10 @@
     // 방어구 세트: 지금 값이 이전 직업의 기본값일 때만 새 직업 기본값으로
     const wantSet = setDefault(now);
     if (inputs.J30 !== wantSet && (inputs.J30 === setDefault(prev) || inputs.J30 == null)) { const old = inputs.J30; inputs.J30 = wantSet; wb.setInput(SH, 'J30', wantSet); syncPartyCrit(old); ch = true; }
+    // 로드 아조트는 미스틱 플라스크(첫 번째 버프 스킬)를 기본으로 사용, 다른 직업으로 바꾸면 다시 미사용
+    const put = (c, v) => { if (inputs[c] !== v) { inputs[c] = v; wb.setInput(SH, c, v); ch = true; } };
+    if (now === AZOTH) put('L11', '사용');
+    else if (prev === AZOTH && inputs.L11 === '사용') put('L11', '미사용');
     return ch;
   }
   // 강배·역강배 바지: 강배(체력 50% 초과인 적 공격시 데미지 증가)와 역강배(체력 50% 이하인 적 공격시 데미지 증가)를 높은 쪽으로 같게
@@ -914,7 +929,7 @@
   }
 
   // ---------- 랭킹 화면(rank.js)과 연결 ----------
-  const SKIP_EDIT = new Set(['ZB1', 'ZB2', 'C12', 'C13', 'J32', 'L32', 'L42', 'I46', 'K46', 'M46', '_key', '_eq']); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
+  const SKIP_EDIT = new Set(['ZB1', 'ZB2', 'ZB3', 'C12', 'C13', 'J32', 'L32', 'L42', 'I46', 'K46', 'M46', '_key', '_eq']); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
   window.SilApp = {
     inputs: () => Object.assign({}, inputs),
     cp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
@@ -922,8 +937,8 @@
     rankInputs: () => Object.assign({}, inputs),
     rankCp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
     customShare: () => inputs.L42 === true,
-    // 랭킹에 못 올리는 버프(피시방·지애)를 켰으면 그 이름들
-    rankBuffs: () => ['ZB1', 'ZB2'].filter(a => (inputs[a] ?? '미적용') !== '미적용').map(a => `${EXTRA_BUFF[a].t}(${inputs[a]})`),
+    // 랭킹에 못 올리는 버프(피시방·에너지드링크·지애)를 켰으면 그 이름들
+    rankBuffs: () => Object.keys(EXTRA_BUFF).filter(a => inputs[a] === true).map(a => EXTRA_BUFF[a]),
     missing: () => isEmptySetting(inputs) ? ['세팅'] : ['C12', 'C13'].filter(a => !(Number(g(a)) > 0)).map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력'),
     cls: () => inputs.C6 || '',
     key: () => store.current,
