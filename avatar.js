@@ -239,12 +239,6 @@
   }
   function renderOwn() {
     const box = $('#avOwnBody'); if (!box) return; box.textContent = '';
-    const on = el('input', { type: 'checkbox' }); on.checked = !!st.ownOn;
-    on.onchange = () => { st.ownOn = on.checked; if (on.checked && !st.own) st.own = []; save(); result = null; renderOwn(); renderResult(); };
-    box.append(el('label', { class: 'av-fix av-own-on' }, on, el('span', { text: '가진 것만으로 추천 (체크한 아이템만 써요)' })));
-    if (!st.ownOn) return;
-    const own = new Set(st.own || []);
-    const p = prof(); for (const part of PARTS) if (p.worn[part]) own.add(p.worn[part]);
     const sets = A.sets.filter(s => db.fiveSetStats.has(s) || db.setToParts.has(s));
     const itemsOf = (s) => {
       const items = [];
@@ -252,6 +246,13 @@
       for (const part of (db.setToParts.get(s) || [])) { const d = db.displayBySetPart.get(s + '||' + part); if (d) items.push(d); }
       return items;
     };
+    const on = el('input', { type: 'checkbox' }); on.checked = !!st.ownOn;
+    // 처음 켜면 전부 가진 것으로 체크해 두고, 없는 것만 끄게 함
+    on.onchange = () => { st.ownOn = on.checked; if (on.checked && !(st.own && st.own.length)) st.own = sets.flatMap(itemsOf); save(); result = null; renderOwn(); renderResult(); };
+    box.append(el('label', { class: 'av-fix av-own-on' }, on, el('span', { text: '가진 것만으로 추천 (없는 아이템은 체크를 꺼 주세요)' })));
+    if (!st.ownOn) return;
+    const own = new Set(st.own || []);
+    const p = prof(); for (const part of PARTS) if (p.worn[part]) own.add(p.worn[part]);
     const setOwn = (list) => { st.own = [...new Set(list)]; save(); result = null; renderOwn(); renderResult(); };
     const all = sets.flatMap(itemsOf);
     box.append(el('div', { class: 'av-own-acts' },
