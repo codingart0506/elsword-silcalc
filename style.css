@@ -158,6 +158,8 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 .stage .progress:not([hidden]) { margin-bottom: 26px; }
 .ocr-result { margin-top: 18px; }
 .ocr-count { font-size: 16px; font-weight: 700; margin: 0 0 6px; }
+.ocr-tip { font-size: 13px; color: var(--mute); margin: 0 0 8px; line-height: 1.5; }
+.drop-tip { margin: 12px 0 0; font-size: 12px; color: var(--mute); line-height: 1.5; }
 .ocr-table { width: 100%; border-collapse: collapse; display: block; }
 .ocr-table tbody { display: block; }
 /* 한 줄: [체크] 항목 ........ [읽은 값] / 아랫줄: 지금 값 */

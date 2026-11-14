@@ -331,7 +331,7 @@
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
       el('p', { text: '게임 채팅창에 이 코드를 입력한 다음, 채팅이 보이게 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요.' }),
       shotBox, file,
-      el('label', { class: 'chk-row' }, noBuff, el('span', {}, 'PC방 혜택과 지애 버프가 꺼진 상태에서 찍었어요', el('small', { text: 'PC방 혜택이나 지애 버프가 켜진 스크린샷은 랭킹에 올릴 수 없어요. 왼쪽 위 PC방 아이콘이 OFF인지 확인해 주세요.' }))),
+      el('label', { class: 'chk-row' }, noBuff, el('span', {}, '게임에서 PC방 혜택과 지애 버프를 끈 상태로 찍었어요', el('small', { text: '게임 상세 스탯 창에는 PC방·지애 효과가 이미 더해져 있어서 숫자만으로는 구분이 안 돼요. 계산기의 도핑 체크와 별개로, 찍을 때 왼쪽 위 PC방 아이콘이 OFF였는지 확인해 주세요.' }))),
       el('div', { class: 'dlg-actions' }, el('button', { type: 'button', class: 'btn', text: '취소', onclick: close }), send));
     const wrap = el('div', { class: 'dialog', id: 'applyDlg' }, card);
     document.body.append(wrap);

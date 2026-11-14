@@ -631,6 +631,12 @@
     const body = $('#ocrBody'); body.innerHTML = '';
     const found = res.found; const cells = O.FIELDS.map(f => f.cell).filter(c => found[c]);
     $('#ocrCount').textContent = cells.length ? `${cells.length}개 항목을 읽었어요` : '항목을 못 찾았어요. 상세 스탯 창 부분만 드래그로 골라서 다시 읽어 보세요.';
+    // 사진이 작거나 읽은 항목이 적으면 찍는 조건 안내
+    const small = shot && (shot.width < 1600 || shot.height < 900);
+    const tip = $('#ocrTip');
+    tip.textContent = small ? `사진이 작아요(${shot.width}×${shot.height}). 글자가 작으면 잘못 읽을 수 있어요. 게임 해상도 1920×1080 이상, 전체 화면으로 찍어 주세요.`
+      : (cells.length && cells.length < 12) ? '덜 읽힌 항목이 있어요. 다른 창이 상세 스탯 창을 가리지 않게, 게임을 전체 화면으로 두고 다시 찍어 보세요.' : '';
+    tip.hidden = !tip.textContent;
     for (const c of cells) {
       const f = found[c], kind = PCT.has(c) ? 'pct' : 'num';
       const cur = g(c);

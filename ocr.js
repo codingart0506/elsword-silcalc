@@ -89,6 +89,8 @@
       return Number.isFinite(n) ? n : null;
     }
     s = s.replace(',', '.');
+    // 소수점을 놓친 경우("73.70%" → "7370%"): 이 창의 % 수치는 늘 소수 둘째 자리까지 표시
+    if (pctSign && /^\d{3,}$/.test(s)) s = s.slice(0, -2) + '.' + s.slice(-2);
     // '%'를 '96'·'9'로 잘못 읽은 경우: 게임은 소수 둘째 자리까지만 표시
     if (!pctSign) { const m = /^(\d+)\.(\d{2})\d+$/.exec(s); if (m) s = m[1] + '.' + m[2]; }
     let n = parseFloat(s);
@@ -237,6 +239,19 @@
       const ok = atk.filter(a => a.score >= top * 0.8 || !found.C11);
       found.C11 = ok.reduce((m, a) => (a.value > m.value ? a : m), ok[0]);
     }
+    // '크리티컬 확률'의 '확률'이 안 읽혀 '크리티컬 91.84%'만 남은 줄 → 100% 이하면 크리티컬 확률
+    if (!found.C17) for (const row of rows) {
+      for (const p of splitPairs(row.text)) {
+        const lab = norm(p.label);
+        if (!/크리티컬$/.test(lab) || /데미지|대미지/.test(lab) || !p.pct) continue;
+        const v = toValue(p.raw, true, 'pct');
+        if (v !== null && v > 0 && v <= 1) { found.C17 = { cell: 'C17', value: v, score: 0.8, text: row.text.trim(), conf: row.conf, label: '크리티컬 확률', guessed: true }; break; }
+      }
+      if (found.C17) break;
+    }
+    // 범위를 크게 벗어난 % 값은 버림(소수점을 놓쳐 100배가 된 값 등) — 다른 칸에서 다시 채우도록
+    const MAXV = { C14: 1, C15: 1, C17: 1, C19: 1, C20: 1, C24: 2, C25: 2, C26: 2, C31: 1, C32: 1, C34: 1 };
+    for (const [c, mx] of Object.entries(MAXV)) if (found[c] && found[c].value > mx) delete found[c];
     return found;
   }
 
@@ -324,7 +339,8 @@
     const x0 = Math.min(...set.map(h => h.x0)), x1 = Math.max(...set.map(h => h.x1));
     const y0 = Math.min(...set.map(h => h.y0)), y1 = Math.max(...set.map(h => h.y1));
     const W = x1 - x0;
-    return { x: x0 - W * 0.06 - rowH, y: y0 - rowH * 2.5, w: W * 1.45 + rowH, h: (y1 - y0) + rowH * 5 };
+    // 상세 스탯 창은 폭이 줄 높이의 약 24배·높이 약 23배로 일정함 → 이름이 덜 잡혀도 오른쪽 칸·아래 줄이 잘리지 않게
+    return { x: x0 - W * 0.06 - rowH, y: y0 - rowH * 2.5, w: Math.max(W * 1.45 + rowH, rowH * 28), h: Math.max((y1 - y0) + rowH * 5, rowH * 24) };
   }
 
   // ---------- 브라우저 전용 ----------
