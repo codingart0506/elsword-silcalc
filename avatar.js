@@ -27,7 +27,7 @@
     const atk = num('C11'), mx = num('C12'), wep = num('C13');
     const mp = wep > 0 ? Math.round(((mx - atk) / (0.55 * wep) * 100 - 100 + (cls === '메타모르피' ? 20 : 0)) * 100) / 100 : 0;
     return { '적응력': pct('C14'), '초적응력': pct('C15'), '강배': pct('C24'), '역강배': pct('C25'), '100이하': pct('C26'), '추피': pct('C22'), '양극화': pct('C20'),
-      '물마퍼': mp, '모스댐': pct('C33'), '초댐증': pct('C30'), '크댐증': pct('C18'), '보댐증': pct('C21'), '쿨감': pct('C32') };
+      '물마퍼': mp, '모스댐': pct('C33'), '초댐증': pct('C30'), '크댐증': pct('C18'), '보댐증': pct('C21'), '쿨감': pct('C32') || pct('C31') };
   }
   const IMPRINT_OF = { 0.04: '4% (찬란석 하옵)', 0.05: '5% (찬란석 상옵)', 0.055: '5.5% (강수, 11강)', 0.06: '6% (강수, 12강)', 0.065: '6.5% (강수, 13강)' };
   function calcOpts() {
@@ -255,7 +255,11 @@
     if (!result) return;
     if (result.err) { box.append(el('p', { class: 'av-hint warn', text: result.err })); return; }
     const r = result.r, p = prof();
-    if (!r.best) { box.append(el('p', { class: 'av-hint warn', text: '조건에 맞는 세팅이 없어요. 목표 쿨감을 낮추거나 고정을 풀어 보세요' })); return; }
+    if (result.warn && result.warn.length) {
+      box.append(el('div', { class: 'av-warn' }, el('b', { text: '조건에 맞는 세팅이 없어요' }), ...result.warn.map(w => el('p', { text: w })),
+        result.relaxed ? el('p', { class: 'av-relax', text: `아래는 ${result.relaxed} 계산한 결과예요. 조건은 '계산 조건'·'보유 아바타'·고정 칸에서 바꿀 수 있어요` }) : ''));
+    }
+    if (!r.best) return;
     const g = r.gain * 100;
     box.append(el('p', { class: 'av-gain' }, g > 0.0005 ? el('span', null, '추천대로 바꾸면 실뎀 ', el('b', { class: 'up', text: '+' + g.toFixed(2) + '%' })) : el('span', { text: '지금 세팅이 이미 가장 좋아요' })));
     const tb = el('tbody');
@@ -270,14 +274,44 @@
   }
   function runRec() {
     const btn = $('#btnAvRun');
-    if (!APP.cls()) { result = { err: '계산기에서 전직을 먼저 골라 주세요' }; renderResult(); return; }
+    if (!APP.cls()) { result = { err: '계산기 탭에서 전직을 먼저 골라 주세요' }; renderResult(); return; }
+    if (!(num('C11') > 0)) { result = { err: '계산기 탭에 지금 스탯이 없어요. 상세 스탯 창 스크린샷을 먼저 읽어 주세요' }; renderResult(); return; }
     btn.disabled = true; btn.textContent = '계산 중…';
     setTimeout(() => {
       try {
-        const p = prof(), c = calcOpts();
-        const opt = Object.assign({}, st.o, c, { owned: st.ownOn ? new Set([...(st.own || []), ...PARTS.map(x => p.worn[x]).filter(Boolean)]) : null });
-        const r = R.run({ items: A.items, chars: A.chars, cls: sheetClass(APP.cls()), cur: curStats(), worn: p.worn, fixed: p.fixed, fiveFixed: !!p.fiveFixed, opt });
+        const p = prof(), c = calcOpts(), cur = curStats();
+        const owned = st.ownOn ? new Set([...(st.own || []), ...PARTS.map(x => p.worn[x]).filter(Boolean)]) : null;
+        const go = (o, fixed, fiveFixed) => R.run({ items: A.items, chars: A.chars, cls: sheetClass(APP.cls()), cur, worn: p.worn, fixed, fiveFixed, opt: Object.assign({}, st.o, c, o) });
+        const fx = p.fixed || {}, f5 = !!p.fiveFixed, anyFix = f5 || Object.values(fx).some(Boolean);
+        const r = go({ owned }, fx, f5);
         result = { r };
+        if (!r.best) {
+          // 어떤 조건 때문에 막혔는지 하나씩 풀어 보며 찾음
+          const why = [];
+          const coolMsg = () => cur['쿨감'] > 0
+            ? `목표 쿨감 ${r.coolTarget}%를 채우는 조합이 없어요. 지금 아바타·악세를 뺀 쿨감이 ${Math.round(r.bare.baseCooldownBare * 100) / 100}%라서 아바타로 ${Math.round((r.coolTarget - r.bare.baseCooldownBare) * 100) / 100}%를 더 채워야 해요`
+            : '계산기 탭의 \'초월한 스킬 재사용 시간 감소\'가 비어 있어서 쿨감을 맞출 수 없어요';
+          const tries = [];
+          if (Number(st.o.cool) > 0) {
+            // 쿨감은 5%씩 낮춰 가며 맞출 수 있는 가장 높은 목표를 찾음
+            if (cur['쿨감'] > 0) for (let t = Number(st.o.cool) - 5; t > 0; t -= 5) tries.push([{ owned, cool: t }, fx, f5, 'cool:' + t]);
+            tries.push([{ owned, cool: 0 }, fx, f5, 'cool']);
+          }
+          if (owned) tries.push([{ owned: null }, fx, f5, 'own']);
+          if (anyFix) tries.push([{ owned }, {}, false, 'fixed']);
+          tries.push([{ owned: null, cool: 0 }, {}, false, 'all']);
+          for (const [o, f, f5b, k] of tries) {
+            const r2 = go(o, f, f5b);
+            if (!r2.best) continue;
+            if (k.startsWith('cool') || k === 'all') { if (Number(st.o.cool) > 0) why.push(coolMsg()); }
+            if (k === 'own' || (k === 'all' && owned)) why.push('보유 체크한 아이템만으로는 3세트 조합을 만들 수 없어요. 보유 아바타에서 더 체크하거나 필터를 꺼 주세요');
+            if (k === 'fixed' || (k === 'all' && anyFix)) why.push('고정한 부위끼리 맞는 조합이 없어요');
+            const what = k.startsWith('cool:') ? `목표 쿨감을 ${r2.coolTarget}%로 낮춰` : { cool: '쿨감 조건을 빼고', own: '보유 필터를 끄고', fixed: '고정을 풀고', all: '쿨감·보유·고정 조건을 모두 빼고' }[k];
+            result = { r: r2, warn: why, relaxed: what };
+            break;
+          }
+          if (!result.relaxed) result = { r, warn: [coolMsg()] };
+        }
       } catch (e) { console.error(e); result = { err: '계산하다 문제가 생겼어요: ' + (e.message || e) }; }
       btn.disabled = false; btn.textContent = '추천 받기'; renderResult();
       if (window.innerWidth < 1024) { const rc = $('.av-res-card'); if (rc) rc.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
