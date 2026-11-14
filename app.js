@@ -523,6 +523,7 @@
     $('#btnNew').onclick = () => {
       const name = 'c' + Date.now().toString(36);
       store.profiles[name] = blank(); loadProfile(name);
+      if (shot && !ocrBusy) clearShot(); // 새 캐릭터는 이전 캐릭터 사진 없이 시작
     };
     $('#btnDelete').onclick = async () => {
       if (!(await dialog({ title: '캐릭터 삭제', text: `"${profileLabel(store.current)}" 세팅을 지울까요?`, ok: '삭제', danger: true }))) return;
