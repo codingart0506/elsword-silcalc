@@ -128,7 +128,7 @@
   }
   function renderRows(rows, start) {
     const mine = new Set(Object.values(A.ranks()).filter(r => r && r.status === 'approved').map(r => String(r.nickname).toLowerCase()));
-    const list = $('#rankList');
+    const list = $('#rankList'), mark = textMark();
     rows.forEach((r, i) => {
       const li = el('li', { class: mine.has(r.nickname.toLowerCase()) ? 'me' : '' });
       li.append(
@@ -136,7 +136,7 @@
           el('span', { class: 'rk-no', text: String(start + i + 1) }),
           el('span', { class: 'rk-who' },
             el('span', { class: 'rk-name', text: r.nickname }),
-            el('span', { class: 'rk-meta' }, el('span', { text: r.cls }), el('span', { text: ago(r.updated_at) }))),
+            el('span', { class: 'rk-meta' }, el('span', { text: r.cls + mark }), el('span', { text: ago(r.updated_at) }))),
           el('span', { class: 'rk-cp' }, el('b', { text: fmtInt(r.cp) }), el('small', { text: korUnit(r.cp) }))));
       list.append(li);
     });
@@ -168,6 +168,23 @@
   function stamp() {
     const d = new Date(), z = (n) => String(n).padStart(2, '0');
     return `${viewerName()}  ${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`;
+  }
+  // 글자 워터마크: 화면에 안 보이는 폭 0 문자로 '보는 사람(닉네임 지문)·시각(시 단위)'을 순위 줄마다 숨겨 둠.
+  // 목록을 복사해서 글로 퍼뜨려도 남고, 관리자 화면 '워터마크 찾기'에 붙여 넣으면 읽힘(복사한 곳이 이런 문자를 지우면 사라짐)
+  const ZW = ['\u200B', '\u200C', '\u200D', '\u2060'], ZW_MARK = '\u2063', WM_EPOCH = Date.UTC(2026, 0, 1);
+  const fnv = (s) => { let h = 0x811c9dc5; for (const ch of String(s)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; } return h & 0xffffff; };
+  function textMark() {
+    let v = fnv(viewerName()) * 65536 + (Math.max(0, Math.floor((Date.now() - WM_EPOCH) / 36e5)) & 0xffff), out = '';
+    for (let i = 0; i < 20; i++) { out = ZW[v % 4] + out; v = Math.floor(v / 4); }
+    return ZW_MARK + out + ZW_MARK;
+  }
+  function readTextMarks(s) {
+    const re = new RegExp(ZW_MARK + '([' + ZW.join('') + ']{20})' + ZW_MARK, 'g'), seen = new Map();
+    for (const m of String(s).matchAll(re)) {
+      let v = 0; for (const ch of m[1]) v = v * 4 + ZW.indexOf(ch);
+      const k = m[1]; if (!seen.has(k)) seen.set(k, { hash: Math.floor(v / 65536), at: new Date(WM_EPOCH + (v % 65536) * 36e5) });
+    }
+    return [...seen.values()];
   }
   // 사진을 못 받아 와서 픽셀에 못 박을 때만 쓰는 흐린 겹침 글자
   function watermark() {
@@ -228,8 +245,23 @@
     og.putImageData(od, 0, 0);
     return out;
   }
-  function wmFinder() {
+  function wmFinder(c) {
     const view = el('div', { class: 'wm-out' });
+    // 복사해서 퍼진 글: 숨은 글자를 읽어 닉네임 지문과 맞는 랭킹 캐릭터를 찾음
+    const txt = el('textarea', { class: 'wm-text', rows: '3', placeholder: '퍼진 글(랭킹을 복사해 붙인 글)을 여기에 붙여 넣으세요' });
+    const txtOut = el('div', { class: 'wm-out' });
+    txt.oninput = async () => {
+      const marks = readTextMarks(txt.value); txtOut.textContent = '';
+      if (!txt.value.trim()) return;
+      if (!marks.length) { txtOut.textContent = '숨은 글자를 못 찾았어요. 복사한 곳에서 지워졌을 수 있어요'; return; }
+      let names = ['관리자'];
+      try { const { data } = await c.from('players').select('nickname'); names = names.concat((data || []).map(x => x.nickname)); } catch (e) { /* 무시 */ }
+      for (const m of marks) {
+        const who = names.filter(n => fnv(n) === m.hash);
+        const d = m.at, z = (n) => String(n).padStart(2, '0');
+        txtOut.append(el('p', { text: `${who.length ? who.join(' 또는 ') : '모르는 사람(지워진 캐릭터일 수 있어요)'}, ${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())} ${z(d.getHours())}시쯤 본 화면` }));
+      }
+    };
     const show = async (blob) => {
       if (!blob) return;
       view.textContent = '찾는 중이에요';
@@ -250,8 +282,8 @@
     zone.addEventListener('dragover', (e) => e.preventDefault());
     zone.addEventListener('drop', (e) => { e.preventDefault(); show([...e.dataTransfer.files].find(f => f.type.startsWith('image/'))); });
     return el('div', { class: 'adm-sec' }, el('h3', { text: '워터마크 찾기' }),
-      el('p', { class: 'rank-note', text: '랭킹 화면과 랭킹 사진에는 보는 사람 닉네임과 시각이 눈에 안 띄게 깔려 있어요. 캡처가 돌면 여기에 넣어서 누가 찍었는지 확인하고, 아래 열람 기록과 맞춰 보세요. 많이 줄이거나 여러 번 다시 저장한 사진은 안 보일 수 있어요.' }),
-      zone, view);
+      el('p', { class: 'rank-note', text: '랭킹 화면·랭킹 사진에는 보는 사람 닉네임과 시각이 눈에 안 띄게 깔려 있고, 순위 글자에도 안 보이는 문자로 숨겨 둬요. 캡처나 복사한 글이 돌면 여기에 넣어서 누가 봤는지 확인하고, 아래 열람 기록과 맞춰 보세요. 많이 줄이거나 여러 번 다시 저장한 사진, 숨은 문자를 지우는 곳에 올린 글은 안 읽힐 수 있어요.' }),
+      zone, view, txt, txtOut);
   }
   // 랭킹 화면 전체에 눈에 안 띄는 워터마크(보는 사람·시각)를 덮어 둠: 화면 캡처에도 그대로 남음
   function markView() {
@@ -303,7 +335,7 @@
       shot,
       el('div', { class: 'rk-side' },
         cap,
-        el('p', { class: 'rk-cap', text: `실투력 ${fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신` }),
+        el('p', { class: 'rk-cap', text: `실투력 ${fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신${textMark()}` }),
         shareP,
         el('div', { class: 'rk-btns' },
           el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => openPlayer(r) }),
@@ -659,7 +691,7 @@
     for (const h of hsHeld) held.append(updItem(h));
     for (const h of hsLive) live.append(updItem(h));
 
-    body.append(wmFinder());
+    body.append(wmFinder(c));
     // 열람 기록: 누가 언제 무엇을 봤는지 + 기기 수(갱신 코드 돌려쓰기 확인). 이상하면 그 사람을 아래에서 숨기면 랭킹도 못 봐요
     const logs = el('div', { class: 'adm-sec' }, el('h3', { text: '열람 기록' }),
       el('p', { class: 'rank-note', text: '랭킹 목록과 상세(사진·세팅)를 본 기록이에요. 최근 300개, 180일 지나면 지워져요. 이름을 누르면 그 사람 기록만 보여요. 한 사람이 최근 7일 동안 기기 4대 이상에서 봤으면 갱신 코드를 나눠 줬을 수 있어요.' }));

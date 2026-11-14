@@ -388,6 +388,7 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .wm-out { margin-top: 10px; font-size: 14px; color: var(--mute); }
 .wm-out canvas { display: block; max-width: 100%; border-radius: 8px; }
 .wm-out p { margin: 12px 0 6px; color: var(--sub); }
+.wm-text { width: 100%; margin-top: 12px; font: inherit; font-size: 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; resize: vertical; box-sizing: border-box; }
 .rank-view { position: relative; }
 .rk-wm { position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit; background-repeat: repeat; }
 .adm-logs { display: flex; flex-direction: column; }
