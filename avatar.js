@@ -109,7 +109,7 @@
   }
   const MATCH = 13;
   async function recognize(canvas, gear) {
-    if (!gear || !gear.grid) return { ok: false, why: '장비창의 일반 악세서리 칸(초록)을 못 찾았어요' };
+    if (!gear || !gear.grid) return { ok: false, why: '캐릭터 장비창(일반 악세서리 초록 칸)을 못 찾았어요' };
     const boxes = slotBoxes(gear.grid); if (!boxes) return { ok: false, why: '장비창 칸 위치를 못 잡았어요' };
     const bg = bgColor(canvas, boxes);
     let cand = charsOfClass((gear.cls && gear.cls.match && gear.cls.match.name) || APP.cls());
@@ -193,7 +193,14 @@
       renderTag();
       body.append(el('div', { class: 'av-row' }, el('span', { class: 'av-part', text: PART_LABEL[part] || part }), tag, sel, el('label', { class: 'av-fix' }, fx, el('span', { text: '고정' }))));
     }
-    renderOpts(); renderOwn(); renderResult();
+    renderStats(); renderOpts(); renderOwn(); renderResult();
+  }
+  function renderStats() {
+    const box = $('#avStatBody'); if (!box) return; box.textContent = '';
+    if (!APP.cls() || !(num('C11') > 0)) { box.append(el('p', { class: 'av-hint warn', text: '계산기 탭에 지금 스탯이 없어요. 상세 스탯 창 스크린샷을 먼저 읽어 주세요' })); return; }
+    const cur = curStats(), grid = el('div', { class: 'av-stat' });
+    for (const [k, v] of Object.entries(cur)) grid.append(el('div', null, el('span', { text: k }), el('span', { text: String(Math.round(v * 100) / 100) })));
+    box.append(grid, el('p', { class: 'av-hint', text: `${APP.cls()} · 계산기 탭에 넣은 값을 그대로 써요. 강배·역강배는 체력 50% 초과·이하, 추피는 추가 지속 피해, 보댐증은 보스 피해, 초댐증은 초월 스킬 데미지예요` }));
   }
   function renderOpts() {
     const box = $('#avOptBody'); if (!box) return; box.textContent = '';
@@ -264,11 +271,43 @@
         result = { r };
       } catch (e) { console.error(e); result = { err: '계산하다 문제가 생겼어요: ' + (e.message || e) }; }
       btn.disabled = false; btn.textContent = '추천 받기'; renderResult();
+      if (window.innerWidth < 1024) { const rc = $('.av-res-card'); if (rc) rc.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     }, 30);
+  }
+  // 머리말 보기 전환(계산기·아바타). 랭킹은 rank.js가 맡음 — 랭킹이 없는 판에서는 랭킹 버튼을 숨김
+  function setAvView(on) {
+    document.body.classList.toggle('view-avatar', on);
+    $('#avView').hidden = !on;
+    if (on) {
+      document.body.classList.remove('view-rank', 'view-admin');
+      for (const id of ['#rankView', '#adminView']) { const x = $(id); if (x) x.hidden = true; }
+      render(); window.scrollTo(0, 0);
+    }
+    const views = $('#views');
+    if (views) for (const x of views.querySelectorAll('button[data-view]')) if (x.dataset.view === 'calc' || x.dataset.view === 'avatar') x.setAttribute('aria-current', (x.dataset.view === 'avatar') === on ? 'page' : 'false');
+  }
+  function wireViews() {
+    const views = $('#views'); if (!views || !$('#avView')) return;
+    if (!window.SIL_CDN) { const rb = views.querySelector('[data-view="rank"]'); if (rb) rb.hidden = true; }
+    views.hidden = false;
+    views.addEventListener('click', (e) => { const b = e.target.closest('button[data-view]'); if (b && (b.dataset.view === 'calc' || b.dataset.view === 'avatar')) setAvView(b.dataset.view === 'avatar'); });
+    if (new URLSearchParams(location.search).has('avatar')) setAvView(true);
   }
   function wire() {
     const card = $('#avCard'); if (!card) return;
+    wireViews();
     $('#btnAvRun').onclick = runRec;
+    const fin = $('#avShotIn');
+    if (fin) fin.onchange = async () => {
+      const f = fin.files && fin.files[0]; fin.value = ''; if (!f) return;
+      $('#avNote').textContent = '스크린샷에서 아바타를 찾는 중이에요';
+      try {
+        const bm = await createImageBitmap(f);
+        const c = document.createElement('canvas'); c.width = bm.width; c.height = bm.height; c.getContext('2d').drawImage(bm, 0, 0);
+        const gear = window.SilGear ? window.SilGear.recognize(c) : null;
+        await fromShot(c, gear || {});
+      } catch (e) { console.error(e); lastRec = { ok: false, why: '사진을 읽지 못했어요' }; render(); }
+    };
     let lastKey = APP.key();
     APP.onRefresh(() => { const k = APP.key(); if (k !== lastKey) { lastKey = k; lastRec = null; result = null; render(); } else if (result) { result = null; renderResult(); } });
     render();

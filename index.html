@@ -6,7 +6,7 @@
 <title>엘소드 실투력 계산기</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%233182F6%22/%3E%3Cpath d=%22M9 20 L14 14 L18 17 L23 10%22 stroke=%22white%22 stroke-width=%223%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 
-<link rel="stylesheet" href="style.css?v=09650840">
+<link rel="stylesheet" href="style.css?v=2fc8747f">
 </head>
 <body>
 <div class="wrap">
@@ -16,6 +16,7 @@
       <nav class="views" id="views" hidden>
         <button type="button" data-view="calc" aria-current="page">계산기</button>
         <button type="button" data-view="rank">랭킹</button>
+        <button type="button" data-view="avatar">아바타</button>
       </nav>
     </div>
     <div class="who">
@@ -104,23 +105,6 @@
     </details>
   </section>
 
-  <section class="card av-card" id="avCard" aria-labelledby="avTitle">
-    <h2 id="avTitle">가열기 아바타 추천</h2>
-    <p class="opt-sub" id="avNote">장비창 스크린샷을 읽으면 지금 입은 아바타가 자동으로 채워져요</p>
-    <div class="av-head" aria-hidden="true"><span>부위</span><span>지금 착용</span><span>고정</span></div>
-    <div id="avWorn" class="av-worn"></div>
-    <details class="opt-set av-set">
-      <summary>계산 조건</summary>
-      <div id="avOptBody"></div>
-    </details>
-    <details class="opt-set av-set">
-      <summary>보유 아바타</summary>
-      <div id="avOwnBody"></div>
-    </details>
-    <button class="btn primary wide" id="btnAvRun" type="button">추천 받기</button>
-    <div id="avResult" aria-live="polite"></div>
-    <p class="av-credit">계산 방식: 엘소드 [룰루]님 가열기 아바타/액세서리 세팅 시뮬레이터 v1.5.1 · 아이콘: 코보덱스</p>
-  </section>
 
   </div>
 
@@ -137,6 +121,37 @@
     <div id="forms"></div>
   </section>
 
+  </div>
+
+  <div class="av-view" id="avView" hidden>
+    <section class="card av-card" id="avCard" aria-labelledby="avTitle">
+      <div class="av-title">
+        <h2 id="avTitle">가열기 아바타 추천</h2>
+        <label class="btn sm av-shot-btn">장비창 스크린샷 읽기<input type="file" accept="image/*" id="avShotIn" hidden></label>
+      </div>
+      <p class="opt-sub" id="avNote">장비창 스크린샷을 읽으면 지금 입은 아바타가 자동으로 채워져요</p>
+      <div class="av-head" aria-hidden="true"><span>부위</span><span>지금 착용</span><span>고정</span></div>
+      <div id="avWorn" class="av-worn"></div>
+      <details class="opt-set av-set">
+        <summary>계산에 쓰는 지금 스탯</summary>
+        <div id="avStatBody"></div>
+      </details>
+      <details class="opt-set av-set">
+        <summary>계산 조건</summary>
+        <div id="avOptBody"></div>
+      </details>
+      <details class="opt-set av-set">
+        <summary>보유 아바타</summary>
+        <div id="avOwnBody"></div>
+      </details>
+    </section>
+    <section class="card av-res-card" aria-labelledby="avResTitle">
+      <h2 id="avResTitle">추천 세팅</h2>
+      <p class="opt-sub">룰루님 시트와 같은 방식으로 5셋 + 3세트 9부위 + 남은 3부위를 골라요</p>
+      <button class="btn primary wide" id="btnAvRun" type="button">추천 받기</button>
+      <div id="avResult" aria-live="polite"></div>
+      <p class="av-credit">계산 방식: 엘소드 [룰루]님 가열기 아바타/액세서리 세팅 시뮬레이터 v1.5.1 · 아이콘: 코보덱스</p>
+    </section>
   </div>
 
   <section class="card rank-view" id="rankView" hidden aria-labelledby="rankTitle">
@@ -203,7 +218,7 @@
 <script src="avdata.js?v=40a37e76"></script>
 <script src="avrec.js?v=7c0b72c7"></script>
 <script src="app.js?v=da81c1fe"></script>
-<script src="avatar.js?v=3de3e530"></script>
-<script src="rank.js?v=2f0a6e19"></script>
+<script src="avatar.js?v=85d1c943"></script>
+<script src="rank.js?v=2a9931b5"></script>
 </body>
 </html>

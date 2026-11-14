@@ -73,7 +73,10 @@
   function setView(v) {
     document.body.classList.toggle('view-rank', v === 'rank');
     document.body.classList.toggle('view-admin', v === 'admin');
+    document.body.classList.toggle('view-avatar', v === 'avatar');
     $('#rankView').hidden = v !== 'rank';
+    if ($('#avView')) $('#avView').hidden = v !== 'avatar';
+    if (v === 'avatar' && window.SilAvatar) window.SilAvatar.render();
     $('#adminView').hidden = v !== 'admin';
     for (const b of views.querySelectorAll('button')) b.setAttribute('aria-current', b.dataset.view === v ? 'page' : 'false');
     if (v === 'rank') loadRank(true);
@@ -609,5 +612,6 @@
   const qs = new URLSearchParams(location.search);
   if (qs.has('admin')) setView('admin');
   else if (qs.has('rank')) setView('rank');
+  else if (qs.has('avatar')) setView('avatar');
   renderLine();
 })();
