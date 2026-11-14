@@ -79,7 +79,7 @@
     if (v === 'avatar' && window.SilAvatar) window.SilAvatar.render();
     $('#adminView').hidden = v !== 'admin';
     for (const b of views.querySelectorAll('button')) b.setAttribute('aria-current', b.dataset.view === v ? 'page' : 'false');
-    if (v === 'rank') loadRank(true);
+    if (v === 'rank') { markView(); loadRank(true); }
     if (v === 'admin') adminInit();
     window.scrollTo(0, 0);
   }
@@ -161,14 +161,119 @@
     const d = new Date(), z = (n) => String(n).padStart(2, '0');
     return `${viewerName()}  ${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`;
   }
+  // 사진을 못 받아 와서 픽셀에 못 박을 때만 쓰는 흐린 겹침 글자
   function watermark() {
     const t = stamp(), w = el('div', { class: 'wm', 'aria-hidden': 'true' });
     for (let i = 0; i < 24; i++) w.append(el('span', { text: t }));
     return w;
   }
-  function lightbox(src, alt) {
+  // 눈에 거의 안 보이는 워터마크: 보는 사람 닉네임·시각을 사진 곳곳(자리·기울기 무작위)에 픽셀로 박음
+  // 파랑 채널을 조금, 밝기를 아주 조금만 바꿔서 눈으로는 안 보이고, 관리자 화면 '워터마크 찾기'에 넣으면 글자가 드러남
+  async function bakeShot(url) {
+    try {
+      const res = await fetch(url); if (!res.ok) return null;
+      const bmp = await createImageBitmap(await res.blob());
+      const w = bmp.width, h = bmp.height;
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      g.drawImage(bmp, 0, 0);
+      const m = document.createElement('canvas'); m.width = w; m.height = h;
+      const mg = m.getContext('2d', { willReadFrequently: true });
+      const t = stamp(), fs = Math.max(14, Math.round(w / 40));
+      mg.font = `700 ${fs}px sans-serif`; mg.fillStyle = '#fff'; mg.textAlign = 'center'; mg.textBaseline = 'middle';
+      const cols = Math.max(2, Math.round(w / (mg.measureText(t).width * 1.15))), rows = Math.max(3, Math.round(h / (fs * 4.5)));
+      for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
+        const x = (q + 0.3 + Math.random() * 0.4) * w / cols, y = (r + 0.2 + Math.random() * 0.6) * h / rows;
+        mg.save(); mg.translate(x, y); mg.rotate((-30 + Math.random() * 20) * Math.PI / 180); mg.fillText(t, 0, 0); mg.restore();
+      }
+      const md = mg.getImageData(0, 0, w, h).data, img = g.getImageData(0, 0, w, h), d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const a = md[i + 3]; if (!a) continue;
+        // 어두운 곳은 조금만(어두운 바탕에선 작은 변화도 눈에 띔), 밝은 곳은 조금 더
+        const amp = (3 + 7 * d[i + 2] / 255) * a / 255;
+        d[i + 2] += d[i + 2] >= amp ? -amp : amp;
+      }
+      g.putImageData(img, 0, 0);
+      const out = await new Promise(r => cv.toBlob(r, 'image/png'));
+      return out ? URL.createObjectURL(out) : null;
+    } catch (e) { console.warn(e); return null; }
+  }
+  // 퍼진 캡처에서 워터마크 드러내기: 주변 평균과의 아주 작은 차이만 남겨 크게 키움(색 차이·밝기 차이 두 가지)
+  function revealMark(src, mode) {
+    const w = src.width, h = src.height, d = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+    const v = new Float32Array(w * h);
+    for (let i = 0, j = 0; j < v.length; i += 4, j++) v[j] = mode === 'lum' ? (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) : d[i + 2] - (d[i] + d[i + 1]) / 2;
+    const W = w + 1, S = new Float64Array(W * (h + 1));
+    for (let y = 0; y < h; y++) { let row = 0; for (let x = 0; x < w; x++) { row += v[y * w + x]; S[(y + 1) * W + x + 1] = S[y * W + x + 1] + row; } }
+    const R = Math.max(4, Math.round(Math.max(w, h) / 120)), gain = mode === 'lum' ? 14 : 10;
+    const out = document.createElement('canvas'); out.width = w; out.height = h;
+    const og = out.getContext('2d'), od = og.createImageData(w, h), o = od.data;
+    for (let y = 0; y < h; y++) {
+      const y0 = Math.max(0, y - R), y1 = Math.min(h, y + R + 1);
+      for (let x = 0; x < w; x++) {
+        const x0 = Math.max(0, x - R), x1 = Math.min(w, x + R + 1);
+        const mean = (S[y1 * W + x1] - S[y0 * W + x1] - S[y1 * W + x0] + S[y0 * W + x0]) / ((y1 - y0) * (x1 - x0));
+        const q = 128 + (mean - v[y * w + x]) * gain, p = (y * w + x) * 4;
+        o[p] = o[p + 1] = o[p + 2] = q; o[p + 3] = 255;
+      }
+    }
+    og.putImageData(od, 0, 0);
+    return out;
+  }
+  function wmFinder() {
+    const view = el('div', { class: 'wm-out' });
+    const show = async (blob) => {
+      if (!blob) return;
+      view.textContent = '찾는 중이에요';
+      try {
+        const bmp = await createImageBitmap(blob);
+        const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+        c.getContext('2d').drawImage(bmp, 0, 0);
+        view.textContent = '';
+        view.append(el('p', { text: '색 차이로 찾기' }), revealMark(c, 'chroma'), el('p', { text: '밝기 차이로 찾기' }), revealMark(c, 'lum'));
+      } catch (e) { view.textContent = '이미지를 열지 못했어요'; }
+    };
+    const fin = el('input', { type: 'file', accept: 'image/*', hidden: '' });
+    fin.onchange = () => show(fin.files[0]);
+    const zone = el('div', { class: 'wm-drop', tabindex: '0' },
+      el('p', { text: '퍼진 랭킹 캡처를 이 칸을 누른 뒤 Ctrl + V로 붙여 넣거나 끌어다 놓으세요. 드러난 글자가 그 화면을 본 사람 닉네임과 시각이에요.' }),
+      el('button', { type: 'button', class: 'btn', text: '이미지 열기', onclick: () => fin.click() }), fin);
+    zone.addEventListener('paste', (e) => { const f = [...(e.clipboardData || {}).items || []].find(i => i.type.startsWith('image/')); if (f) { e.preventDefault(); e.stopPropagation(); show(f.getAsFile()); } });
+    zone.addEventListener('dragover', (e) => e.preventDefault());
+    zone.addEventListener('drop', (e) => { e.preventDefault(); show([...e.dataTransfer.files].find(f => f.type.startsWith('image/'))); });
+    return el('div', { class: 'adm-sec' }, el('h3', { text: '워터마크 찾기' }),
+      el('p', { class: 'rank-note', text: '랭킹 화면과 랭킹 사진에는 보는 사람 닉네임과 시각이 눈에 안 띄게 깔려 있어요. 캡처가 돌면 여기에 넣어서 누가 찍었는지 확인하고, 아래 열람 기록과 맞춰 보세요. 많이 줄이거나 여러 번 다시 저장한 사진은 안 보일 수 있어요.' }),
+      zone, view);
+  }
+  // 랭킹 화면 전체에 눈에 안 띄는 워터마크(보는 사람·시각)를 덮어 둠: 화면 캡처에도 그대로 남음
+  function markView() {
+    const v = $('#rankView'); if (!v) return;
+    let m = v.querySelector('.rk-wm');
+    if (!m) { m = el('div', { class: 'rk-wm', 'aria-hidden': 'true' }); v.append(m); }
+    const t = stamp().replace(/[<>&"']/g, '');
+    // 노란색을 아주 옅게: 흰 바탕에서 파랑만 몇 칸 빠져서 눈에는 안 띄고, '워터마크 찾기'의 색 차이로 드러남
+    const fs = 38, mc = document.createElement('canvas').getContext('2d');
+    mc.font = `900 ${fs}px sans-serif`;
+    const tw = Math.ceil(mc.measureText(t).width);
+    const tile = (deg, padX, padY) => {
+      const r = deg * Math.PI / 180, w = Math.ceil(tw * Math.cos(r)) + padX, h = Math.ceil(tw * Math.sin(r)) + fs + padY;
+      const x = Math.round(padX / 2), y = h - Math.round(padY / 2);
+      return { w, h, url: 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><text x="${x}" y="${y}" transform="rotate(${-deg} ${x} ${y})" font-family="sans-serif" font-weight="900" font-size="${fs}" fill="rgb(255,230,0)" fill-opacity="0.02">${t}</text></svg>`) + '")' };
+    };
+    const A1 = tile(16, 220, 150), A2 = tile(26, 300, 260);
+    m.style.backgroundImage = A1.url + ',' + A2.url;
+    m.style.backgroundPosition = `0 0, ${Math.round(A1.w / 2)}px ${Math.round(A1.h / 2)}px`;
+  }
+  // 크게 보기(화면 위에 따로 뜸)에도 랭킹 화면과 같은 워터마크를 덮음
+  function viewMark() {
+    const m = $('#rankView .rk-wm'); if (!m) return null;
+    const c = el('div', { class: 'rk-wm', 'aria-hidden': 'true' });
+    c.style.backgroundImage = m.style.backgroundImage; c.style.backgroundPosition = m.style.backgroundPosition;
+    return c;
+  }
+  function lightbox(src, alt, marked) {
     const box = el('div', { class: 'lb', role: 'dialog', 'aria-label': alt },
-      el('div', { class: 'lb-in' }, el('img', { src, alt }), watermark()));
+      el('div', { class: 'lb-in' }, el('img', { src, alt }), marked ? null : watermark(), viewMark()));
     const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
     const onKey = (e) => { if (e.key === 'Escape') close(); };
     box.onclick = close; document.addEventListener('keydown', onKey);
@@ -183,8 +288,9 @@
     const img = el('img', { alt: `${r.nickname} 실투력 스크린샷` });
     const cap = el('p', { class: 'rk-cap', text: '사진 불러오는 중이에요' });
     const shareP = el('p', { class: 'rk-cap', text: '초월:강렬 비율 불러오는 중' });
-    const shot = el('button', { type: 'button', class: 'rk-shot', 'aria-label': '사진 크게 보기' }, img, watermark());
-    shot.onclick = () => { if (img.src) lightbox(img.src, img.alt); };
+    const shot = el('button', { type: 'button', class: 'rk-shot', 'aria-label': '사진 크게 보기' }, img);
+    let marked = false;
+    shot.onclick = () => { if (img.src) lightbox(img.src, img.alt, marked); };
     box = el('div', { class: 'rk-detail' },
       shot,
       el('div', { class: 'rk-side' },
@@ -200,7 +306,10 @@
       await playerDetail(c, r);
       shareP.textContent = `초월:강렬 비율 ${shareText(r.inputs)}`;
       const u = r.shot_path ? await signed(c, r.shot_path) : null;
-      if (u) { img.src = u; cap.textContent = '지금 랭킹 값을 낸 스크린샷이에요. 누르면 크게 보여요.'; }
+      const bu = u ? await bakeShot(u) : null;
+      if (bu) { marked = true; img.src = bu; }
+      else if (u) { img.src = u; shot.append(watermark()); }
+      if (u) cap.textContent = '지금 랭킹 값을 낸 스크린샷이에요. 누르면 크게 보여요.';
       else { shot.hidden = true; cap.textContent = '사진이 아직 없어요.'; }
     } catch (e) { cap.textContent = '사진을 불러오지 못했어요.'; }
   }
@@ -545,6 +654,7 @@
     for (const h of hsHeld) held.append(updItem(h));
     for (const h of hsLive) live.append(updItem(h));
 
+    body.append(wmFinder());
     // 열람 기록: 누가 언제 무엇을 봤는지(IP 포함). 이상하면 그 사람을 아래에서 숨기면 랭킹도 못 봐요
     const logs = el('div', { class: 'adm-sec' }, el('h3', { text: '열람 기록' }),
       el('p', { class: 'rank-note', text: '랭킹 목록과 상세(사진·세팅)를 본 기록이에요. 최근 300개, 180일 지나면 지워져요. 이름을 누르면 그 사람 기록만 보여요.' }));

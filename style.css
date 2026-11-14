@@ -374,13 +374,21 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .rk-detail { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; padding: 12px 6px 18px 62px; align-items: start; }
 .rk-shot { display: block; position: relative; width: 100%; padding: 0; border: 0; border-radius: 12px; overflow: hidden; background: var(--fill); cursor: zoom-in; }
 .wm { position: absolute; inset: -30%; display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 64px; place-items: center; transform: rotate(-22deg); pointer-events: none; user-select: none; }
-.wm span { white-space: nowrap; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.32); text-shadow: 0 0 2px rgba(0,0,0,0.45); }
+.wm span { white-space: nowrap; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.05); }
 .lb { position: fixed; inset: 0; z-index: 90; background: rgba(10,14,20,0.86); display: grid; place-items: center; padding: 16px; cursor: zoom-out; }
 .lb-in { position: relative; overflow: hidden; max-width: 100%; max-height: 100%; border-radius: 8px; }
 .lb-in img { display: block; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); }
 .lb-in .wm { grid-auto-rows: 90px; }
 .lb-in .wm span { font-size: 16px; }
 .rank-warn { color: var(--sub); }
+.wm-drop { border: 1px dashed var(--line); border-radius: 12px; padding: 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.wm-drop p { margin: 0; flex: 1; min-width: 220px; font-size: 14px; color: var(--sub); }
+.wm-drop:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.wm-out { margin-top: 10px; font-size: 14px; color: var(--mute); }
+.wm-out canvas { display: block; max-width: 100%; border-radius: 8px; }
+.wm-out p { margin: 12px 0 6px; color: var(--sub); }
+.rank-view { position: relative; }
+.rk-wm { position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit; background-repeat: repeat; }
 .adm-logs { display: flex; flex-direction: column; }
 .adm-log { display: grid; grid-template-columns: minmax(0, 9em) minmax(0, 1fr); gap: 2px 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; color: var(--text); }
 .adm-log small { grid-column: 2; color: var(--mute); }
