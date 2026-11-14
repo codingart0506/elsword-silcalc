@@ -59,7 +59,7 @@
         { c: 'C31', t: '강렬한 스킬 재사용 시간 감소' }, { c: 'C32', t: '초월한 스킬 재사용 시간 감소' },
         { c: 'C33', t: '모든 스킬 데미지 증가' }, { c: 'C34', t: '스킬 사용시 재사용 시간 초기화 확률' }] },
       { bar: '보조', fields: [{ c: 'C35', t: '동작속도' }] },
-      { bar: '창에 없는 값', note: '상세 스탯 창에 안 나와서 직접 입력해요', single: true, fields: [{ c: 'C12', lab: 'B12' }, { c: 'C13', lab: 'B13' }, { c: 'C27', t: '테네브로스 3옵 (HP n% 이하 적에게 n% 데미지)' }] },
+      { bar: '창에 없는 값', note: '상세 스탯 창에 안 나와서 직접 입력해요', single: true, fields: [{ c: 'C12', lab: 'B12' }, { c: 'C13', lab: 'B13' }] },
     ] },
     { id: 'buff', name: '버프·아이템', groups: [
       { bar: '파티 버프', note: '파티원 것 말고 본인이 입은 아이템 효과만', fields: [{ c: 'H11', lab: 'D11' }, { c: 'H12', lab: 'D12' }, { c: 'H13', lab: 'D13' }] },
@@ -105,7 +105,7 @@
   const BLANK = Object.assign({ C6: '' }, Object.fromEntries(STAT_CELLS.map(a => [a, null])), {
     H11: 0.1, H12: 0, H13: 0, ZB1: false, ZB2: false, ZB3: false, H15: '사용', H16: '이상', F17: '격려 재사용 시간 감소', F18: '격려 재사용 시간 감소', H17: 0.15, H18: 0.15,
     D20: '물리 공격력 증가 (%)', D21: '크리티컬 데미지 증가 (%)', D22: '스킬 데미지 증가 (%)', H20: 0.05, H21: 0.05, H22: 0.05,
-    G24: 'Dogma', G25: '압도', G27: '해당사항 없음', G28: '해당사항 없음', G29: '해당사항 없음', G30: '해당사항 없음',
+    G24: 'Dogma', G25: '미착용', G27: '해당사항 없음', G28: '해당사항 없음', G29: '해당사항 없음', G30: '해당사항 없음',
     H31: 0, H32: 0, H33: 0, D35: '황색', G35: '5세트',
     L11: '미사용', L12: '미사용', L13: '미사용', L14: '미사용', L15: '미사용',
     J17: '엘 하우스(강화)', J18: '천상의 디저트파티', J19: '사용', J20: '투지의 물약', J21: '적용2-녹엑사 (팟모스뎀, 팟물마 10%)', J22: '미적용', J23: '아리엘의 스페셜 기프트 마크',
@@ -122,8 +122,8 @@
   for (const [k, v] of Object.entries(store.profiles)) if (!v || !Object.keys(v).length) { store.profiles[k] = blank(); if (store.bases) delete store.bases[k]; }
   // 예전 기본값(각인 없음)이던 캐릭터는 기본 각인으로
   for (const v of Object.values(store.profiles)) if (v && v.D20 === '해당사항 없음' && v.D21 === '해당사항 없음' && v.D22 === '해당사항 없음' && v.H20 === '해당사항 없음') Object.assign(v, { D20: BLANK.D20, D21: BLANK.D21, D22: BLANK.D22, H20: 0.05, H21: 0.05, H22: 0.05 });
-  // 칭호 기본값(상시 Dogma, 스위칭 압도): 아직 아무것도 안 넣은 캐릭터만 새 기본값으로
-  for (const v of Object.values(store.profiles)) if (v && isEmptySetting(v) && v.G24 === '미착용' && v.G25 === '미착용') Object.assign(v, { G24: BLANK.G24, G25: BLANK.G25 });
+  // 상시 칭호 기본값 Dogma: 아직 아무것도 안 넣은 캐릭터만. 스위칭 칭호는 사진 읽을 때 물어보니 기본값은 미착용
+  for (const v of Object.values(store.profiles)) if (v && isEmptySetting(v)) { if (v.G24 === '미착용') v.G24 = BLANK.G24; if (v.G25 === '압도') v.G25 = BLANK.G25; }
   if (!store.bases) store.bases = {};
   // 방어구 세트 효과 기본값을 '연산'으로 바꾼 뒤: 예전 기본값(해당사항 없음)이던 캐릭터도 한 번만 맞춰 줌
   if (!store.mig) store.mig = {};
@@ -215,7 +215,8 @@
   }
   applyBase();
   function persist() { try { localStorage.setItem(LS, JSON.stringify(store)); } catch (e) { /* 무시 */ } }
-  function applyInputs() { wb.inputs = {}; for (const [a, v] of Object.entries(inputs)) wb.inputs[SH + '!' + a] = v; wb.invalidate(); }
+  // 테네브로스 3옵(C27)은 입력란을 없앴으니 예전에 넣은 값이 있어도 계산에 안 씀(시트 기본값 0)
+  function applyInputs() { wb.inputs = {}; for (const [a, v] of Object.entries(inputs)) if (a !== 'C27') wb.inputs[SH + '!' + a] = v; wb.invalidate(); }
 
   // ---------- 숫자 표시 ----------
   const fmtInt = (n) => typeof n === 'number' ? Math.round(n).toLocaleString('ko-KR') : String(n ?? '-');
@@ -713,7 +714,7 @@
     const s = el('select', { 'data-cell': 'G25' });
     for (const o of optionsOf('G25') || []) s.append(el('option', { value: String(o), text: String(o) }));
     s.value = String(inputs.G25 ?? defaultOf('G25') ?? '');
-    return el('label', { class: 'ex-row' }, el('span', {}, '스위칭 칭호', el('small', { text: '압도·콘체르토처럼 버프로 켜는 칭호. 사진에는 상시 칭호만 나와요' })), s);
+    return el('label', { class: 'ex-row' }, el('span', {}, '스위칭 칭호'), s);
   }
   const pickSel = (c, opts, cur) => {
     const s = el('select', { 'data-cell': c });
