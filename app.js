@@ -950,9 +950,19 @@
 
   // ---------- 랭킹 화면(rank.js)과 연결 ----------
   const SKIP_EDIT = new Set(['ZB1', 'ZB2', 'ZB3', 'C12', 'C13', 'J32', 'L32', 'L42', 'I46', 'K46', 'M46', '_key', '_eq']); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
+  // 지금 세팅에서 몇 칸만 바꿨을 때의 실투력(화면·저장값은 그대로). 아바타 추천을 실투력으로 다시 줄 세울 때 씀
+  let simWb = null;
+  function cpWith(over) {
+    if (!simWb) simWb = new E.Workbook(M);
+    simWb.inputs = {};
+    for (const [a, v] of Object.entries(Object.assign({}, inputs, over || {}))) if (a !== 'C27') simWb.inputs[SH + '!' + a] = v;
+    simWb.invalidate();
+    const v = simWb.get(SH, 'C36'); return typeof v === 'number' ? v : NaN;
+  }
   window.SilApp = {
     inputs: () => Object.assign({}, inputs),
     cp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
+    cpWith,
     // 랭킹도 계산기에 넣은 그대로(강렬:초월 점유율을 직접 넣었으면 그 비율로) 반영
     rankInputs: () => Object.assign({}, inputs),
     rankCp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },

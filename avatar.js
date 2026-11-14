@@ -282,8 +282,15 @@
         result.relaxed ? el('p', { class: 'av-relax', text: `아래는 ${result.relaxed} 계산한 결과예요. 조건은 '계산 조건'·'보유 아바타'·고정 칸에서 바꿀 수 있어요` }) : ''));
     }
     if (!r.best) return;
-    const g = r.gain * 100;
-    box.append(el('p', { class: 'av-gain' }, g > 0.0005 ? el('span', null, '추천대로 바꾸면 실뎀 ', el('b', { class: 'up', text: '+' + g.toFixed(2) + '%' })) : el('span', { text: '지금 세팅이 이미 가장 좋아요' })));
+    const g = r.gain * 100, fmt = (n) => Math.round(n).toLocaleString('ko-KR');
+    if (r.cpNow > 0 && r.best.cp > 0) {
+      const up = r.best.cp - r.cpNow;
+      box.append(el('p', { class: 'av-gain' }, up >= 1
+        ? el('span', null, '추천대로 바꾸면 실투력 ', el('b', { text: fmt(r.cpNow) }), ' → ', el('b', { class: 'up', text: fmt(r.best.cp) }), el('span', { class: 'av-gain-sub', text: ` (+${(up / r.cpNow * 100).toFixed(2)}%)` }))
+        : el('span', { text: '지금 세팅이 이미 실투력이 가장 높아요' })));
+    } else {
+      box.append(el('p', { class: 'av-gain' }, g > 0.0005 ? el('span', null, '추천대로 바꾸면 실뎀 ', el('b', { class: 'up', text: '+' + g.toFixed(2) + '%' })) : el('span', { text: '지금 세팅이 이미 가장 좋아요' })));
+    }
     const tb = el('tbody');
     const rec = Object.assign({ '아바타5셋': r.best.fiveSetDisplay }, r.best.partToDisplay);
     for (const part of PARTS) {
@@ -292,7 +299,68 @@
       tb.append(el('tr', { class: same ? '' : 'chg' }, el('th', { scope: 'row', text: PART_LABEL[part] || part }), el('td', { text: short(now) || '-' }), el('td', { class: same ? 'same' : 'to', text: same ? '그대로' : short(want) })));
     }
     box.append(el('table', { class: 'av-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '부위' })), el('th', { scope: 'col', text: '지금' }), el('th', { scope: 'col', text: '추천' }))), tb));
-    box.append(el('p', { class: 'av-hint', text: `3세트: ${r.best.setLabels.join(' · ')} | ${r.mode}${r.coolTarget ? ` | 쿨감 ${r.best.coolReal}%` : ''} | 시트 기준 맨몸 대비 점수 ${r.cur.score.toFixed(2)} → ${r.best.score.toFixed(2)}` }));
+    box.append(el('p', { class: 'av-hint', text: `3세트: ${r.best.setLabels.join(' · ')} | ${r.mode}${r.coolTarget ? ` | 쿨감 ${r.best.coolReal}%` : ''} | 시트(룰루) 점수로는 실뎀 ${g >= 0 ? '+' : ''}${g.toFixed(2)}%` }));
+    if (r.cands && r.cands.length > 1 && r.best.cp > 0) box.append(el('p', { class: 'av-hint', text: `계산기 실투력 기준으로 모든 조합을 비교해서 고른 결과예요. 마지막에 후보 ${r.cands.length}개를 계산기로 정확히 다시 쟀어요` }));
+  }
+  // 아바타 점수 상위 조합을 계산기 본체(시트와 같은 실투력 계산)에 넣어 실투력으로 다시 줄 세움
+  const STAT_CELL = { '적응력': ['C14'], '초적응력': ['C15'], '강배': ['C24'], '역강배': ['C25'], '100이하': ['C26'], '추피': ['C22'], '양극화': ['C20'], '모스댐': ['C33'], '초댐증': ['C30'], '크댐증': ['C18'], '보댐증': ['C21'], '쿨감': ['C31', 'C32'] };
+  // 후보 세팅의 스탯(탐색과 같은 셈법)과 지금 낀 것의 차이만큼 계산기 칸을 바꾼 값
+  function overridesFor(r, worn, cand) {
+    const w = R.sumsToAddArr(R.wornContribution(r.db, worn || {}).sums), a = cand.addArr, inp = APP.inputs(), o = {}, cs = curStats();
+    AIDX.forEach((k, i) => {
+      const d = (a[i] || 0) - (w[i] || 0); if (!d) return;
+      if (k === '물마퍼') { const m = (100 + cs['물마퍼'] + d) / (100 + cs['물마퍼']); o.C11 = Math.round(num('C11') * m); o.C12 = Math.round(num('C12') * m); return; }
+      for (const c of STAT_CELL[k]) o[c] = Math.round(((Number(inp[c]) || 0) + d / 100) * 1e6) / 1e6;
+    });
+    const dc = Math.min(cand.coolReal, 35) - cs['쿨감'];
+    if (dc) for (const c of STAT_CELL['쿨감']) o[c] = Math.round(((Number(inp[c]) || 0) + dc / 100) * 1e6) / 1e6;
+    return o;
+  }
+  // 탐색 점수를 계산기 실투력에 맞춤: 지금 세팅에서 스탯을 조금씩 바꿔 실투력(로그)이 얼마나 변하는지 재서 씀.
+  // 적응력·양극화·쿨감은 상한이 있어서 구간별로 재고, 나머지는 1%p당 변화량. 모두 늘면 줄지 않게(상한 건너뛰기에 필요)
+  const AIDX = ['적응력', '초적응력', '강배', '역강배', '100이하', '추피', '양극화', '물마퍼', '모스댐', '초댐증', '크댐증', '보댐증'];
+  function buildScorer(db, worn) {
+    if (!APP.cpWith) return null;
+    const cp0 = APP.cpWith({}); if (!(cp0 > 0)) return null;
+    const L0 = Math.log(cp0), inp = APP.inputs(), cs = curStats(), mp = cs['물마퍼'], curCool = cs['쿨감'];
+    const over = (stat, d) => {
+      if (stat === '물마퍼') { const k = (100 + mp + d) / (100 + mp); return { C11: Math.round(num('C11') * k), C12: Math.round(num('C12') * k) }; }
+      const o = {}; for (const c of STAT_CELL[stat]) o[c] = Math.round(((Number(inp[c]) || 0) + d / 100) * 1e6) / 1e6; return o;
+    };
+    const lg = (stat, d) => { const v = APP.cpWith(over(stat, d)); return v > 0 ? Math.log(v) - L0 : 0; };
+    const table = (stat, lo, hi, step) => {
+      const xs = [], ys = []; let m = -Infinity;
+      for (let d = lo; d <= hi + 1e-9; d += step) { xs.push(d); m = Math.max(m, d === 0 ? 0 : lg(stat, d)); ys.push(m); }
+      const s0 = Math.max(0, (ys[1] - ys[0]) / step), s1 = Math.max(0, (ys[ys.length - 1] - ys[ys.length - 2]) / step);
+      return (d) => {
+        if (d <= xs[0]) return ys[0] + (d - xs[0]) * s0;
+        if (d >= xs[xs.length - 1]) return ys[ys.length - 1] + (d - xs[xs.length - 1]) * s1;
+        const i = Math.min(xs.length - 2, Math.floor((d - xs[0]) / step)), t = (d - xs[i]) / step;
+        return ys[i] + (ys[i + 1] - ys[i]) * t;
+      };
+    };
+    const w = R.sumsToAddArr(R.wornContribution(db, worn || {}).sums);
+    const lin = AIDX.map((k, i) => (i === 0 || i === 6) ? 0 : Math.max(0, lg(k, 2) / 2));
+    const tAdapt = table('적응력', -20, 20, 2.5), tPolar = table('양극화', -20, 20, 2.5);
+    const lo = Math.max(0, Math.floor(curCool) - 20), tCool = table('쿨감', lo - curCool, 35 - curCool, 1);
+    return (a, cool) => {
+      let L = 0;
+      for (let i = 0; i < 12; i++) if (lin[i]) L += lin[i] * (a[i] - w[i]);
+      L += tAdapt(a[0] - w[0]) + tPolar(a[6] - w[6]);
+      if (cool != null) L += tCool(Math.min(cool, 35) - curCool);
+      return L * 1000;
+    };
+  }
+  function rerank(r, worn) {
+    if (!r || !r.cands || !r.cands.length || !APP.cpWith) return r;
+    r.cpNow = APP.cpWith({});
+    for (const c of r.cands) c.cp = APP.cpWith(overridesFor(r, worn, c));
+    const top = r.cands.slice().sort((a, b) => b.cp - a.cp)[0];
+    if (!(top.cp > 0)) return r;
+    r.scoreRank = r.cands.indexOf(top) + 1;
+    r.best = top; r.mode = top.mode || r.mode;
+    r.gain = (100 + (top.rScore != null ? top.rScore : top.score)) / (100 + r.cur.score) - 1;
+    return r;
   }
   function runRec() {
     const btn = $('#btnAvRun');
@@ -303,7 +371,8 @@
       try {
         const p = prof(), c = calcOpts(), cur = curStats();
         const owned = st.ownOn ? new Set([...(st.own || []), ...PARTS.map(x => p.worn[x]).filter(Boolean)]) : null;
-        const go = (o, fixed, fiveFixed) => R.run({ items: A.items, chars: A.chars, cls: sheetClass(APP.cls()), cur, worn: p.worn, fixed, fiveFixed, opt: Object.assign({}, st.o, c, o) });
+        const db = R.prepareDb(A.items), scorer = buildScorer(db, p.worn);
+        const go = (o, fixed, fiveFixed) => rerank(R.run({ items: A.items, chars: A.chars, cls: sheetClass(APP.cls()), cur, worn: p.worn, fixed, fiveFixed, opt: Object.assign({ topK: 50, scorer }, st.o, c, o) }), p.worn);
         const fx = p.fixed || {}, f5 = !!p.fiveFixed, anyFix = f5 || Object.values(fx).some(Boolean);
         const r = go({ owned }, fx, f5);
         result = { r };
@@ -378,6 +447,6 @@
     APP.onRefresh(() => { const k = APP.key(); if (k !== lastKey) { lastKey = k; lastRec = null; result = null; render(); } else if (result) { result = null; renderResult(); } });
     render();
   }
-  window.SilAvatar = { fromShot, recognize, render, curStats, calcOpts };
+  window.SilAvatar = { fromShot, recognize, render, curStats, calcOpts, buildScorer, rerank };
   wire();
 })();

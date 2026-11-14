@@ -470,6 +470,7 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .av-chip.on { background: var(--blue-weak); color: var(--blue-dark); border-color: var(--blue); }
 .av-gain { margin: 14px 0 8px; font-size: 15px; }
 .av-gain b.up { font-size: 18px; }
+.av-gain-sub { color: var(--mute); font-size: 13px; }
 .av-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .av-table th, .av-table td { padding: 8px 4px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .av-table thead th { color: var(--mute); font-weight: 500; font-size: 12px; }

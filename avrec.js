@@ -38,6 +38,8 @@
     ];
   }
   function computeScore(b, a, env, crit) { let t = 1; for (const f of factors(b, a, env, crit)) t *= f; return t * 100 - 100; }
+  // 탐색 점수: 기본은 시트(룰루) 점수, opt.scorer를 주면 그걸로(예: 계산기 실투력을 흉내 낸 점수 — 스탯·쿨감이 늘면 줄지 않아야 함)
+  function sf(ctx, a, cool) { return ctx.scorer ? ctx.scorer(a, cool) : computeScore(ctx.baseStat, a, ctx.envDebuff, ctx.baseCritReal); }
 
   // 아이템DB 가공 (한 번만)
   function prepareDb(items) {
@@ -169,7 +171,7 @@
       fiveSetStats: db.fiveSetStats, fiveSetList, fiveSetFixed, current5set,
       eliosFixedParts, eliosK: eliosFixedParts.length, eliosEffect3: effOf(ELIOS_SET_NAME, 3), eliosEffect4: effOf(ELIOS_SET_NAME, 4),
       eliosPartStats, eliosDisplayByPart, eligibleSets, ownedFilterOn: !!owned, mustSets: (opt.mustSets || []).filter(Boolean),
-      keepRatio: opt.keepRatio != null ? Number(opt.keepRatio) : 1, _bestScore: -Infinity, // 기본은 모든 조합(상한으로 건너뛰기) — 시트처럼 상위 30%만 보려면 keepRatio 0.3
+      keepRatio: opt.keepRatio != null ? Number(opt.keepRatio) : 1, topK: Math.max(1, Number(opt.topK) || 1), _top: [], scorer: typeof opt.scorer === 'function' ? opt.scorer : null, // 기본은 모든 조합(상한으로 건너뛰기) — 시트처럼 상위 30%만 보려면 keepRatio 0.3
       _setPartInfo: new Map(), _setEffect: new Map()
     };
     const fiveSets = fiveSetFixed ? (current5set ? [current5set] : fiveSetList) : fiveSetList;
@@ -194,7 +196,17 @@
       }
     }
     if (best) best.fiveSetDisplay = db.fiveSetDisplay.get(best.fiveSet) || (best.fiveSet + ' 5셋');
-    return { cur: { score: curScore, sums: J.sums, active: J.active }, bare, best, mode,
+    // 후보 목록: 표준 조합 상위 K개 + 엘리오스 빌드(있으면) — 점수순
+    const cands = ctx._top.slice();
+    if (best && !cands.some(c => c.score === best.score && c.fiveSet === best.fiveSet)) cands.push(best);
+    cands.sort((a, b) => b.score - a.score);
+    for (const c of cands) {
+      c.fiveSetDisplay = db.fiveSetDisplay.get(c.fiveSet) || (c.fiveSet + ' 5셋'); c.mode = c === best ? mode : '표준 9파츠';
+      // 후보 스탯은 탐색과 같은 방식(고른 3세트·5셋 효과만)으로 — 남은 3부위가 우연히 다른 세트 효과를 켜도 시트처럼 셈하지 않음
+      if (!c.addArr) c.addArr = sumsToAddArr(wornContribution(db, Object.assign({ '아바타5셋': c.fiveSetDisplay }, c.partToDisplay)).sums);
+      c.rScore = computeScore(bare.base, c.addArr, env, bare.baseCritReal);
+    }
+    return { cur: { score: curScore, sums: J.sums, active: J.active }, bare, best, mode, cands, db,
       gain: best ? (100 + best.score) / (100 + curScore) - 1 : 0, coolTarget };
   }
 
@@ -249,12 +261,12 @@
     const f = best.finals[0], partToDisplay = {};
     for (let i = 0; i < 9; i++) partToDisplay[f.rec.parts[i]] = f.rec.displays[i];
     for (let i = 0; i < 3; i++) partToDisplay[f.rec.remain[i]] = f.best[i];
-    return { fiveSet: best.set, score: f.finalScore, coolReal: f.coolReal, partToDisplay, setLabels: [f.rec.set1, f.rec.set2, f.rec.set3] };
+    return { fiveSet: best.set, score: f.finalScore, coolReal: f.coolReal, partToDisplay, setLabels: [f.rec.set1, f.rec.set2, f.rec.set3], addArr: f.arr };
   }
   function process5Set(ctx, fiveSet, recs, forcedBase) {
     const offset = mergeSums(ctx.fiveSetStats.get(fiveSet) || null, forcedBase);
     const baseCool = ctx.baseCooldownBare + (offset ? (offset['쿨감'] || 0) : 0);
-    let scored = recs.map(rec => { const addArr = offset ? addArrPlus(rec.baseAddArr, offset) : rec.baseAddArr; return { rec, addArr, score: computeScore(ctx.baseStat, addArr, ctx.envDebuff, ctx.baseCritReal) }; });
+    let scored = recs.map(rec => { const addArr = offset ? addArrPlus(rec.baseAddArr, offset) : rec.baseAddArr; return { rec, addArr, score: sf(ctx, addArr, Math.min(baseCool + rec.cool9, COOLDOWN_CAP)) }; });
     const T = ctx.coolTarget, atLeast = ctx.coolMode === 'atleast';
     if (ctx.coolOn) {
       scored = scored.filter(it => {
@@ -274,9 +286,9 @@
     const finals = [], ZERO = emptySums();
     const maxVec = exact ? partMaxVec(ctx) : null;
     for (const it of top) {
-      if (exact && ctx._bestScore > -Infinity) {
-        let ub = it.addArr; for (const p of it.rec.remain) ub = addArrPlus(ub, maxVec.get(p));
-        if (computeScore(ctx.baseStat, ub, ctx.envDebuff, ctx.baseCritReal) <= ctx._bestScore) continue;
+      if (exact && thr(ctx) > -Infinity) {
+        let ub = it.addArr, uc = baseCool + it.rec.cool9; for (const p of it.rec.remain) { ub = addArrPlus(ub, maxVec.get(p)); uc += Math.max(0, maxVec.get(p)['쿨감'] || 0); }
+        if (sf(ctx, ub, Math.min(uc, COOLDOWN_CAP)) <= thr(ctx)) continue;
       }
       const rec = it.rec, spd = {};
       for (let q = 0; q < 9; q++) spd[rec.parts[q]] = rec.displays[q];
@@ -288,16 +300,29 @@
         if (ctx.fixedChecks[part]) list = list.filter(d => d === ctx.currentFixedDisplays[part]);
         return list.map(d => { const s = ctx.statsByDisplay.get(d) || ZERO; return { d, s, cool: s['쿨감'] || 0 }; });
       });
-      const b9 = baseCool + rec.cool9; let bs = -Infinity, bA = '', bB = '', bC = '', bCool = 0;
+      const b9 = baseCool + rec.cool9; let bs = -Infinity, bA = '', bB = '', bC = '', bCool = 0, bArr = null;
       for (const x of cl[0]) { const a0 = addArrPlus(it.addArr, x.s), cA = b9 + x.cool;
         for (const y of cl[1]) { const ab = addArrPlus(a0, y.s), cAB = cA + y.cool;
           for (const z of cl[2]) { const tc = Math.min(cAB + z.cool, COOLDOWN_CAP);
             if (ctx.coolOn && (atLeast ? tc < T : tc !== T)) continue;
-            const sc = computeScore(ctx.baseStat, addArrPlus(ab, z.s), ctx.envDebuff, ctx.baseCritReal);
-            if (sc > bs) { bs = sc; bA = x.d; bB = y.d; bC = z.d; bCool = tc; } } } }
-      if (bs > -Infinity) { finals.push({ rec, best: [bA, bB, bC], finalScore: bs, score9: it.score, coolReal: bCool }); if (bs > ctx._bestScore) ctx._bestScore = bs; }
+            const arr = addArrPlus(ab, z.s), sc = sf(ctx, arr, tc);
+            if (sc > bs) { bs = sc; bA = x.d; bB = y.d; bC = z.d; bCool = tc; bArr = arr; } } } }
+      if (bs > -Infinity) { finals.push({ rec, best: [bA, bB, bC], finalScore: bs, score9: it.score, coolReal: bCool, arr: bArr }); pushTop(ctx, bs, () => candOf(fiveSet, rec, [bA, bB, bC], bs, bCool, bArr)); }
     }
     return finals;
+  }
+  // 상위 K개 조합 보관(실투력 계산기로 다시 줄 세우기용). 상한 건너뛰기는 K번째 점수를 기준으로 함
+  function thr(ctx) { return ctx._top.length < ctx.topK ? -Infinity : ctx._top[ctx._top.length - 1].score; }
+  function pushTop(ctx, score, make) {
+    if (score <= thr(ctx)) return;
+    const c = make(); const t = ctx._top; let i = t.length; while (i > 0 && t[i - 1].score < score) i--;
+    t.splice(i, 0, c); if (t.length > ctx.topK) t.pop();
+  }
+  function candOf(fiveSet, rec, rest, score, coolReal, addArr) {
+    const partToDisplay = {};
+    for (let i = 0; i < 9; i++) partToDisplay[rec.parts[i]] = rec.displays[i];
+    for (let i = 0; i < 3; i++) partToDisplay[rec.remain[i]] = rest[i];
+    return { fiveSet, score, coolReal, partToDisplay, setLabels: [rec.set1, rec.set2, rec.set3], addArr };
   }
   // 부위마다 후보 아이템들의 스탯별 최댓값(고정한 부위는 그 아이템 그대로) — 점수 상한 계산용
   function partMaxVec(ctx) {
@@ -341,7 +366,7 @@
               const off = ctx.fiveSetStats.get(fiveSet) || null, addArr0 = off ? addArrPlus(bAA, off) : bAA.slice();
               const cool0 = ctx.baseCooldownBare + (off ? (off['쿨감'] || 0) : 0) + base['쿨감'];
               const fr = optimizeFree(ctx, free, addArr0, cool0, T, atLeast); if (!fr) continue;
-              if (!best || fr.score > best.score) { const full = Object.assign({}, pd); free.forEach((p, t) => { full[p] = fr.displays[t]; }); best = { fiveSet, score: fr.score, coolReal: fr.cool, partToDisplay: full, setLabels: [ELIOS_SET_NAME, s2, s3] }; }
+              if (!best || fr.score > best.score) { const full = Object.assign({}, pd); free.forEach((p, t) => { full[p] = fr.displays[t]; }); best = { fiveSet, score: fr.score, coolReal: fr.cool, partToDisplay: full, setLabels: [ELIOS_SET_NAME, s2, s3], addArr: fr.arr }; }
             }
           }
         }
@@ -353,14 +378,14 @@
     const ZERO = emptySums();
     const cl = free.map(part => { let list = [...(ctx.partCandidates.get(part) || [])]; if (ctx.fixedChecks[part]) list = list.filter(d => d === ctx.currentFixedDisplays[part]); return list.map(d => { const s = ctx.statsByDisplay.get(d) || ZERO; return { d, s, cool: s['쿨감'] || 0 }; }); });
     const bad = (t) => ctx.coolOn && (atLeast ? t < T : t !== T);
-    if (free.length === 0) { const t = Math.min(cool0, COOLDOWN_CAP); if (bad(t)) return null; return { score: computeScore(ctx.baseStat, baseAddArr, ctx.envDebuff, ctx.baseCritReal), displays: [], cool: t }; }
+    if (free.length === 0) { const t = Math.min(cool0, COOLDOWN_CAP); if (bad(t)) return null; return { score: sf(ctx, baseAddArr, t), displays: [], cool: t, arr: baseAddArr }; }
     let best = null;
-    if (free.length === 1) { for (const x of cl[0]) { const t = Math.min(cool0 + x.cool, COOLDOWN_CAP); if (bad(t)) continue; const sc = computeScore(ctx.baseStat, addArrPlus(baseAddArr, x.s), ctx.envDebuff, ctx.baseCritReal); if (!best || sc > best.score) best = { score: sc, displays: [x.d], cool: t }; } return best; }
-    if (free.length === 2) { for (const x of cl[0]) for (const y of cl[1]) { const t = Math.min(cool0 + x.cool + y.cool, COOLDOWN_CAP); if (bad(t)) continue; const sc = computeScore(ctx.baseStat, addArrPlus(addArrPlus(baseAddArr, x.s), y.s), ctx.envDebuff, ctx.baseCritReal); if (!best || sc > best.score) best = { score: sc, displays: [x.d, y.d], cool: t }; } return best; }
+    if (free.length === 1) { for (const x of cl[0]) { const t = Math.min(cool0 + x.cool, COOLDOWN_CAP); if (bad(t)) continue; const arr = addArrPlus(baseAddArr, x.s), sc = sf(ctx, arr, t); if (!best || sc > best.score) best = { score: sc, displays: [x.d], cool: t, arr }; } return best; }
+    if (free.length === 2) { for (const x of cl[0]) for (const y of cl[1]) { const t = Math.min(cool0 + x.cool + y.cool, COOLDOWN_CAP); if (bad(t)) continue; const arr = addArrPlus(addArrPlus(baseAddArr, x.s), y.s), sc = sf(ctx, arr, t); if (!best || sc > best.score) best = { score: sc, displays: [x.d, y.d], cool: t, arr }; } return best; }
     return null;
   }
 
-  const api = { run, prepareDb, wornContribution, bareStats, computeScore, ALL_PARTS, TARGET_STATS, GUILD, ATMA, MEDAL, IMPRINT, RALLY: ['없음', '수색대원의 결의', '엘 하우스 버프', '강화 엘 하우스 버프', '공존의 축제 버프'] };
+  const api = { run, prepareDb, wornContribution, bareStats, computeScore, sumsToAddArr, ALL_PARTS, TARGET_STATS, GUILD, ATMA, MEDAL, IMPRINT, RALLY: ['없음', '수색대원의 결의', '엘 하우스 버프', '강화 엘 하우스 버프', '공존의 축제 버프'] };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SilAvRec = api;
 })(typeof window !== 'undefined' ? window : globalThis);
