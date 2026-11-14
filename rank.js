@@ -18,12 +18,20 @@
     rs.sort((a, b) => (b.status === 'approved') - (a.status === 'approved'));
     return [...new Set(rs.map(r => r.token))].slice(0, 5).join(',');
   }
+  // 이 브라우저를 구분하는 임의 번호(갱신 코드를 여러 기기에서 돌려 쓰는지 알아보는 용도, 개인 정보 아님)
+  function devId() {
+    try {
+      let d = localStorage.getItem('silcalc.dev');
+      if (!d) { const a = new Uint8Array(12); crypto.getRandomValues(a); d = [...a].map(x => x.toString(16).padStart(2, '0')).join(''); localStorage.setItem('silcalc.dev', d); }
+      return d;
+    } catch (e) { return ''; }
+  }
   function sb() {
     if (!sbP) sbP = new Promise((res, rej) => {
       // 랭킹은 승인된 갱신 코드가 있는 사람만 볼 수 있어서, 갖고 있는 갱신 코드를 요청마다 같이 보냄(서버가 확인)
       const withCode = (url, opts) => {
         const t = viewCodes(); if (!t) return fetch(url, opts);
-        const o = Object.assign({}, opts); const h = new Headers(o.headers || {}); h.set('x-sil-token', t); o.headers = h;
+        const o = Object.assign({}, opts); const h = new Headers(o.headers || {}); h.set('x-sil-token', t); const d = devId(); if (d) h.set('x-sil-dev', d); o.headers = h;
         return fetch(url, o);
       };
       const make = () => res(window.supabase.createClient(SB_URL, SB_KEY, { auth: { flowType: 'implicit', persistSession: true, detectSessionInUrl: true }, global: { fetch: withCode } }));
@@ -437,6 +445,7 @@
       el('label', { class: 'ex-row' }, el('span', {}, '닉네임', el('small', { text: '게임 닉네임 그대로' })), nick),
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
       el('p', { text: '게임 채팅창에 이 코드를 입력한 다음, 채팅이 보이게 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요. PC방 혜택과 지애 버프는 끄고 찍어 주세요.' }),
+      el('p', { class: 'apply-privacy', text: '신청하면 닉네임, 계산기 세팅, 스크린샷이 랭킹용으로 저장돼요. 랭킹을 볼 때는 본 기록(본 캐릭터, 시각, 기기 구분용 임의 번호)이 180일 동안 남아요. IP 주소는 모으지 않아요.' }),
       shotBox, file,
       el('div', { class: 'dlg-actions' }, el('button', { type: 'button', class: 'btn', text: '취소', onclick: close }), send));
     const wrap = el('div', { class: 'dialog', id: 'applyDlg' }, card);
@@ -651,11 +660,11 @@
     for (const h of hsLive) live.append(updItem(h));
 
     body.append(wmFinder());
-    // 열람 기록: 누가 언제 무엇을 봤는지(IP 포함). 이상하면 그 사람을 아래에서 숨기면 랭킹도 못 봐요
+    // 열람 기록: 누가 언제 무엇을 봤는지 + 기기 수(갱신 코드 돌려쓰기 확인). 이상하면 그 사람을 아래에서 숨기면 랭킹도 못 봐요
     const logs = el('div', { class: 'adm-sec' }, el('h3', { text: '열람 기록' }),
-      el('p', { class: 'rank-note', text: '랭킹 목록과 상세(사진·세팅)를 본 기록이에요. 최근 300개, 180일 지나면 지워져요. 이름을 누르면 그 사람 기록만 보여요.' }));
+      el('p', { class: 'rank-note', text: '랭킹 목록과 상세(사진·세팅)를 본 기록이에요. 최근 300개, 180일 지나면 지워져요. 이름을 누르면 그 사람 기록만 보여요. 한 사람이 최근 7일 동안 기기 4대 이상에서 봤으면 갱신 코드를 나눠 줬을 수 있어요.' }));
     body.append(logs);
-    const { data: lg, error: e4 } = await c.from('view_log').select('at,viewer,viewer_nick,kind,target_nick,ip,ua').order('at', { ascending: false }).limit(300);
+    const { data: lg, error: e4 } = await c.from('view_log').select('at,viewer,viewer_nick,kind,target_nick,dev').order('at', { ascending: false }).limit(300);
     if (e4) throw e4;
     const logBox = el('div', { class: 'adm-logs' });
     let only = null;
@@ -665,14 +674,17 @@
       const rows = only ? lg.filter(l => l.viewer === only) : lg;
       if (only) logBox.append(el('button', { type: 'button', class: 'txt sm', text: '전체 기록 보기', onclick: () => { only = null; drawLogs(); } }));
       if (!rows.length) logBox.append(el('p', { class: 'rank-note', text: '아직 기록이 없어요' }));
-      const cnt = {};
-      for (const l of lg) if (l.kind === 'detail' && Date.now() - new Date(l.at) < 864e5) cnt[l.viewer] = (cnt[l.viewer] || 0) + 1;
+      const cnt = {}, devs = {};
+      for (const l of lg) {
+        if (l.kind === 'detail' && Date.now() - new Date(l.at) < 864e5) cnt[l.viewer] = (cnt[l.viewer] || 0) + 1;
+        if (l.dev && Date.now() - new Date(l.at) < 7 * 864e5) (devs[l.viewer] = devs[l.viewer] || new Set()).add(l.dev);
+      }
       for (const l of rows) {
-        const many = cnt[l.viewer] >= 30;
+        const nDev = devs[l.viewer] ? devs[l.viewer].size : 0, many = cnt[l.viewer] >= 30 || nDev >= 4;
         logBox.append(el('div', { class: 'adm-log' + (many ? ' many' : '') },
           el('button', { type: 'button', class: 'txt sm nm', text: l.viewer_nick || '지워진 캐릭터', onclick: () => { only = l.viewer; drawLogs(); } }),
           el('span', { text: kindText(l) }),
-          el('small', { text: `${ago(l.at)}${l.ip ? ', ' + l.ip : ''}${many ? ', 하루 상세 ' + cnt[l.viewer] + '번' : ''}` })));
+          el('small', { text: `${ago(l.at)}${nDev ? `, 기기 ${nDev}대(7일)` : ''}${cnt[l.viewer] >= 30 ? ', 하루 상세 ' + cnt[l.viewer] + '번' : ''}` })));
       }
     };
     drawLogs(); logs.append(logBox);
