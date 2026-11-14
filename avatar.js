@@ -202,6 +202,11 @@
       renderTag();
       body.append(el('div', { class: 'av-row' }, el('span', { class: 'av-part', text: PART_LABEL[part] || part }), tag, sel, el('label', { class: 'av-fix' }, fx, el('span', { text: '고정' }))));
     }
+    const allFixed = !!p.fiveFixed && PARTS.slice(1).every(x => p.fixed[x]);
+    body.append(el('div', { class: 'av-fix-acts' },
+      el('button', { type: 'button', class: 'txt sm', text: '전체 고정', onclick: () => { p.fiveFixed = true; for (const x of PARTS.slice(1)) p.fixed[x] = true; save(); result = null; render(); } }),
+      el('button', { type: 'button', class: 'txt sm mute', text: '고정 해제', onclick: () => { p.fiveFixed = false; p.fixed = {}; save(); result = null; render(); } }),
+      allFixed ? el('span', { class: 'av-hint', text: '모두 고정하면 지금 세팅 그대로예요' }) : ''));
     renderStats(); renderOpts(); renderOwn(); renderResult();
   }
   function renderStats() {
@@ -238,16 +243,29 @@
     const own = new Set(st.own || []);
     const p = prof(); for (const part of PARTS) if (p.worn[part]) own.add(p.worn[part]);
     const sets = A.sets.filter(s => db.fiveSetStats.has(s) || db.setToParts.has(s));
-    for (const s of sets) {
+    const itemsOf = (s) => {
       const items = [];
       if (db.fiveSetDisplay.has(s)) items.push(db.fiveSetDisplay.get(s));
       for (const part of (db.setToParts.get(s) || [])) { const d = db.displayBySetPart.get(s + '||' + part); if (d) items.push(d); }
+      return items;
+    };
+    const setOwn = (list) => { st.own = [...new Set(list)]; save(); result = null; renderOwn(); renderResult(); };
+    const all = sets.flatMap(itemsOf);
+    box.append(el('div', { class: 'av-own-acts' },
+      el('button', { type: 'button', class: 'txt sm', text: '전체 선택', onclick: () => setOwn(all) }),
+      el('button', { type: 'button', class: 'txt sm mute', text: '전체 취소', onclick: () => setOwn([]) }),
+      el('span', { class: 'av-hint', text: '지금 낀 아이템은 늘 가진 것으로 쳐요. 세트 이름을 누르면 그 세트를 한꺼번에 골라요' })));
+    for (const s of sets) {
+      const items = itemsOf(s);
       const chips = items.map(d => {
         const b = el('button', { type: 'button', class: 'av-chip' + (own.has(d) ? ' on' : ''), text: d.replace(s, '').replace(/^ : /, '').trim() || d, 'aria-pressed': own.has(d) ? 'true' : 'false' });
-        b.onclick = () => { const cur = new Set(st.own || []); if (cur.has(d)) cur.delete(d); else cur.add(d); st.own = [...cur]; save(); result = null; renderOwn(); renderResult(); };
+        b.onclick = () => { const cur = new Set(st.own || []); if (cur.has(d)) cur.delete(d); else cur.add(d); setOwn([...cur]); };
         return b;
       });
-      box.append(el('div', { class: 'av-own-set' }, el('span', { class: 'av-own-name', text: s }), el('div', { class: 'av-chips' }, ...chips)));
+      const allOn = items.every(d => own.has(d));
+      const name = el('button', { type: 'button', class: 'av-own-name', text: s, title: allOn ? '이 세트 모두 빼기' : '이 세트 모두 고르기' });
+      name.onclick = () => { const cur = new Set(st.own || []); for (const d of items) { if (allOn) cur.delete(d); else cur.add(d); } setOwn([...cur]); };
+      box.append(el('div', { class: 'av-own-set' }, name, el('div', { class: 'av-chips' }, ...chips)));
     }
   }
   function renderResult() {

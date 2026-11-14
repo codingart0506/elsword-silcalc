@@ -453,7 +453,8 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .av-opt .av-hint { flex-basis: 100%; margin: 0; }
 .av-own-on { margin: 4px 0 10px; }
 .av-own-set { padding: 8px 0; border-bottom: 1px solid var(--line); }
-.av-own-name { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.av-own-name { display: block; font: inherit; font-size: 13px; font-weight: 600; margin: 0 0 6px; padding: 0; background: none; border: 0; color: var(--text); cursor: pointer; text-align: left; }
+.av-own-name:hover { color: var(--blue); }
 .av-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .av-chip { font: inherit; font-size: 12px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--sub); cursor: pointer; }
 .av-chip.on { background: var(--blue-weak); color: var(--blue-dark); border-color: var(--blue); }
@@ -485,3 +486,7 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .av-warn b { display: block; color: var(--up); font-size: 14px; margin-bottom: 4px; }
 .av-warn p { margin: 2px 0 0; }
 .av-warn .av-relax { margin-top: 6px; color: var(--text); }
+.av-own-acts, .av-fix-acts { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; padding: 4px 0 8px; }
+.av-own-acts .av-hint, .av-fix-acts .av-hint { margin: 0; flex-basis: 100%; }
+.av-fix-acts { justify-content: flex-end; padding-top: 8px; }
+.av-fix-acts .av-hint { text-align: right; }
