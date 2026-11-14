@@ -105,7 +105,7 @@
   const BLANK = Object.assign({ C6: '' }, Object.fromEntries(STAT_CELLS.map(a => [a, null])), {
     H11: 0.1, H12: 0, H13: 0, ZB1: false, ZB2: false, ZB3: false, H15: '사용', H16: '이상', F17: '격려 재사용 시간 감소', F18: '격려 재사용 시간 감소', H17: 0.15, H18: 0.15,
     D20: '물리 공격력 증가 (%)', D21: '크리티컬 데미지 증가 (%)', D22: '스킬 데미지 증가 (%)', H20: 0.05, H21: 0.05, H22: 0.05,
-    G24: '미착용', G25: '미착용', G27: '해당사항 없음', G28: '해당사항 없음', G29: '해당사항 없음', G30: '해당사항 없음',
+    G24: 'Dogma', G25: '압도', G27: '해당사항 없음', G28: '해당사항 없음', G29: '해당사항 없음', G30: '해당사항 없음',
     H31: 0, H32: 0, H33: 0, D35: '황색', G35: '5세트',
     L11: '미사용', L12: '미사용', L13: '미사용', L14: '미사용', L15: '미사용',
     J17: '엘 하우스(강화)', J18: '천상의 디저트파티', J19: '사용', J20: '투지의 물약', J21: '적용2-녹엑사 (팟모스뎀, 팟물마 10%)', J22: '미적용', J23: '아리엘의 스페셜 기프트 마크',
@@ -122,6 +122,8 @@
   for (const [k, v] of Object.entries(store.profiles)) if (!v || !Object.keys(v).length) { store.profiles[k] = blank(); if (store.bases) delete store.bases[k]; }
   // 예전 기본값(각인 없음)이던 캐릭터는 기본 각인으로
   for (const v of Object.values(store.profiles)) if (v && v.D20 === '해당사항 없음' && v.D21 === '해당사항 없음' && v.D22 === '해당사항 없음' && v.H20 === '해당사항 없음') Object.assign(v, { D20: BLANK.D20, D21: BLANK.D21, D22: BLANK.D22, H20: 0.05, H21: 0.05, H22: 0.05 });
+  // 칭호 기본값(상시 Dogma, 스위칭 압도): 아직 아무것도 안 넣은 캐릭터만 새 기본값으로
+  for (const v of Object.values(store.profiles)) if (v && isEmptySetting(v) && v.G24 === '미착용' && v.G25 === '미착용') Object.assign(v, { G24: BLANK.G24, G25: BLANK.G25 });
   if (!store.bases) store.bases = {};
   // 방어구 세트 효과 기본값을 '연산'으로 바꾼 뒤: 예전 기본값(해당사항 없음)이던 캐릭터도 한 번만 맞춰 줌
   if (!store.mig) store.mig = {};
