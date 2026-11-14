@@ -261,7 +261,8 @@
     const row = el('div', { class: 'srow' + (fields.length > 1 ? ' multi' : '') + (f0.plain ? ' plain' : '') });
     const labText = f0.t || (f0.lab ? label(f0.lab) : '');
     const lab = el('label', { class: 'lab', for: 'in-' + f0.c, 'data-labcell': f0.t ? null : (f0.lab || null) }, labText);
-    if (labText) row.append(lab);
+    // 직업에 따라 바뀌는 이름(I11 등)은 처음에 비어 있어도 자리를 둬야 나중에 이름이 채워짐
+    if (labText || f0.lab) row.append(lab);
     const help = HELP[f0.c];
     if (help) row.append(el('details', { class: 'help' }, el('summary', { 'aria-label': '도움말', text: '?' }), el('p', { text: help })));
     const ctl = el('div', { class: 'ctl' });
@@ -301,13 +302,19 @@
       $('#pane-' + t.id).hidden = !on;
     }
   }
+  // 보기 글자를 짧게(값은 시트 그대로): 금빛 각인석 '물리 공격력 증가 (%)' → '물리 공격력 증가'
+  function optText(a, o) {
+    const s = String(o);
+    if (/^D2[0-2]$/.test(a)) return s.replace(/\s*\(%\)$/, '').replace('보스에게 입히는 피해 증가', '보스 피해 증가');
+    return s;
+  }
   function fillSelect(node, a) {
     const opts = optionsOf(a) || [];
     const cur = g(a);
     const key = opts.join('\u0001');
     if (node._key !== key) {
       node.innerHTML = '';
-      for (const o of opts) node.append(el('option', { value: String(o), text: typeof o === 'number' && PCT.has(a) ? fmtPct(o, 0) : String(o) }));
+      for (const o of opts) node.append(el('option', { value: String(o), text: typeof o === 'number' && PCT.has(a) ? fmtPct(o, 0) : optText(a, o) }));
       node._key = key;
     }
     if (!opts.some(o => String(o) === String(cur))) {
@@ -330,7 +337,7 @@
   function syncLabels() {
     document.querySelectorAll('[data-labcell]').forEach(n => { const t = label(n.getAttribute('data-labcell')); if (n.textContent !== t) n.textContent = t; });
     for (const [a, c] of Object.entries(controls)) {
-      if (c.row && /^L1[1-4]$/.test(a)) c.row.classList.toggle('muted', label('I' + a.slice(1)) === '관련스킬 없음');
+      if (c.row && /^L1[1-4]$/.test(a)) { const t = label('I' + a.slice(1)); c.row.classList.toggle('muted', !t || t === '관련스킬 없음'); }
     }
   }
 
