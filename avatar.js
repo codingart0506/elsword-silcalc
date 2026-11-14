@@ -161,6 +161,15 @@
     return r;
   }
   let lastRec = null, result = null;
+  async function readShot(blob) {
+    const note = $('#avNote'); note.textContent = '스크린샷에서 아바타를 찾는 중이에요';
+    try {
+      const bm = await createImageBitmap(blob);
+      const c = document.createElement('canvas'); c.width = bm.width; c.height = bm.height; c.getContext('2d').drawImage(bm, 0, 0);
+      const gear = window.SilGear ? window.SilGear.recognize(c) : null;
+      await fromShot(c, gear || {});
+    } catch (e) { console.error(e); lastRec = { ok: false, why: '사진을 읽지 못했어요' }; render(); }
+  }
 
   // ---------- 카드 ----------
   const OPT_SEL = { guild: Object.keys(R.GUILD), medal: Object.keys(R.MEDAL) };
@@ -298,16 +307,17 @@
     wireViews();
     $('#btnAvRun').onclick = runRec;
     const fin = $('#avShotIn');
-    if (fin) fin.onchange = async () => {
-      const f = fin.files && fin.files[0]; fin.value = ''; if (!f) return;
-      $('#avNote').textContent = '스크린샷에서 아바타를 찾는 중이에요';
-      try {
-        const bm = await createImageBitmap(f);
-        const c = document.createElement('canvas'); c.width = bm.width; c.height = bm.height; c.getContext('2d').drawImage(bm, 0, 0);
-        const gear = window.SilGear ? window.SilGear.recognize(c) : null;
-        await fromShot(c, gear || {});
-      } catch (e) { console.error(e); lastRec = { ok: false, why: '사진을 읽지 못했어요' }; render(); }
-    };
+    if (fin) fin.onchange = () => { const f = fin.files && fin.files[0]; fin.value = ''; if (f) readShot(f); };
+    document.addEventListener('paste', (e) => {
+      if (!document.body.classList.contains('view-avatar')) return;
+      const it = [...(e.clipboardData ? e.clipboardData.items : [])].find(i => i.type.startsWith('image/'));
+      if (it) { e.preventDefault(); readShot(it.getAsFile()); }
+    });
+    const drop = $('#avCard');
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drop-on'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('drop-on'));
+    drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('drop-on'); const f = [...e.dataTransfer.files].find(x => x.type.startsWith('image/')); if (f) readShot(f); });
+    if (matchMedia('(pointer: coarse)').matches) $('#avDropMain').textContent = 'PC에서 캐릭터 장비창을 띄우고 찍은 스크린샷을 골라 주세요';
     let lastKey = APP.key();
     APP.onRefresh(() => { const k = APP.key(); if (k !== lastKey) { lastKey = k; lastRec = null; result = null; render(); } else if (result) { result = null; renderResult(); } });
     render();

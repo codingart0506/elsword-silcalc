@@ -6,7 +6,7 @@
 <title>엘소드 실투력 계산기</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%233182F6%22/%3E%3Cpath d=%22M9 20 L14 14 L18 17 L23 10%22 stroke=%22white%22 stroke-width=%223%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 
-<link rel="stylesheet" href="style.css?v=2fc8747f">
+<link rel="stylesheet" href="style.css?v=db932d4d">
 </head>
 <body>
 <div class="wrap">
@@ -125,9 +125,10 @@
 
   <div class="av-view" id="avView" hidden>
     <section class="card av-card" id="avCard" aria-labelledby="avTitle">
-      <div class="av-title">
-        <h2 id="avTitle">가열기 아바타 추천</h2>
-        <label class="btn sm av-shot-btn">장비창 스크린샷 읽기<input type="file" accept="image/*" id="avShotIn" hidden></label>
+      <h2 id="avTitle">가열기 아바타 추천</h2>
+      <div class="av-drop" id="avDrop">
+        <p class="av-drop-main" id="avDropMain">캐릭터 장비창을 띄우고 <span class="nw"><kbd>PrtSc</kbd> →</span> <span class="nw">여기서 <kbd>Ctrl</kbd> + <kbd>V</kbd></span></p>
+        <label class="btn sm av-shot-btn">이미지 열기<input type="file" accept="image/*" id="avShotIn" hidden></label>
       </div>
       <p class="opt-sub" id="avNote">장비창 스크린샷을 읽으면 지금 입은 아바타가 자동으로 채워져요</p>
       <div class="av-head" aria-hidden="true"><span>부위</span><span>지금 착용</span><span>고정</span></div>
@@ -217,8 +218,8 @@
 <script src="opt.js?v=8522dd93"></script>
 <script src="avdata.js?v=40a37e76"></script>
 <script src="avrec.js?v=7c0b72c7"></script>
-<script src="app.js?v=da81c1fe"></script>
-<script src="avatar.js?v=85d1c943"></script>
+<script src="app.js?v=6d7b4ef5"></script>
+<script src="avatar.js?v=2b25d8d7"></script>
 <script src="rank.js?v=2a9931b5"></script>
 </body>
 </html>

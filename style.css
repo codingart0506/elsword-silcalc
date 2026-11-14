@@ -478,3 +478,6 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .av-stat div { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .av-stat span:last-child { font-variant-numeric: tabular-nums; color: var(--sub); }
 .av-shot-btn { font-size: 14px; padding: 8px 14px; background: var(--blue-weak); color: var(--blue-dark); }
+.av-drop { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; margin: 12px 0 6px; padding: 14px 16px; border: 1.5px dashed var(--line); border-radius: 14px; background: var(--fill); }
+.av-drop-main { margin: 0; font-size: 14px; color: var(--sub); }
+#avCard.drop-on .av-drop { border-color: var(--blue); background: var(--blue-weak); }

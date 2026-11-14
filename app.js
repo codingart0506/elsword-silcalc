@@ -584,6 +584,7 @@
     }
     $('#fileIn').onchange = async (e) => { const f = e.target.files[0]; if (f) showShot(await O.imageFromBlob(f)); e.target.value = ''; };
     document.addEventListener('paste', async (e) => {
+      if (document.body.classList.contains('view-avatar')) return; // 아바타 탭에서는 아바타 인식으로
       const it = [...(e.clipboardData ? e.clipboardData.items : [])].find(i => i.type.startsWith('image/'));
       if (it) { e.preventDefault(); showShot(await O.imageFromBlob(it.getAsFile())); }
     });
