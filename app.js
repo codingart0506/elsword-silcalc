@@ -611,6 +611,7 @@
       if (res.auto && res.rect) { selRect = res.rect; drawSel(); }
       let gear = null;
       try { if (window.SilGear) { pt.textContent = '악세서리 아이콘 보는 중'; gear = window.SilGear.recognize(shot); } } catch (e) { console.error(e); }
+      try { if (window.SilAvatar) { pt.textContent = '아바타 아이콘 보는 중'; await window.SilAvatar.fromShot(shot, gear); } } catch (e) { console.error(e); }
       try { if (gear && gear.cls) { pt.textContent = '칭호 읽는 중'; res.title = await O.readTitle(shot, gear.cls); } } catch (e) { console.error(e); }
       try { if (gear && gear.cls && !shared) { pt.textContent = '캐릭터 이름 읽는 중'; res.name = await O.readName(shot, gear.cls); } } catch (e) { console.error(e); }
       pendingExtras = { gotRange: !!(res.found && res.found.C12) };
@@ -941,6 +942,7 @@
     rankBuffs: () => Object.keys(EXTRA_BUFF).filter(a => inputs[a] === true).map(a => EXTRA_BUFF[a]),
     missing: () => isEmptySetting(inputs) ? ['세팅'] : ['C12', 'C13'].filter(a => !(Number(g(a)) > 0)).map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력'),
     cls: () => inputs.C6 || '',
+    val: (c) => g(c),
     key: () => store.current,
     nick: () => nickOf(store.current),
     setNick: (v) => { if (v) store.names[store.current] = v; else delete store.names[store.current]; persist(); syncNick(); renderProfiles(); refresh(); },

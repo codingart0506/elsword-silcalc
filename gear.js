@@ -223,6 +223,33 @@
   }
   const CLS_MATCH = 16;
 
+  // 코보덱스 아이콘 견본 (칸 안쪽만, 16x16) — 사진으로 배운 견본에 없거나 애매할 때
+  const F2 = 16, MASK2 = new Uint8Array(F2 * F2);
+  for (let y = 0; y < F2; y++) for (let x = 0; x < F2; x++) MASK2[y * F2 + x] = ((x >= 11 && y < 10) || (x >= 9 && y >= 9) || (x < 4 && y < 4)) ? 0 : 1;
+  let LIB2 = null;
+  function matchCobo(canvas, c) {
+    if (!LIB2) LIB2 = (root.SIL_ICONS2 || []).map(e => ({ name: e.name, f: b64ToBytes(e.f) }));
+    if (!LIB2.length) return null;
+    const ins = Math.max(1, Math.round(c.s * 0.05)), st = Math.max(1, Math.round(c.s / 40)), byName = {};
+    const t = document.createElement('canvas'); t.width = F2; t.height = F2;
+    const g = t.getContext('2d', { willReadFrequently: true }); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    for (let dy = -st; dy <= st; dy += st) for (let dx = -st; dx <= st; dx += st) {
+      const x = c.x + ins + dx, y = c.y + ins + dy, s = c.s - 2 * ins;
+      if (x < 0 || y < 0 || x + s > canvas.width || y + s > canvas.height) continue;
+      g.clearRect(0, 0, F2, F2); g.drawImage(canvas, x, y, s, s, 0, 0, F2, F2);
+      const d = g.getImageData(0, 0, F2, F2).data;
+      for (const e of LIB2) {
+        let sum = 0, n = 0;
+        for (let i = 0; i < F2 * F2; i++) { if (!MASK2[i]) continue; const k = i * 3, j = i * 4; sum += Math.abs(d[j] - e.f[k]) + Math.abs(d[j + 1] - e.f[k + 1]) + Math.abs(d[j + 2] - e.f[k + 2]); n += 3; }
+        const dd = sum / n; if (!(e.name in byName) || dd < byName[e.name]) byName[e.name] = dd;
+      }
+    }
+    const r = Object.entries(byName).sort((a, b) => a[1] - b[1]);
+    if (!r.length) return null;
+    const best = r[0], second = r[1] ? r[1][1] : Infinity;
+    return (best[1] <= 13 && second - best[1] >= 3) ? { name: best[0], d: best[1], second, cobo: true } : null;
+  }
+
   function recognize(canvas) {
     let cls = null;
     try { cls = recognizeClass(canvas); } catch (e) { /* 초상화 없음 */ }
@@ -235,6 +262,7 @@
       let match = null;
       if (best && best.d <= MATCH) match = best;
       else if (best && best.d <= GUESS && best.second - best.d >= 6) match = Object.assign({ guess: true }, best);
+      if (!match || match.guess) { try { const m2 = matchCobo(canvas, c); if (m2) match = m2; } catch (e) { /* 무시 */ } }
       return Object.assign({}, c, { f: featureOf(canvas, c), thumb: thumbOf(canvas, c, 40), match, nearest: best });
     });
     return { grid, cells, cls };
