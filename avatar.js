@@ -125,9 +125,11 @@
       const pool = lib.filter(e => b.kind === 'acc' ? e.k === 'acc' : b.kind === 'wep' ? e.k === 'wep' : (e.k === 'av' && e.p === b.piece));
       if (!pool.length) continue;
       const ins = Math.max(1, Math.round(b.s * 0.05)), st = Math.max(1, Math.round(b.s / 40));
+      // 아바타·무기 칸은 초록 격자에서 멀리 떨어져 있어서(1920x1080이 아닌 화면에선 몇 픽셀 어긋남) 더 넓게 찾음
+      const R = b.kind === 'acc' ? Math.max(st, Math.round(b.s / 18)) : Math.max(2, Math.round(b.s / 16)), stp = 1;
       let best = null, second = Infinity;
       const byName = {};
-      for (let dy = -st; dy <= st; dy += st) for (let dx = -st; dx <= st; dx += st) {
+      for (let dy = -R; dy <= R; dy += stp) for (let dx = -R; dx <= R; dx += stp) {
         const x = b.x + ins + dx, y = b.y + ins + dy, s = b.s - 2 * ins;
         if (x < 0 || y < 0 || x + s > canvas.width || y + s > canvas.height) continue;
         const f = feat(canvas, x, y, s);
@@ -136,8 +138,9 @@
       const ranked = Object.values(byName).sort((a, b2) => a.d - b2.d);
       if (!ranked.length) continue;
       best = ranked[0]; second = ranked[1] ? ranked[1].d : Infinity;
-      const ok = best.d <= MATCH && second - best.d >= 3;
-      detail.push({ part: b.part, piece: b.piece, name: best.e.n, d: best.d, ok });
+      // 충분히 가깝거나, 조금 멀어도 2등과 차이가 아주 크면 인정(염색·별 표시·화질 차이로 거리가 조금 커지는 경우)
+      const ok = (best.d <= MATCH && second - best.d >= 3) || (best.d <= 18 && second - best.d >= 8);
+      detail.push({ part: b.part, piece: b.piece, name: best.e.n, d: best.d, gap: second - best.d, ok });
       if (!ok) continue;
       if (b.kind === 'av') { pieces[best.e.d] = (pieces[best.e.d] || 0) + 1; continue; }
       if (b.part === best.e.p || b.kind === 'wep') found[b.part] = { d: best.e.d, n: best.e.n, known: optionsOf(b.part).includes(best.e.d) };
