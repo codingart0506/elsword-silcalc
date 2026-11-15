@@ -737,15 +737,28 @@
     const box = el('div', { class: 'share-in' }, el('span', { text: '초월' }), bravery, el('span', { text: ':' }), strength, el('span', { text: '강렬' }));
     return el('div', { class: 'ex-row atma-row share-row' }, el('span', {}, '초월:강렬 비율'), box);
   }
+  // 퍼센트 칸(창에서 % 그대로 입력, 저장할 때 /100)
+  const exPctIn = (c, ph) => { const v = Number(g(c)); return el('input', { type: 'text', inputmode: 'decimal', class: 'num pct-in', 'data-pct': c, placeholder: ph || '0', value: Number.isFinite(v) ? String(+(v * 100).toFixed(2)) : '' }); };
   function eqRow() {
     const cb = el('input', { type: 'checkbox', id: 'exEq' }); cb.checked = !!inputs._eq;
-    return el('label', { class: 'chk-row ex-eq' }, cb, el('span', {}, '강배 역강배 수치 동일', el('small', { text: '둘 중 높은 쪽 수치로 같게 맞춰요' })));
+    // 역강배(체력 50% 이하인 적 공격시 데미지 증가): 적으면 그 값 그대로, 안 건드리면 사진에서 읽은 값 그대로. '동일'을 켜면 안 씀
+    const rev = exPctIn('C25'); rev.disabled = cb.checked;
+    cb.addEventListener('change', () => { rev.disabled = cb.checked; });
+    return el('div', { class: 'ex-eq-block' },
+      el('label', { class: 'chk-row ex-eq' }, cb, el('span', {}, '강배 역강배 수치 동일', el('small', { text: '둘 중 높은 쪽 수치로 같게 맞춰요' }))),
+      el('label', { class: 'ex-row ex-rev' }, el('span', {}, '역강배 수치', el('small', { text: '강배·역강배 수치가 다를 때 역강배 수치를 입력해요' })),
+        el('span', { class: 'pct-box' }, rev, el('span', { text: '%' }))));
+  }
+  function overflowRow() {
+    return el('label', { class: 'ex-row' }, el('span', {}, '오버플로우', el('small', { text: '하이퍼 카트리지 - 투지 모스뎀' })),
+      el('span', { class: 'pct-box' }, exPctIn('H31'), el('span', { text: '%' })));
   }
   function askExtras({ weapon = true, range = false, during = false } = {}) {
     const open = $('#extraDlg');
     if (open && !during) {
       // 읽는 동안 띄운 창이 아직 열려 있으면 닫지 않고, 빠진 칸만 붙임. 사진으로 바뀐 값(직업에 따른 세트 효과 등)은 안 건드린 칸에 반영
       for (const sl of open.querySelectorAll('select[data-cell]:not([data-touched])')) { const c = sl.getAttribute('data-cell'); if (inputs[c] != null) sl.value = String(inputs[c]); }
+      for (const ip of open.querySelectorAll('input[data-pct]:not([data-touched])')) { const v = Number(g(ip.getAttribute('data-pct'))); if (Number.isFinite(v)) ip.value = String(+(v * 100).toFixed(2)); }
       if (range && !open.querySelector('[data-cell=C12]')) open.querySelector('.dlg-actions').before(rangeRow()[0]);
       const note = open.querySelector('#exNote'); if (note) note.textContent = '사진은 다 읽어서 적용했어요. 사진에 안 나오는 아래 값만 확인해 주세요.';
       return;
@@ -769,6 +782,12 @@
         const c = sl.getAttribute('data-cell');
         if (sl.value !== String(inputs[c] ?? '')) setVal(c, parseOpt(c, sl.value));
       }
+      for (const inp of wrap.querySelectorAll('input[data-pct][data-touched]')) {
+        const c = inp.getAttribute('data-pct'), t = inp.value.replace(/[,\s%]/g, ''), n = Number(t);
+        if (t === '' || !Number.isFinite(n) || n < 0) continue;
+        const v = Math.round(n * 100) / 10000;
+        if (Math.abs(v - (Number(g(c)) || 0)) > 1e-9) setVal(c, v);
+      }
       const eq = wrap.querySelector('#exEq');
       if (eq) {
         const b24 = inputs.C24, b25 = inputs.C25;
@@ -781,6 +800,7 @@
       el('h3', { id: 'exTitle', text: iC13 ? '남은 수치를 직접 기입해 주세요' : '극대화 범위 최댓값을 기입해 주세요' }),
       el('p', { id: 'exNote', text: iC13 ? `사진에 안 나오는 값이에요.${during ? ' 그동안 사진을 읽고 있어요.' : ''}` : '이번 사진에서 못 찾은 값이에요.' }),
       iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '무기에 마우스를 올리면 나오는 무기 자체 수치' })), iC13) : null,
+      iC13 ? overflowRow() : null,
       iC13 ? titleRow() : null,
       r12 ? r12[0] : null,
       iC13 ? setRow() : null,
@@ -792,6 +812,7 @@
         el('button', { class: 'btn primary', text: '확인', onclick: save })));
     const wrap = el('div', { class: 'dialog', id: 'extraDlg' }, card);
     wrap.addEventListener('change', (e) => { if (e.target.matches('select[data-cell]')) e.target.setAttribute('data-touched', '1'); });
+    wrap.addEventListener('input', (e) => { if (e.target.matches('input[data-pct]')) e.target.setAttribute('data-touched', '1'); });
     wrap.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); save(); } });
     document.body.append(wrap);
     setTimeout(() => (iC13 || r12[1]).focus(), 50);

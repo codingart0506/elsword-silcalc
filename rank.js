@@ -181,9 +181,11 @@
         if (!ok) {
           const wait = Object.values(A.ranks()).some(r => r && r.token && r.status === 'pending');
           const gone = Object.values(A.ranks()).find(r => r && (r.status === 'hidden' || r.status === 'removed'));
+          const rej = Object.values(A.ranks()).find(r => r && r.status === 'rejected');
           empty.hidden = false;
           empty.textContent = gone ? `관리자가 랭킹에서 ${gone.status === 'hidden' ? '내려서' : '삭제해서'} 랭킹을 볼 수 없어요.${gone.memo ? ` 사유: ${gone.memo}` : ''}`
             : wait ? '신청을 확인하고 있어요. 관리자가 승인하면 랭킹을 볼 수 있어요.'
+            : rej ? `랭킹 신청이 거절됐어요.${rej.memo ? ` 사유: ${rej.memo}` : ''} 다시 신청해서 승인되면 볼 수 있어요.`
             : '랭킹은 랭킹에 올라간 사람만 볼 수 있어요. 계산기에서 "랭킹에 올리기"로 신청해서 승인되면 볼 수 있어요. 다른 기기에서 승인받았다면 아래 "갱신 코드 입력"에 그때 받은 갱신 코드를 넣어 주세요.';
           pager.hidden = true; rkBusy = false; return;
         }
@@ -495,8 +497,9 @@
       line.append(el('span', { class: 'rk-state' }, '랭킹 승인 기다리는 중', el('small', { text: r.nickname })),
         el('span', { class: 'acts' }, btn('갱신 코드', showToken, true)));
     } else if (r.status === 'rejected') {
-      line.append(el('span', { class: 'rk-state' }, '랭킹 신청이 거절됐어요', r.memo ? el('small', { text: r.memo }) : null),
+      line.append(el('span', { class: 'rk-state' }, '랭킹 신청이 거절됐어요', r.memo ? el('small', { text: `사유: ${r.memo}` }) : null),
         el('span', { class: 'acts' }, btn('다시 신청', openApply)));
+      noticeRemoved(r);
     } else if (r.status === 'hidden' || r.status === 'removed') {
       // 관리자가 내린 경우: 사유를 보여 줌(처음 한 번은 창으로)
       line.append(el('span', { class: 'rk-state' }, r.status === 'hidden' ? '관리자가 랭킹에서 내렸어요' : '관리자가 랭킹에서 삭제했어요', r.memo ? el('small', { text: `사유: ${r.memo}` }) : null),
@@ -515,6 +518,10 @@
     const k = r.status + '|' + (r.memo || '');
     if (r.seen === k) return;
     r.seen = k; A.setRank(r);
+    if (r.status === 'rejected') {
+      A.dialog({ title: '랭킹 신청이 거절됐어요', text: `${r.nickname} 랭킹 신청이 거절됐어요.${r.memo ? `\n사유: ${r.memo}` : ''}`, ok: '확인' });
+      return;
+    }
     A.dialog({ title: r.status === 'hidden' ? '랭킹에서 내려졌어요' : '랭킹에서 삭제됐어요',
       text: `${r.nickname} 캐릭터를 관리자가 랭킹에서 ${r.status === 'hidden' ? '내렸어요. 랭킹도 볼 수 없어요' : '삭제했어요'}.${r.memo ? `\n사유: ${r.memo}` : ''}`, ok: '확인' });
   }
@@ -733,6 +740,13 @@
     const pend = el('div', { class: 'adm-sec' }, el('h3', { text: '승인 기다리는 신청' }));
     const hist = el('div', { class: 'adm-sec' }, el('h3', { text: '최근 갱신' }));
     body.append(pend, hist);
+    // 아무 데서도 안 쓰는 사진(거절된 신청 사진, 지운 기록의 사진 등)은 저장소에서 정리
+    c.rpc('admin_orphan_shots').then(async ({ data, error }) => {
+      if (error || !data || !data.length) return;
+      const names = data.map(x => typeof x === 'string' ? x : Object.values(x)[0]).filter(Boolean);
+      const { error: re } = await c.storage.from('shots').remove(names);
+      if (!re) body.prepend(el('p', { class: 'rank-note', text: `안 쓰는 사진 ${names.length}장(거절된 신청 사진 등)을 저장소에서 지웠어요` }));
+    }).catch(e => console.warn(e));
 
     const { data: apps, error } = await c.from('applications').select('id,nickname,cls,cp,inputs,verify_code,shot_path,pub_path,created_at').eq('status', 'pending').order('created_at');
     if (error) throw error;
@@ -762,6 +776,9 @@
         ok.disabled = no.disabled = true;
         const { error: e } = await c.rpc('reject_application', { p_id: a.id, p_memo: memo || '' });
         if (e) { toast(errMsg(e)); ok.disabled = no.disabled = false; return; }
+        // 거절한 신청 사진은 남겨 둘 필요가 없어서 바로 지움(사유는 남음)
+        const rm = [a.shot_path, a.pub_path].filter(Boolean);
+        if (rm.length) { const { error: re } = await c.storage.from('shots').remove(rm); if (re) console.warn(re); }
         item.remove(); toast(`${a.nickname} 신청을 거절했어요`);
       };
       pend.append(item);
