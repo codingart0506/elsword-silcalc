@@ -498,7 +498,7 @@
     if (!store.bases[name]) store.bases[name] = Object.assign({}, inputs);
     persist(); applyInputs(); applyBase(); renderProfiles(); refresh();
   }
-  function dialog({ title, text, input, area, ok = '확인', danger }) {
+  function dialog({ title, text, input, area, code, ok = '확인', danger }) {
     return new Promise((resolve) => {
       const d = $('#dialog'); d.hidden = false;
       $('#dlgTitle').textContent = title; $('#dlgText').textContent = text || '';
@@ -506,8 +506,21 @@
       inp.hidden = input === undefined; ar.hidden = area === undefined;
       if (input !== undefined) { inp.value = input; setTimeout(() => inp.focus(), 0); }
       if (area !== undefined) { ar.value = area; ar.readOnly = false; }
+      // 코드(갱신 코드 등): 글상자 대신 크게 보여 주고 복사 버튼
+      const cb = $('#dlgCode'); cb.hidden = code === undefined;
+      if (code !== undefined) {
+        // 하이픈 뒤에서만 줄이 바뀌게
+        const ct = $('#dlgCodeText'); ct.textContent = '';
+        String(code).split('-').forEach((part, i, all) => { ct.append(part + (i < all.length - 1 ? '-' : '')); if (i < all.length - 1) ct.append(document.createElement('wbr')); });
+        const cp = $('#dlgCopy'); cp.textContent = '복사';
+        cp.onclick = async () => {
+          try { await navigator.clipboard.writeText(code); cp.textContent = '복사했어요'; }
+          catch (e) { const r = document.createRange(); r.selectNodeContents($('#dlgCodeText')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); cp.textContent = '선택했어요'; }
+        };
+      }
       const okB = $('#dlgOk'); okB.textContent = ok; okB.classList.toggle('danger', !!danger);
-      const done = (v) => { d.hidden = true; okB.onclick = null; $('#dlgCancel').onclick = null; resolve(v); };
+      $('#dlgCancel').hidden = code !== undefined; // 코드만 보여 주는 창은 닫기 하나만
+      const done = (v) => { d.hidden = true; okB.onclick = null; $('#dlgCancel').onclick = null; $('#dlgCancel').hidden = false; resolve(v); };
       okB.onclick = () => done(input !== undefined ? inp.value : area !== undefined ? ar.value : true);
       $('#dlgCancel').onclick = () => done(null);
     });
@@ -750,7 +763,7 @@
         el('span', { class: 'pct-box' }, rev, el('span', { text: '%' }))));
   }
   function overflowRow() {
-    return el('label', { class: 'ex-row' }, el('span', {}, '오버플로우', el('small', { text: '하이퍼 카트리지 - 투지 모스뎀' })),
+    return el('label', { class: 'ex-row' }, el('span', {}, '오버플로우'),
       el('span', { class: 'pct-box' }, exPctIn('H31'), el('span', { text: '%' })));
   }
   function askExtras({ weapon = true, range = false, during = false } = {}) {

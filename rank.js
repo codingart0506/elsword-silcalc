@@ -549,7 +549,7 @@
   }
   function showToken() {
     const r = A.rank(); if (!r) return;
-    A.dialog({ title: '갱신 코드', text: '다른 기기나 브라우저에서 갱신할 때 이 코드가 필요해요. 다른 사람에게 알려 주지 마세요.', area: r.token, ok: '닫기' });
+    A.dialog({ title: '갱신 코드', text: '다른 기기나 브라우저에서 갱신할 때 이 코드가 필요해요. 다른 사람에게 알려 주지 마세요.', code: r.token, ok: '닫기' });
   }
 
   // 피시방·에너지드링크·지애 버프를 켠 세팅은 랭킹에 올리지 않음(서버에도 안 보냄)
@@ -628,7 +628,7 @@
         A.setRank({ token, status: 'pending', nickname: n, cls: A.cls(), cp });
         checked[A.key()] = true;
         close(); renderLine();
-        await A.dialog({ title: '신청했어요', text: '관리자가 스크린샷을 확인하면 랭킹에 올라가요. 아래 갱신 코드는 다른 기기에서 갱신할 때 필요하니 따로 적어 두세요.', area: token, ok: '확인' });
+        await A.dialog({ title: '신청했어요', text: '관리자가 스크린샷을 확인하면 랭킹에 올라가요. 아래 갱신 코드는 다른 기기에서 갱신할 때 필요하니 따로 적어 두세요.', code: token, ok: '확인' });
       } catch (e) {
         toast('신청하지 못했어요. ' + errMsg(e));
         send.disabled = false; send.textContent = '신청하기';

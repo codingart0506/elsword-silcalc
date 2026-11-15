@@ -245,6 +245,9 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 .dialog-card h3 { margin: 0 0 6px; font-size: 18px; }
 .dialog-card p { margin: 0 0 14px; color: var(--sub); font-size: 14px; }
 .dialog-card input { width: 100%; }
+.dlg-code { display: flex; align-items: center; gap: 10px; background: var(--fill); border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; }
+.dlg-code b { flex: 1; min-width: 0; font-size: 16px; letter-spacing: .03em; word-break: keep-all; overflow-wrap: normal; user-select: all; -webkit-user-select: all; font-variant-numeric: tabular-nums; }
+.dlg-code .btn { flex: none; padding: 8px 14px; font-size: 14px; background: #fff; }
 .dlg-actions { display: flex; gap: 8px; margin-top: 16px; }
 .dlg-actions .btn { flex: 1; }
 
