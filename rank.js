@@ -464,7 +464,7 @@
     return w;
   }
   // 눈에 안 보이는 워터마크: 보는 사람 닉네임·시각을 사진 곳곳(자리·기울기 무작위)에 픽셀로 박음
-  // 밝기를 1~2칸만 바꾸고 테두리를 뭉개서 눈으로는 안 보이고, 관리자 화면 '워터마크 찾기'에 캡처 원본을 넣으면 글자가 드러남
+  // 파랑만 조금 바꾸고 테두리를 뭉개서 눈으로는 안 보이고, 관리자 화면 '워터마크 찾기'의 '색 차이로 찾기'에 캡처 원본을 넣으면 글자가 드러남
   async function bakeShot(url) {
     try {
       const res = await fetch(url); if (!res.ok) return null;
@@ -489,7 +489,7 @@
         const a = md[i + 3]; if (!a) continue;
         // 밝기를 조금(압축돼도 남게) + 파랑을 조금 더. 어두운 곳은 작은 변화도 눈에 띄어서 덜, 밝은 곳은 조금 더
         const k = a / 255, lum = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
-        const L = (1 + 1.5 * lum) * k, B = L;
+        const L = 0, B = (2 + 3 * lum) * k; // 파랑만 2~5칸(밝기로는 1칸도 안 됨)
         d[i] += d[i] >= L ? -L : L; d[i + 1] += d[i + 1] >= L ? -L : L; d[i + 2] += d[i + 2] >= B ? -B : B;
       }
       g.putImageData(img, 0, 0);
@@ -501,7 +501,7 @@
   function revealMark(src, mode) {
     const w = src.width, h = src.height, d = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
     const v = new Float32Array(w * h);
-    for (let i = 0, j = 0; j < v.length; i += 4, j++) v[j] = mode !== 'chroma' ? (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) : d[i + 2] - (d[i] + d[i + 1]) / 2;
+    for (let i = 0, j = 0; j < v.length; i += 4, j++) v[j] = mode === 'faint' ? d[i + 2] : mode === 'lum' ? (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) : d[i + 2] - (d[i] + d[i + 1]) / 2;
     const W = w + 1, S = new Float64Array(W * (h + 1));
     for (let y = 0; y < h; y++) { let row = 0; for (let x = 0; x < w; x++) { row += v[y * w + x]; S[(y + 1) * W + x + 1] = S[y * W + x + 1] + row; } }
     const M = Math.max(w, h), faint = mode === 'faint';
@@ -558,7 +558,7 @@
         const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
         c.getContext('2d').drawImage(bmp, 0, 0);
         view.textContent = '';
-        view.append(el('p', { text: '안 보이는 글자 찾기(랭킹 화면 캡처 원본)' }), revealMark(c, 'faint'), el('p', { text: '밝기 차이로 찾기(스크린샷 사진)' }), revealMark(c, 'lum'), el('p', { text: '색 차이로 찾기' }), revealMark(c, 'chroma'));
+        view.append(el('p', { text: '안 보이는 글자 찾기(랭킹 목록 캡처 원본)' }), revealMark(c, 'faint'), el('p', { text: '색 차이로 찾기(스크린샷 사진 캡처)' }), revealMark(c, 'chroma'), el('p', { text: '밝기 차이로 찾기(예전 캡처)' }), revealMark(c, 'lum'));
       } catch (e) { view.textContent = '이미지를 열지 못했어요'; }
     };
     const fin = el('input', { type: 'file', accept: 'image/*', hidden: '' });
@@ -579,9 +579,9 @@
     let m = v.querySelector('.rk-wm');
     if (!m) { m = el('div', { class: 'rk-wm', 'aria-hidden': 'true' }); v.append(m); }
     const [l1, l2] = stampLines().map(x => String(x).replace(/[<>&"']/g, ''));
-    // 눈에는 안 보이는 글자(닉네임 / 시각 두 줄)를 촘촘히: 밝기를 딱 1칸(255→254)만 낮춤. 사람 눈으로는 구별이 안 되고,
+    // 눈에는 안 보이는 글자(닉네임 / 시각 두 줄)를 촘촘히: 파랑만 딱 1칸(255→254) 낮춤. 밝기로 치면 0.1칸이라 사람 눈으로는 구별이 안 되고,
     // 캡처 원본(PNG)을 관리자 화면 '워터마크 찾기'의 '안 보이는 글자 찾기'에 넣으면 드러남. 겹치면 2칸이 되니 한 겹만 씀
-    const WM = window.SIL_WM || { fs: 60, fill: 'rgb(0,0,0)', op: 0.005, blur: 1.5, a: [18, 70, 50], b: null };
+    const WM = window.SIL_WM || { fs: 60, fill: 'rgb(255,255,0)', op: 0.005, blur: 1.5, a: [18, 70, 50], b: null };
     const fs = WM.fs, lh = Math.round(fs * 1.15), mc = document.createElement('canvas').getContext('2d');
     mc.font = `900 ${fs}px sans-serif`;
     const tw = Math.ceil(Math.max(mc.measureText(l1).width, mc.measureText(l2).width));
