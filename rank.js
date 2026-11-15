@@ -69,52 +69,228 @@
     return c;
   }
   // 랭킹에 보일 사진: 캐릭터 창(전투력 줄까지)·상세 스탯 창만 또렷하게 두고 나머지(채팅·배경·다른 사람 이름표·점령전 줄 아래)는 흐리게.
-  // 장비창의 초록 악세서리 칸(2열 6행)으로 창 위치를 잡음. 상세 스탯 창은 캐릭터 창 오른쪽에 붙어서 열림. 못 찾으면 null(원본을 씀)
-  function privacyBlur(src) {
-    let G = null;
-    try { G = window.SilGear && window.SilGear.detectGrid(src); } catch (e) { G = null; }
-    if (!G || G.cells.length < 12) return null;
-    const W = src.width, H = src.height, P = G.pitch;
-    const xs = G.cells.map(c => c.x), xa = Math.min(...xs), xb = Math.max(...xs), y0 = Math.min(...G.cells.map(c => c.y));
-    const top = y0 - 8.3 * P, left = xa - 13.85 * P, mid = xb + 1.5 * P, right = mid + 16.5 * P;
-    if (left < -3 * P || top < -3 * P || mid > W + P) return null;
-    const keep = [[left, top, mid, y0 + 8.75 * P], [mid, top, right, y0 + 11.15 * P]];
-    // 흐리게: 크게 줄였다가 다시 키움(모든 브라우저에서 됨)
+  // 캐릭터 창: 장비창의 초록 악세서리 칸(2열 6행)으로 잡고, 상세 스탯 창에 가려 칸이 안 보이면 왼쪽 위 전직 일러스트(금색 테두리)로 잡음.
+  // 상세 스탯 창: 창 안의 검은 구분 띠로 따로 찾음(캐릭터 창 위에 겹쳐 있어도 됨). 못 찾으면 캐릭터 창 오른쪽에 붙어 있다고 봄
+  // 상세 스탯 창 찾기: 창 안의 검은 구분 띠(기본 능력치·공격·스킬·보조·방어…)가 같은 폭으로 여러 개 쌓여 있음.
+  // 띠를 찾은 뒤 띠 위아래로 창 바탕색(짙은 남색) 줄이 이어지는 데까지를 창으로 봄. 못 찾으면 null
+  function findStatPanel(src) {
+    const W = src.width, H = src.height;
+    const d = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+    const blk = (i) => d[i] <= 16 && d[i + 1] <= 16 && d[i + 2] <= 18;
+    const minRun = Math.round(W * 0.04), join = Math.round(W * 0.07), minSpan = Math.round(W * 0.15);
+    const rows = [];
+    for (let y = 0; y < H; y++) {
+      const runs = []; let st = -1, miss = 0;
+      for (let x = 0; x <= W; x++) {
+        const b = x < W && blk((y * W + x) * 4);
+        if (b) { if (st < 0) st = x; miss = 0; }
+        else if (st >= 0 && ++miss > 2) { const e = x - miss; if (e - st + 1 >= minRun) runs.push([st, e]); st = -1; miss = 0; }
+      }
+      const seg = [];
+      for (const r of runs) {
+        const l = seg[seg.length - 1];
+        // 띠 이름(가운데 글자) 때문에 끊긴 곳만 이어 붙임: 끊긴 곳이 합친 띠의 가운데쯤일 때만(창 테두리 너머 다른 검은 곳과 붙지 않게)
+        const ok = l && r[0] - l[1] <= join && Math.abs((l[1] + r[0]) / 2 - (l[0] + r[1]) / 2) <= 0.12 * (r[1] - l[0]);
+        if (ok) { l[2] += r[1] - r[0] + 1; l[1] = r[1]; } else seg.push([r[0], r[1], r[1] - r[0] + 1]);
+      }
+      for (const s of seg) if (s[1] - s[0] + 1 >= minSpan && s[2] / (s[1] - s[0] + 1) >= 0.7) rows.push({ y, x0: s[0], x1: s[1] });
+    }
+    // 붙은 줄을 띠로 묶음
+    const tol = Math.max(4, Math.round(W * 0.006)), bands = [];
+    for (const r of rows) {
+      const b = bands.find(b => r.y - b.y1 <= 2 && Math.abs(r.x0 - b.x0) <= tol && Math.abs(r.x1 - b.x1) <= tol);
+      if (b) { b.y1 = r.y; } else bands.push({ y0: r.y, y1: r.y, x0: r.x0, x1: r.x1 });
+    }
+    const ok = bands.filter(b => { const h = b.y1 - b.y0 + 1, w = b.x1 - b.x0; return h >= w * 0.015 && h <= w * 0.07; });
+    // 왼쪽·오른쪽 끝이 같은 띠가 3개 이상
+    let best = null;
+    for (const a of ok) {
+      const g = ok.filter(b => Math.abs(b.x0 - a.x0) <= tol && Math.abs(b.x1 - a.x1) <= tol).sort((p, q) => p.y0 - q.y0);
+      if (g.length < 3) continue;
+      const u = g.map(b => b.y1 - b.y0 + 1).sort((p, q) => p - q)[g.length >> 1];
+      let far = false; for (let i = 1; i < g.length; i++) if (g[i].y0 - g[i - 1].y1 > u * 16) far = true;
+      if (far) continue;
+      if (!best || g.length > best.g.length) best = { g, u };
+    }
+    if (!best) return null;
+    const { g, u } = best;
+    const x0 = Math.round(g.reduce((s, b) => s + b.x0, 0) / g.length), x1 = Math.round(g.reduce((s, b) => s + b.x1, 0) / g.length);
+    // 줄마다: 창 바탕(짙은 남색 두 가지)·띠(검정)가 많으면 창 안, 밝은 줄(창 테두리)이면 끝
+    const xa = Math.round(x0 + (x1 - x0) * 0.04), xb = Math.round(x1 - (x1 - x0) * 0.04);
+    const rowKind = (y) => {
+      let n = 0, br = 0, k = 0;
+      for (let x = xa; x < xb; x += 3) {
+        const i = (y * W + x) * 4, r = d[i], gg = d[i + 1], b = d[i + 2]; k++;
+        if (Math.max(r, gg, b) >= 150) br++;
+        else if ((r <= 20 && gg <= 20 && b <= 22) || (r >= 18 && r <= 74 && gg >= r + 2 && gg <= r + 18 && b >= gg + 2 && b <= gg + 18)) n++;
+      }
+      return br / k >= 0.6 ? 'edge' : n / k >= 0.45 ? 'in' : 'out';
+    };
+    const scan = (y, dir) => {
+      let last = y, miss = 0;
+      for (let yy = y; yy >= 0 && yy < H; yy += dir) {
+        const t = rowKind(yy);
+        if (t === 'edge') break;
+        if (t === 'in') { last = yy; miss = 0; } else if (++miss > u * 1.3) break;
+      }
+      return last;
+    };
+    let top = scan(g[0].y0, -1), bot = scan(g[g.length - 1].y1, 1);
+    // 창 높이는 띠 두께의 40배를 넘지 않음
+    const lim = u * 40;
+    if (bot - top > lim) { if (top < g[0].y0 - u * 20) top = Math.max(top, bot - lim); if (bot - top > lim) bot = top + lim; }
+    return { x0: x0 - u, y0: top - u * 3.6, x1: x1 + u * 2.2, y1: bot + u * 1.5, u, n: g.length };
+  }
+  // 또렷하게 둘 곳 [[x0,y0,x1,y1], …]. 캐릭터 창이나 상세 스탯 창을 못 찾으면 null
+  function privacyRects(src) {
+    const W = src.width, H = src.height, SG = window.SilGear;
+    let G = null, sp = null, ch = null, docked = null, unit = 0;
+    try { G = SG && SG.detectGrid(src); } catch (e) { G = null; }
+    try { sp = findStatPanel(src); } catch (e) { sp = null; }
+    if (G && G.cells.length >= 12) {
+      const P = G.pitch, xs = G.cells.map(c => c.x), xa = Math.min(...xs), xb = Math.max(...xs), y0 = Math.min(...G.cells.map(c => c.y));
+      const top = y0 - 8.3 * P, left = xa - 13.85 * P, mid = xb + 1.5 * P;
+      if (left >= -3 * P && top >= -3 * P && mid <= W + P) { ch = [left, top, mid, y0 + 8.75 * P]; docked = [mid, top, mid + 16.5 * P, y0 + 11.15 * P]; unit = P * 0.5; }
+    }
+    if (!ch) {
+      let pt = null; try { pt = SG && SG.findPortrait(src); } catch (e) { pt = null; }
+      if (pt) {
+        const s = pt.s, r = [pt.x - 0.25 * s, pt.y - 0.8 * s, pt.x + 6.3 * s, pt.y + 6.02 * s];
+        if (r[0] >= -s && r[1] >= -s && r[2] <= W + s && r[3] <= H + s) { ch = r; unit = s * 0.2; }
+      }
+    }
+    // 찾은 상세 스탯 창 크기가 캐릭터 창과 맞을 때만 씀
+    const st = sp && unit && sp.u / unit > 0.75 && sp.u / unit < 1.3 ? [sp.x0, sp.y0, sp.x1, sp.y1] : docked;
+    if (!ch || !st) return null;
+    return [ch, st];
+  }
+  // keep 안은 원본 그대로, 나머지는 흐리게(크게 줄였다가 다시 키움: 모든 브라우저에서 됨)
+  function blurKeep(src, keep) {
+    const W = src.width, H = src.height;
     const step = (from, w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(from, 0, 0, w, h); return c; };
     const small = step(step(src, Math.max(16, Math.round(W / 5)), Math.max(16, Math.round(H / 5))), Math.max(8, Math.round(W / 18)), Math.max(8, Math.round(H / 18)));
     const out = step(step(small, Math.max(16, Math.round(W / 5)), Math.max(16, Math.round(H / 5))), W, H);
     const g = out.getContext('2d');
-    for (const [x0, y0_, x1, y1] of keep) {
-      const a = Math.max(0, Math.round(x0)), b = Math.max(0, Math.round(y0_)), c = Math.min(W, Math.round(x1)), d = Math.min(H, Math.round(y1));
+    for (const [x0, y0, x1, y1] of keep) {
+      const a = Math.max(0, Math.round(Math.min(x0, x1))), b = Math.max(0, Math.round(Math.min(y0, y1))), c = Math.min(W, Math.round(Math.max(x0, x1))), d = Math.min(H, Math.round(Math.max(y0, y1)));
       if (c > a && d > b) g.drawImage(src, a, b, c - a, d - b, a, b, c - a, d - b);
     }
     return out;
   }
+  function privacyBlur(src) { const k = privacyRects(src); return k ? blurKeep(src, k) : null; }
   window.SilBlur = privacyBlur;
+  window.SilBlurRects = privacyRects;
+
+  // 관리자: 또렷하게 둘 곳을 직접 네모로 정함. 끌어서 새 네모, 네모 안을 끌면 옮김, 모서리 ×를 누르면 지움. 저장하면 네모 목록, 취소하면 null
+  function editKeep(src, init) {
+    return new Promise((resolve) => {
+      const W = src.width, H = src.height;
+      const base = blurKeep(src, []);
+      let rects = init.map(r => r.slice()), auto = init.map(r => r.slice()), drag = null, raf = 0;
+      const cv = el('canvas', { class: 'kp-cv' }); cv.width = W; cv.height = H;
+      const g = cv.getContext('2d');
+      const scale = () => W / cv.getBoundingClientRect().width;
+      const norm = (r) => [Math.max(0, Math.min(r[0], r[2])), Math.max(0, Math.min(r[1], r[3])), Math.min(W, Math.max(r[0], r[2])), Math.min(H, Math.max(r[1], r[3]))];
+      const draw = () => {
+        raf = 0; g.drawImage(base, 0, 0);
+        const k = scale(), list = drag && drag.mode === 'new' ? rects.concat([drag.r]) : rects;
+        for (const r0 of list) { const r = norm(r0); if (r[2] - r[0] > 1 && r[3] - r[1] > 1) g.drawImage(src, r[0], r[1], r[2] - r[0], r[3] - r[1], r[0], r[1], r[2] - r[0], r[3] - r[1]); }
+        g.lineWidth = 3 * k; g.strokeStyle = '#3182f6';
+        for (const r0 of list) { const r = norm(r0); g.strokeRect(r[0], r[1], r[2] - r[0], r[3] - r[1]); }
+        for (const r0 of rects) {
+          const r = norm(r0), R = 13 * k;
+          g.fillStyle = '#3182f6'; g.beginPath(); g.arc(r[2], r[1], R, 0, Math.PI * 2); g.fill();
+          g.strokeStyle = '#fff'; g.lineWidth = 2.5 * k; const q = R * 0.42;
+          g.beginPath(); g.moveTo(r[2] - q, r[1] - q); g.lineTo(r[2] + q, r[1] + q); g.moveTo(r[2] + q, r[1] - q); g.lineTo(r[2] - q, r[1] + q); g.stroke();
+          g.strokeStyle = '#3182f6'; g.lineWidth = 3 * k;
+        }
+        info.textContent = rects.length ? `또렷하게 둘 곳 ${rects.length}군데` : '아직 정한 곳이 없어요. 사진 위를 끌어서 네모를 그리세요';
+      };
+      const redraw = () => { if (!raf) raf = requestAnimationFrame(draw); };
+      const at = (e) => { const b = cv.getBoundingClientRect(), k = W / b.width; return [(e.clientX - b.left) * k, (e.clientY - b.top) * k]; };
+      cv.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); const [x, y] = at(e), R = 18 * scale();
+        const hit = rects.findIndex(r0 => { const r = norm(r0); return Math.hypot(x - r[2], y - r[1]) <= R; });
+        if (hit >= 0) { rects.splice(hit, 1); redraw(); return; }
+        const inside = rects.findIndex(r0 => { const r = norm(r0); return x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]; });
+        drag = inside >= 0 ? { mode: 'move', i: inside, x, y, r: norm(rects[inside]) } : { mode: 'new', r: [x, y, x, y] };
+        cv.setPointerCapture(e.pointerId);
+      });
+      cv.addEventListener('pointermove', (e) => {
+        if (!drag) return; const [x, y] = at(e);
+        if (drag.mode === 'new') { drag.r[2] = Math.max(0, Math.min(W, x)); drag.r[3] = Math.max(0, Math.min(H, y)); }
+        else { const o = drag.r, dx = Math.max(-o[0], Math.min(W - o[2], x - drag.x)), dy = Math.max(-o[1], Math.min(H - o[3], y - drag.y)); rects[drag.i] = [o[0] + dx, o[1] + dy, o[2] + dx, o[3] + dy]; }
+        redraw();
+      });
+      const up = () => {
+        if (!drag) return;
+        if (drag.mode === 'new') { const r = norm(drag.r); if (r[2] - r[0] >= 12 * scale() && r[3] - r[1] >= 12 * scale()) rects.push(r); }
+        drag = null; redraw();
+      };
+      cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+      const info = el('span', { class: 'kp-info' });
+      const close = (v) => { box.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+      const onKey = (e) => { if (e.key === 'Escape') close(null); };
+      const clr = el('button', { type: 'button', class: 'btn', text: '모두 지우기' }); clr.onclick = () => { rects = []; redraw(); };
+      const back = el('button', { type: 'button', class: 'btn', text: '자동으로 찾은 곳' }); back.onclick = () => { rects = auto.map(r => r.slice()); redraw(); };
+      back.hidden = !auto.length;
+      const no = el('button', { type: 'button', class: 'btn', text: '취소' }); no.onclick = () => close(null);
+      const ok = el('button', { type: 'button', class: 'btn primary', text: '이대로 저장' });
+      ok.onclick = () => { if (!rects.length) { toast('또렷하게 둘 곳을 하나 이상 그려 주세요'); return; } close(rects.map(norm)); };
+      const box = el('div', { class: 'kp', role: 'dialog', 'aria-label': '가릴 곳 직접 정하기' },
+        el('div', { class: 'kp-head' }, el('b', { text: '가릴 곳 직접 정하기' }),
+          el('span', { text: '캐릭터 창(전투력 줄까지)과 상세 스탯 창을 끌어서 네모로 감싸세요. 네모 밖은 모두 흐려져요. 네모 안을 끌면 옮기고, 모서리 ×를 누르면 지워요.' })),
+        el('div', { class: 'kp-stage' }, cv),
+        el('div', { class: 'kp-acts' }, info, el('span', { class: 'kp-gap' }), clr, back, no, ok));
+      document.addEventListener('keydown', onKey);
+      document.body.append(box);
+      draw();
+    });
+  }
   // 관리자: 원본(확인용)과 랭킹에 보일 흐린 사본을 나란히. 누르면 크게 열림
-  // 흐린 사본이 없으면(예전 화면으로 신청 등) 여기서 원본으로 만들어 붙임
+  // 흐린 사본이 없으면(예전 화면으로 신청 등) 여기서 원본으로 만들어 붙임. 자동으로 못 가리거나 잘못 가렸으면 직접 네모로 정함
   function shotPair(c, orig, pub, fix, folder) {
     const one = (path, cap) => {
       const img = el('img', { alt: cap });
       signed(c, path).then(u => { if (u) { img.src = u; img.onclick = () => window.open(u, '_blank', 'noopener'); } });
       return el('figure', { class: 'adm-shot' }, img, el('figcaption', { text: cap }));
     };
-    const box = el('div', { class: 'adm-shots' }, one(orig, '원본(확인용)'));
-    if (pub) { box.append(one(pub, '랭킹에 보일 사진')); return box; }
-    const note = el('p', { class: 'adm-flag', text: '다른 사람 이름을 가린 사진을 만드는 중이에요' });
-    box.append(note);
+    const editBtn = el('button', { type: 'button', class: 'btn adm-edit', text: '가릴 곳 직접 정하기' });
+    const box = el('div', { class: 'adm-shots' }, one(orig, '원본(확인용)'), editBtn);
+    let slot = null;
+    const put = (node) => { if (slot) slot.replaceWith(node); else box.insertBefore(node, editBtn); slot = node; };
+    const setPub = (path) => put(one(path, '랭킹에 보일 사진'));
+    const note = (t) => put(el('p', { class: 'adm-flag', text: t }));
+    let cvP = null;
+    const loadOrig = () => cvP || (cvP = (async () => {
+      const u = await signed(c, orig); if (!u) throw new Error('원본 사진을 열지 못했어요');
+      return blobToCanvas(await (await fetch(u)).blob());
+    })().catch(e => { cvP = null; throw e; }));
+    const save = async (pc) => {
+      const path = `${folder}/${uuid()}_p.jpg`;
+      const up = await c.storage.from('shots').upload(path, await toJpeg(pc), { contentType: 'image/jpeg', upsert: false });
+      if (up.error) throw up.error;
+      const { error } = await fix(path); if (error) throw error;
+      setPub(path);
+    };
+    editBtn.hidden = !fix || !orig;
+    editBtn.onclick = async () => {
+      editBtn.disabled = true;
+      try {
+        const cv = await loadOrig();
+        const rects = await editKeep(cv, privacyRects(cv) || []);
+        if (rects) { await save(blurKeep(cv, rects)); toast('랭킹에 보일 사진을 바꿨어요'); }
+      } catch (e) { console.warn(e); toast('저장하지 못했어요. ' + errMsg(e)); }
+      editBtn.disabled = false;
+    };
+    if (pub) { setPub(pub); return box; }
+    note('다른 사람 이름을 가린 사진을 만드는 중이에요');
     (async () => {
       try {
         if (!fix || !orig) throw null;
-        const u = await signed(c, orig); if (!u) throw null;
-        const cv = await blobToCanvas(await (await fetch(u)).blob());
-        const pc = privacyBlur(cv); if (!pc) throw null;
-        const path = `${folder}/${uuid()}_p.jpg`;
-        const up = await c.storage.from('shots').upload(path, await toJpeg(pc), { contentType: 'image/jpeg', upsert: false });
-        if (up.error) throw up.error;
-        const { error } = await fix(path); if (error) throw error;
-        note.replaceWith(one(path, '랭킹에 보일 사진'));
-      } catch (e) { if (e) console.warn(e); note.textContent = '다른 사람 이름을 자동으로 못 가렸어요. 반영하면 원본이 그대로 랭킹에 보여요'; }
+        const pc = privacyBlur(await loadOrig()); if (!pc) throw null;
+        await save(pc);
+      } catch (e) { if (e) console.warn(e); note('다른 사람 이름을 자동으로 못 가렸어요. 아래 \'가릴 곳 직접 정하기\'로 정해 주세요. 그냥 반영하면 원본이 그대로 랭킹에 보여요'); }
     })();
     return box;
   }
@@ -301,6 +477,7 @@
       const mg = m.getContext('2d', { willReadFrequently: true });
       const [l1, l2] = stampLines(), fs = Math.max(16, Math.round(w / 34));
       mg.font = `700 ${fs}px sans-serif`; mg.fillStyle = '#fff'; mg.textAlign = 'center'; mg.textBaseline = 'middle';
+      try { mg.filter = `blur(${Math.max(0.6, fs / 40).toFixed(1)}px)`; } catch (e) { /* 안 되는 브라우저는 그냥 */ }
       const tw = Math.max(mg.measureText(l1).width, mg.measureText(l2).width);
       const cols = Math.max(2, Math.round(w / (tw * 1.25))), rows = Math.max(4, Math.round(h / (fs * 3.4)));
       for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
@@ -312,7 +489,7 @@
         const a = md[i + 3]; if (!a) continue;
         // 밝기를 조금(압축돼도 남게) + 파랑을 조금 더. 어두운 곳은 작은 변화도 눈에 띄어서 덜, 밝은 곳은 조금 더
         const k = a / 255, lum = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
-        const L = (2 + 3 * lum) * k, B = L + (2 + 5 * lum) * k;
+        const L = (2 + 3 * lum) * k, B = L + (1 + 2 * lum) * k;
         d[i] += d[i] >= L ? -L : L; d[i + 1] += d[i + 1] >= L ? -L : L; d[i + 2] += d[i + 2] >= B ? -B : B;
       }
       g.putImageData(img, 0, 0);
@@ -324,21 +501,35 @@
   function revealMark(src, mode) {
     const w = src.width, h = src.height, d = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
     const v = new Float32Array(w * h);
-    for (let i = 0, j = 0; j < v.length; i += 4, j++) v[j] = mode === 'lum' ? (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) : d[i + 2] - (d[i] + d[i + 1]) / 2;
+    for (let i = 0, j = 0; j < v.length; i += 4, j++) v[j] = mode !== 'chroma' ? (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) : d[i + 2] - (d[i] + d[i + 1]) / 2;
     const W = w + 1, S = new Float64Array(W * (h + 1));
     for (let y = 0; y < h; y++) { let row = 0; for (let x = 0; x < w; x++) { row += v[y * w + x]; S[(y + 1) * W + x + 1] = S[y * W + x + 1] + row; } }
-    const R = Math.max(4, Math.round(Math.max(w, h) / 120)), gain = mode === 'lum' ? 14 : 10;
+    const M = Math.max(w, h), faint = mode === 'faint';
+    const R = faint ? Math.max(6, Math.round(M / 50)) : Math.max(4, Math.round(M / 120)), gain = faint ? 28 : mode === 'lum' ? 14 : 10;
     const out = document.createElement('canvas'); out.width = w; out.height = h;
     const og = out.getContext('2d'), od = og.createImageData(w, h), o = od.data;
+    const res = new Float32Array(w * h);
     for (let y = 0; y < h; y++) {
       const y0 = Math.max(0, y - R), y1 = Math.min(h, y + R + 1);
       for (let x = 0; x < w; x++) {
         const x0 = Math.max(0, x - R), x1 = Math.min(w, x + R + 1);
         const mean = (S[y1 * W + x1] - S[y0 * W + x1] - S[y1 * W + x0] + S[y0 * W + x0]) / ((y1 - y0) * (x1 - x0));
-        const q = 128 + (mean - v[y * w + x]) * gain, p = (y * w + x) * 4;
-        o[p] = o[p + 1] = o[p + 2] = q; o[p + 3] = 255;
+        const r = mean - v[y * w + x];
+        res[y * w + x] = faint ? Math.max(-8, Math.min(8, r)) : r;
       }
     }
+    let fin = res;
+    if (faint) {
+      // 압축 잡음(작은 점)은 살짝 뭉갬. 글자·테두리처럼 크게 튀는 곳은 위에서 잘라 냄
+      const r2 = Math.max(1, Math.round(M / 700)), T = new Float64Array(W * (h + 1));
+      for (let y = 0; y < h; y++) { let row = 0; for (let x = 0; x < w; x++) { row += res[y * w + x]; T[(y + 1) * W + x + 1] = T[y * W + x + 1] + row; } }
+      fin = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) {
+        const y0 = Math.max(0, y - r2), y1 = Math.min(h, y + r2 + 1);
+        for (let x = 0; x < w; x++) { const x0 = Math.max(0, x - r2), x1 = Math.min(w, x + r2 + 1); fin[y * w + x] = (T[y1 * W + x1] - T[y0 * W + x1] - T[y1 * W + x0] + T[y0 * W + x0]) / ((y1 - y0) * (x1 - x0)); }
+      }
+    }
+    for (let j = 0; j < w * h; j++) { const q = 128 + fin[j] * gain, p = j * 4; o[p] = o[p + 1] = o[p + 2] = q; o[p + 3] = 255; }
     og.putImageData(od, 0, 0);
     return out;
   }
@@ -367,7 +558,7 @@
         const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
         c.getContext('2d').drawImage(bmp, 0, 0);
         view.textContent = '';
-        view.append(el('p', { text: '색 차이로 찾기' }), revealMark(c, 'chroma'), el('p', { text: '밝기 차이로 찾기' }), revealMark(c, 'lum'));
+        view.append(el('p', { text: '아주 옅은 글자 찾기(랭킹 목록 캡처)' }), revealMark(c, 'faint'), el('p', { text: '밝기 차이로 찾기(스크린샷 사진)' }), revealMark(c, 'lum'), el('p', { text: '색 차이로 찾기' }), revealMark(c, 'chroma'));
       } catch (e) { view.textContent = '이미지를 열지 못했어요'; }
     };
     const fin = el('input', { type: 'file', accept: 'image/*', hidden: '' });
@@ -388,9 +579,9 @@
     let m = v.querySelector('.rk-wm');
     if (!m) { m = el('div', { class: 'rk-wm', 'aria-hidden': 'true' }); v.append(m); }
     const [l1, l2] = stampLines().map(x => String(x).replace(/[<>&"']/g, ''));
-    // 아주 옅은 누런색 글자(닉네임 / 시각 두 줄)를 촘촘히: 흰 바탕에서 밝기 3~4칸·파랑 7칸쯤만 빠져서 눈에는 거의 안 띄고,
-    // 카톡처럼 사진을 압축해 보내도, 작게 잘라 내도 '워터마크 찾기'의 밝기 차이로 드러남(색 차이는 압축하면 잘 사라짐)
-    const WM = window.SIL_WM || { fs: 44, fill: 'rgb(150,140,0)', op: 0.03, a: [18, 70, 50], b: [30, 110, 90] };
+    // 아주 옅은 회색 글자(닉네임 / 시각 두 줄)를 촘촘히: 흰 바탕에서 밝기가 2~3칸쯤만 빠지고 글자 테두리도 뭉개서 눈에는 거의 안 띄고,
+    // 카톡처럼 사진을 압축해 보내도 '워터마크 찾기'의 '아주 옅은 글자' 칸에서 드러남(굵은 덩어리라 압축에도 남음)
+    const WM = window.SIL_WM || { fs: 60, fill: 'rgb(0,0,0)', op: 0.012, blur: 3, a: [18, 70, 50], b: [30, 110, 90] };
     const fs = WM.fs, lh = Math.round(fs * 1.15), mc = document.createElement('canvas').getContext('2d');
     mc.font = `900 ${fs}px sans-serif`;
     const tw = Math.ceil(Math.max(mc.measureText(l1).width, mc.measureText(l2).width));
@@ -399,7 +590,10 @@
       const x = Math.round(padX / 2 + fs * sn), y = Math.round(padY / 2 + tw * sn + fs * cs);
       const w = Math.ceil(x + tw * cs + lh * sn + padX / 2), h = Math.ceil(y + lh * cs + 0.3 * fs + padY / 2);
       const txt = (t, dy) => `<text x="${x}" y="${y + dy}" font-family="sans-serif" font-weight="900" font-size="${fs}" fill="${WM.fill}" fill-opacity="${WM.op}">${t}</text>`;
-      return { w, h, url: 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><g transform="rotate(${-deg} ${x} ${y})">${txt(l1, 0)}${txt(l2, lh)}</g></svg>`) + '")' };
+      // 글자 테두리를 뭉개서 눈에 덜 띄게(압축해도 남는 건 굵은 덩어리 쪽이라 찾기에는 거의 영향 없음)
+      const flt = WM.blur ? `<filter id="f" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${WM.blur}"/></filter>` : '';
+      const grp = `<g transform="rotate(${-deg} ${x} ${y})"${WM.blur ? ' filter="url(#f)"' : ''}>${txt(l1, 0)}${txt(l2, lh)}</g>`;
+      return { w, h, url: 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${flt}${grp}</svg>`) + '")' };
     };
     const A1 = tile(...WM.a), A2 = tile(...WM.b);
     m.style.backgroundImage = A1.url + ',' + A2.url;
