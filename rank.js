@@ -68,7 +68,7 @@
     c.getContext('2d').drawImage(bmp, 0, 0);
     return c;
   }
-  // 랭킹에 보일 사진: 캐릭터 창(장비 칸까지)·상세 스탯 창만 또렷하게 두고 나머지(채팅·배경·다른 사람 이름표·전투력 줄 위 채팅)는 흐리게.
+  // 랭킹에 보일 사진: 캐릭터 창(전투력 줄까지)·상세 스탯 창만 또렷하게 두고 나머지(채팅·배경·다른 사람 이름표·점령전 줄 아래)는 흐리게.
   // 장비창의 초록 악세서리 칸(2열 6행)으로 창 위치를 잡음. 상세 스탯 창은 캐릭터 창 오른쪽에 붙어서 열림. 못 찾으면 null(원본을 씀)
   function privacyBlur(src) {
     let G = null;
@@ -78,7 +78,7 @@
     const xs = G.cells.map(c => c.x), xa = Math.min(...xs), xb = Math.max(...xs), y0 = Math.min(...G.cells.map(c => c.y));
     const top = y0 - 8.3 * P, left = xa - 13.85 * P, mid = xb + 1.5 * P, right = mid + 16.5 * P;
     if (left < -3 * P || top < -3 * P || mid > W + P) return null;
-    const keep = [[left, top, mid, y0 + 7.45 * P], [mid, top, right, y0 + 11.15 * P]];
+    const keep = [[left, top, mid, y0 + 8.75 * P], [mid, top, right, y0 + 11.15 * P]];
     // 흐리게: 크게 줄였다가 다시 키움(모든 브라우저에서 됨)
     const step = (from, w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(from, 0, 0, w, h); return c; };
     const small = step(step(src, Math.max(16, Math.round(W / 5)), Math.max(16, Math.round(H / 5))), Math.max(8, Math.round(W / 18)), Math.max(8, Math.round(H / 18)));
@@ -90,6 +90,7 @@
     }
     return out;
   }
+  window.SilBlur = privacyBlur;
   // 관리자: 랭킹에 보일(흐리게 한) 사진 열기. 못 가린 사진이면 그렇게 알려 줌
   function pubLink(c, path) {
     if (!path) return el('small', { class: 'adm-flag', text: '다른 사람 이름을 자동으로 못 가렸어요. 승인하면 원본이 그대로 랭킹에 보여요' });
@@ -212,6 +213,11 @@
     const me = (cur && cur.status === 'approved' && cur.nickname) || (rs[0] && rs[0].nickname);
     return me || '관리자';
   }
+  // 그림 워터마크용 짧은 두 줄(작게 잘라 낸 캡처에도 한 벌이 통째로 들어가게): 닉네임 / 월.일 시:분
+  function stampLines() {
+    const d = new Date(), z = (n) => String(n).padStart(2, '0');
+    return [viewerName(), `${z(d.getMonth() + 1)}.${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`];
+  }
   function stamp() {
     const d = new Date(), z = (n) => String(n).padStart(2, '0');
     return `${viewerName()}  ${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`;
@@ -251,12 +257,13 @@
       g.drawImage(bmp, 0, 0);
       const m = document.createElement('canvas'); m.width = w; m.height = h;
       const mg = m.getContext('2d', { willReadFrequently: true });
-      const t = stamp(), fs = Math.max(18, Math.round(w / 28));
+      const [l1, l2] = stampLines(), fs = Math.max(16, Math.round(w / 34));
       mg.font = `700 ${fs}px sans-serif`; mg.fillStyle = '#fff'; mg.textAlign = 'center'; mg.textBaseline = 'middle';
-      const cols = Math.max(2, Math.round(w / (mg.measureText(t).width * 1.05))), rows = Math.max(4, Math.round(h / (fs * 3)));
+      const tw = Math.max(mg.measureText(l1).width, mg.measureText(l2).width);
+      const cols = Math.max(2, Math.round(w / (tw * 1.25))), rows = Math.max(4, Math.round(h / (fs * 3.4)));
       for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
         const x = (q + 0.3 + Math.random() * 0.4) * w / cols, y = (r + 0.2 + Math.random() * 0.6) * h / rows;
-        mg.save(); mg.translate(x, y); mg.rotate((-30 + Math.random() * 20) * Math.PI / 180); mg.fillText(t, 0, 0); mg.restore();
+        mg.save(); mg.translate(x, y); mg.rotate((-30 + Math.random() * 20) * Math.PI / 180); mg.fillText(l1, 0, -fs * 0.58); mg.fillText(l2, 0, fs * 0.58); mg.restore();
       }
       const md = mg.getImageData(0, 0, w, h).data, img = g.getImageData(0, 0, w, h), d = img.data;
       for (let i = 0; i < d.length; i += 4) {
@@ -338,17 +345,19 @@
     const v = $('#rankView'); if (!v) return;
     let m = v.querySelector('.rk-wm');
     if (!m) { m = el('div', { class: 'rk-wm', 'aria-hidden': 'true' }); v.append(m); }
-    const t = stamp().replace(/[<>&"']/g, '');
-    // 아주 옅은 누런색 글자를 크게, 촘촘히: 흰 바탕에서 밝기 3~4칸·파랑 7칸쯤만 빠져서 눈에는 거의 안 띄고,
-    // 카톡처럼 사진을 압축해 보내도 '워터마크 찾기'의 밝기 차이로 드러남(색 차이는 압축하면 잘 사라짐)
-    const WM = window.SIL_WM || { fs: 56, fill: 'rgb(150,140,0)', op: 0.03, a: [18, 110, 70], b: [30, 150, 120] };
-    const fs = WM.fs, mc = document.createElement('canvas').getContext('2d');
+    const [l1, l2] = stampLines().map(x => String(x).replace(/[<>&"']/g, ''));
+    // 아주 옅은 누런색 글자(닉네임 / 시각 두 줄)를 촘촘히: 흰 바탕에서 밝기 3~4칸·파랑 7칸쯤만 빠져서 눈에는 거의 안 띄고,
+    // 카톡처럼 사진을 압축해 보내도, 작게 잘라 내도 '워터마크 찾기'의 밝기 차이로 드러남(색 차이는 압축하면 잘 사라짐)
+    const WM = window.SIL_WM || { fs: 44, fill: 'rgb(150,140,0)', op: 0.03, a: [18, 70, 50], b: [30, 110, 90] };
+    const fs = WM.fs, lh = Math.round(fs * 1.15), mc = document.createElement('canvas').getContext('2d');
     mc.font = `900 ${fs}px sans-serif`;
-    const tw = Math.ceil(mc.measureText(t).width);
+    const tw = Math.ceil(Math.max(mc.measureText(l1).width, mc.measureText(l2).width));
     const tile = (deg, padX, padY) => {
-      const r = deg * Math.PI / 180, w = Math.ceil(tw * Math.cos(r)) + padX, h = Math.ceil(tw * Math.sin(r)) + fs + padY;
-      const x = Math.round(padX / 2), y = h - Math.round(padY / 2);
-      return { w, h, url: 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><text x="${x}" y="${y}" transform="rotate(${-deg} ${x} ${y})" font-family="sans-serif" font-weight="900" font-size="${fs}" fill="${WM.fill}" fill-opacity="${WM.op}">${t}</text></svg>`) + '")' };
+      const r = deg * Math.PI / 180, sn = Math.sin(r), cs = Math.cos(r);
+      const x = Math.round(padX / 2 + fs * sn), y = Math.round(padY / 2 + tw * sn + fs * cs);
+      const w = Math.ceil(x + tw * cs + lh * sn + padX / 2), h = Math.ceil(y + lh * cs + 0.3 * fs + padY / 2);
+      const txt = (t, dy) => `<text x="${x}" y="${y + dy}" font-family="sans-serif" font-weight="900" font-size="${fs}" fill="${WM.fill}" fill-opacity="${WM.op}">${t}</text>`;
+      return { w, h, url: 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><g transform="rotate(${-deg} ${x} ${y})">${txt(l1, 0)}${txt(l2, lh)}</g></svg>`) + '")' };
     };
     const A1 = tile(...WM.a), A2 = tile(...WM.b);
     m.style.backgroundImage = A1.url + ',' + A2.url;
