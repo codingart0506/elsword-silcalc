@@ -577,3 +577,9 @@ body.view-rank .who, body.view-admin .who { display: none; }
   .adm-plain .adm-info > * { grid-column: 1; }
   .adm-plain .adm-info > .adm-acts { grid-column: 2; grid-row: 1 / span 3; align-self: center; margin-top: 0; }
 }
+/* 랭킹 신청 창: 스크린샷 예시 */
+.apply-ex { margin: 4px 0 12px; background: var(--fill); border-radius: 12px; padding: 10px; }
+.apply-ex img { display: block; width: 100%; border-radius: 8px; cursor: zoom-in; aspect-ratio: 16 / 9; object-fit: cover; background: #dfe3e8; }
+.apply-ex figcaption { font-size: 13px; color: var(--sub); margin-top: 8px; line-height: 1.5; }
+.apply-ex figcaption b { color: var(--text); }
+.apply-ex ol { margin: 4px 0 0; padding-left: 20px; }
