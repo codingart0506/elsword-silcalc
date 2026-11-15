@@ -503,3 +503,4 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .av-own-acts .av-hint, .av-fix-acts .av-hint { margin: 0; flex-basis: 100%; }
 .av-fix-acts { justify-content: flex-end; padding-top: 8px; }
 .av-fix-acts .av-hint { text-align: right; }
+#dlgText { white-space: pre-line; }

@@ -108,8 +108,10 @@
         $('#rankFilters').hidden = !ok;
         if (!ok) {
           const wait = Object.values(A.ranks()).some(r => r && r.token && r.status === 'pending');
+          const gone = Object.values(A.ranks()).find(r => r && (r.status === 'hidden' || r.status === 'removed'));
           empty.hidden = false;
-          empty.textContent = wait ? '신청을 확인하고 있어요. 관리자가 승인하면 랭킹을 볼 수 있어요.'
+          empty.textContent = gone ? `관리자가 랭킹에서 ${gone.status === 'hidden' ? '내려서' : '삭제해서'} 랭킹을 볼 수 없어요. 사유: ${gone.memo || '따로 적지 않았어요'}`
+            : wait ? '신청을 확인하고 있어요. 관리자가 승인하면 랭킹을 볼 수 있어요.'
             : '랭킹은 랭킹에 올라간 사람만 볼 수 있어요. 계산기에서 "랭킹에 올리기"로 신청해서 승인되면 볼 수 있어요. 다른 기기에서 승인받았다면 아래 "갱신 코드 입력"에 그때 받은 갱신 코드를 넣어 주세요.';
           rkDone = true; $('#btnRankMore').hidden = true; rkBusy = false; return;
         }
@@ -396,6 +398,11 @@
     } else if (r.status === 'rejected') {
       line.append(el('span', { class: 'rk-state' }, '랭킹 신청이 거절됐어요', r.memo ? el('small', { text: r.memo }) : null),
         el('span', { class: 'acts' }, btn('다시 신청', openApply)));
+    } else if (r.status === 'hidden' || r.status === 'removed') {
+      // 관리자가 내린 경우: 사유를 보여 줌(처음 한 번은 창으로)
+      line.append(el('span', { class: 'rk-state' }, r.status === 'hidden' ? '관리자가 랭킹에서 내렸어요' : '관리자가 랭킹에서 삭제했어요', el('small', { text: r.memo ? `사유: ${r.memo}` : '사유는 따로 적지 않았어요' })),
+        el('span', { class: 'acts' }, r.status === 'removed' ? btn('다시 신청', () => { A.setRank(null); renderLine(); openApply(); }) : btn('갱신 코드', showToken, true)));
+      noticeRemoved(r);
     } else {
       const upd = r.upd === 'held' ? `갱신 ${fmtInt(r.updCp)} 확인 기다리는 중`
         : (r.upd === 'rejected' || r.upd === 'reverted') ? `최근 갱신이 반영되지 않았어요${r.updMemo ? `: ${r.updMemo}` : ''}` : '';
@@ -405,6 +412,13 @@
     }
   }
   A.onRefresh(renderLine);
+  function noticeRemoved(r) {
+    const k = r.status + '|' + (r.memo || '');
+    if (r.seen === k) return;
+    r.seen = k; A.setRank(r);
+    A.dialog({ title: r.status === 'hidden' ? '랭킹에서 내려졌어요' : '랭킹에서 삭제됐어요',
+      text: `${r.nickname} 캐릭터를 관리자가 랭킹에서 ${r.status === 'hidden' ? '내렸어요. 랭킹도 볼 수 없어요' : '삭제했어요'}.\n사유: ${r.memo || '따로 적지 않았어요'}`, ok: '확인' });
+  }
 
   async function positions(c, r) {
     const { data, error } = await c.rpc('rank_pos', { p_cp: r.cp, p_cls: r.cls || null });
@@ -568,6 +582,17 @@
     const { data, error } = await c.storage.from('shots').createSignedUrl(path, 3600);
     return error ? null : data.signedUrl;
   }
+  // 숨기기·삭제 사유: 그 사람이 다음에 사이트를 열면 창으로 보여 줌
+  async function setHidden(c, id, nv) {
+    let reason = '';
+    if (nv) {
+      const v = await A.dialog({ title: '랭킹에서 숨기기', text: '숨긴 사람이 사이트를 열면 이 사유가 창으로 보여요. 비워 둬도 돼요.', input: '', ok: '숨기기' });
+      if (v === null) return null; reason = String(v).trim();
+    }
+    const { error } = await c.rpc('admin_hide_player', { p_id: id, p_hidden: nv, p_reason: reason });
+    if (error) { toast(errMsg(error)); return null; }
+    return reason;
+  }
   async function adminInit() {
     const body = $('#adminBody');
     body.innerHTML = ''; body.append(el('p', { class: 'rank-note', text: '불러오는 중이에요' }));
@@ -678,8 +703,7 @@
         const hide = el('button', { type: 'button', class: 'btn', text: p.hidden ? '다시 보이기' : '랭킹에서 숨기기' });
         hide.onclick = async () => {
           const nv = !p.hidden;
-          const { error: e } = await c.from('players').update({ hidden: nv }).eq('id', h.player_id);
-          if (e) { toast(errMsg(e)); return; }
+          if (await setHidden(c, h.player_id, nv) === null) return;
           p.hidden = nv; hide.textContent = nv ? '다시 보이기' : '랭킹에서 숨기기';
           toast(nv ? '랭킹에서 숨겼어요' : '다시 보이게 했어요');
         };
@@ -725,11 +749,12 @@
     const all = el('div', { class: 'adm-sec' }, el('h3', { text: '랭킹에 올라간 캐릭터' }),
       el('p', { class: 'rank-note', text: '숨기면 랭킹에서 빠지고 그 사람은 랭킹도 못 봐요(분탕 차단). 삭제하면 랭킹, 갱신 기록, 사진이 모두 지워지고 되돌릴 수 없어요.' }));
     body.append(all);
-    const { data: ps, error: e3 } = await c.from('players').select('id,nickname,cls,cp,hidden,updated_at').order('cp', { ascending: false }).limit(500);
+    const { data: ps, error: e3 } = await c.from('players').select('id,nickname,cls,cp,hidden,hide_reason,updated_at').order('cp', { ascending: false }).limit(500);
     if (e3) throw e3;
     if (!ps.length) all.append(el('p', { class: 'rank-note', text: '아직 올라간 캐릭터가 없어요' }));
     ps.forEach((p, i) => {
-      const nm = el('span', { class: 'nm', text: `${i + 1}. ${p.nickname}${p.hidden ? ' (숨김)' : ''}` });
+      const tag = () => p.hidden ? ` (숨김${p.hide_reason ? ': ' + p.hide_reason : ''})` : '';
+      const nm = el('span', { class: 'nm', text: `${i + 1}. ${p.nickname}${tag()}` });
       const hide = el('button', { type: 'button', class: 'btn', text: p.hidden ? '다시 보이기' : '숨기기' });
       const del = el('button', { type: 'button', class: 'btn danger', text: '삭제' });
       const item = el('div', { class: 'adm-item adm-plain' }, el('div', { class: 'adm-info' }, nm,
@@ -738,17 +763,16 @@
         el('div', { class: 'adm-acts' }, hide, del)));
       hide.onclick = async () => {
         const nv = !p.hidden;
-        const { error: e } = await c.from('players').update({ hidden: nv }).eq('id', p.id);
-        if (e) { toast(errMsg(e)); return; }
-        p.hidden = nv; hide.textContent = nv ? '다시 보이기' : '숨기기';
-        nm.textContent = `${i + 1}. ${p.nickname}${nv ? ' (숨김)' : ''}`;
+        const why = await setHidden(c, p.id, nv); if (why === null) return;
+        p.hidden = nv; p.hide_reason = nv ? why : null; hide.textContent = nv ? '다시 보이기' : '숨기기';
+        nm.textContent = `${i + 1}. ${p.nickname}${tag()}`;
         toast(nv ? '랭킹에서 숨겼어요' : '다시 보이게 했어요');
       };
       del.onclick = async () => {
-        const ok = await A.dialog({ title: `${p.nickname} 삭제`, text: '랭킹, 갱신 기록, 사진이 모두 지워지고 되돌릴 수 없어요.', ok: '삭제', danger: true });
-        if (!ok) return;
+        const why = await A.dialog({ title: `${p.nickname} 삭제`, text: '랭킹, 갱신 기록, 사진이 모두 지워지고 되돌릴 수 없어요. 지운 사람이 사이트를 열면 아래 사유가 창으로 보여요(비워 둬도 돼요).', input: '', ok: '삭제', danger: true });
+        if (why === null) return;
         hide.disabled = del.disabled = true;
-        const { data: paths, error: e } = await c.rpc('admin_delete_player', { p_id: p.id });
+        const { data: paths, error: e } = await c.rpc('admin_delete_player', { p_id: p.id, p_reason: String(why).trim() });
         if (e) { toast(errMsg(e)); hide.disabled = del.disabled = false; return; }
         if (paths && paths.length) { const { error: re } = await c.storage.from('shots').remove(paths); if (re) console.warn(re); }
         item.remove(); toast(`${p.nickname} 랭킹을 지웠어요`);
