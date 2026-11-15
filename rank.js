@@ -91,12 +91,19 @@
     return out;
   }
   window.SilBlur = privacyBlur;
-  // 관리자: 랭킹에 보일(흐리게 한) 사진 열기. 못 가린 사진이면 그렇게 알려 줌
-  function pubLink(c, path) {
-    if (!path) return el('small', { class: 'adm-flag', text: '다른 사람 이름을 자동으로 못 가렸어요. 승인하면 원본이 그대로 랭킹에 보여요' });
-    const b = el('button', { type: 'button', class: 'txt sm', text: '랭킹에 보일 사진 보기' });
-    b.onclick = async () => { const u = await signed(c, path); if (u) window.open(u, '_blank', 'noopener'); };
-    return b;
+  // 관리자: 원본(확인용)과 랭킹에 보일 흐린 사본을 나란히. 누르면 크게 열림
+  function shotPair(c, orig, pub) {
+    const one = (path, cap) => {
+      const img = el('img', { alt: cap });
+      signed(c, path).then(u => { if (u) { img.src = u; img.onclick = () => window.open(u, '_blank', 'noopener'); } });
+      return el('figure', { class: 'adm-shot' }, img, el('figcaption', { text: cap }));
+    };
+    return el('div', { class: 'adm-shots' }, one(orig, '원본(확인용)'),
+      pub ? one(pub, '랭킹에 보일 사진') : el('p', { class: 'adm-flag', text: '다른 사람 이름을 자동으로 못 가렸어요. 반영하면 원본이 그대로 랭킹에 보여요' }));
+  }
+  // 관리자: 신청·갱신한 세팅을 계산기에서 열어 실투력이 맞는지 확인
+  function adminSetting(nick, cls, inputs) {
+    return el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => { setView('calc'); A.openShared({ n: cls, k: nick, i: inputs || {} }); } });
   }
   function genCode() { return 'SIL-' + String(1000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 9000)); }
   function genToken() {
@@ -698,8 +705,7 @@
     if (error) throw error;
     if (!apps.length) pend.append(el('p', { class: 'rank-note', text: '기다리는 신청이 없어요' }));
     for (const a of apps) {
-      const img = el('img', { alt: `${a.nickname} 신청 스크린샷` });
-      signed(c, a.shot_path).then(u => { if (u) { img.src = u; img.onclick = () => window.open(u, '_blank', 'noopener'); } });
+      const img = shotPair(c, a.shot_path, a.pub_path);
       const ok = el('button', { type: 'button', class: 'btn primary', text: '승인' });
       const no = el('button', { type: 'button', class: 'btn', text: '거절' });
       const item = el('div', { class: 'adm-item' }, img, el('div', { class: 'adm-info' },
@@ -707,10 +713,9 @@
         el('span', { text: `${a.cls}, 실투력 ${fmtInt(a.cp)}` }),
         el('span', { text: `초월:강렬 비율 ${shareText(a.inputs)}` }),
         el('span', { class: 'code' }, '인증 코드 ', el('b', { text: a.verify_code })),
-        el('small', { class: 'adm-flag', text: '채팅의 인증 코드, 닉네임, PC방 아이콘 OFF, 지애 버프 없음을 확인하세요' }),
-        pubLink(c, a.pub_path),
+        el('small', { class: 'adm-flag', text: '채팅의 인증 코드와 닉네임을 확인하세요' }),
         el('small', { text: new Date(a.created_at).toLocaleString('ko-KR') }),
-        el('div', { class: 'adm-acts' }, ok, no)));
+        el('div', { class: 'adm-acts' }, ok, no, adminSetting(a.nickname, a.cls, a.inputs))));
       ok.onclick = async () => {
         ok.disabled = no.disabled = true;
         const { error: e } = await c.rpc('approve_application', { p_id: a.id });
@@ -734,7 +739,7 @@
       el('p', { class: 'rank-note', text: '실투력이 그대로거나 내려간 갱신이라 바로 반영됐어요. 사진을 보고 확인하거나, 이상하면 되돌려요.' }));
     body.insertBefore(held, hist); body.insertBefore(live, hist); hist.remove();
     const { data: hs, error: e2 } = await c.from('cp_history')
-      .select('id,cp,prev_cp,cls,inputs,edited,status,created_at,shot_path,player_id,players(nickname,hidden)')
+      .select('id,cp,prev_cp,cls,inputs,edited,status,created_at,shot_path,pub_path,player_id,players(nickname,hidden)')
       .in('status', ['held', 'live']).order('created_at', { ascending: false }).limit(60);
     if (e2) throw e2;
     const hsHeld = hs.filter(h => h.status === 'held'), hsLive = hs.filter(h => h.status === 'live');
@@ -753,10 +758,10 @@
     };
     const updItem = (h) => {
       const p = h.players || {};
-      const img = el('img', { alt: `${p.nickname || ''} 갱신 스크린샷` });
-      signed(c, h.shot_path).then(u => { if (u) { img.src = u; img.onclick = () => window.open(u, '_blank', 'noopener'); } });
+      const img = shotPair(c, h.shot_path, h.pub_path);
       const diff = h.prev_cp ? (h.cp - h.prev_cp) / h.prev_cp * 100 : 0;
       const acts = el('div', { class: 'adm-acts' });
+      const setBtn = adminSetting(p.nickname || '', h.cls, h.inputs);
       const item = el('div', { class: 'adm-item' }, img, el('div', { class: 'adm-info' },
         el('span', { class: 'nm', text: p.nickname || '?' }),
         el('span', { text: `${h.cls || ''}, ${h.prev_cp ? fmtInt(h.prev_cp) + ' → ' : ''}${fmtInt(h.cp)}${h.prev_cp ? ` (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%)` : ''}` }),
@@ -777,6 +782,7 @@
         acts.append(el('button', { type: 'button', class: 'btn primary', text: '확인', onclick: () => act(h, 'check', item, '확인했어요') }),
           el('button', { type: 'button', class: 'btn', text: '되돌리기', onclick: () => act(h, 'revert', item, '이전 값으로 되돌렸어요') }), hide);
       }
+      acts.append(setBtn);
       return item;
     };
     for (const h of hsHeld) held.append(updItem(h));
