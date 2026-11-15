@@ -92,14 +92,31 @@
   }
   window.SilBlur = privacyBlur;
   // 관리자: 원본(확인용)과 랭킹에 보일 흐린 사본을 나란히. 누르면 크게 열림
-  function shotPair(c, orig, pub) {
+  // 흐린 사본이 없으면(예전 화면으로 신청 등) 여기서 원본으로 만들어 붙임
+  function shotPair(c, orig, pub, fix, folder) {
     const one = (path, cap) => {
       const img = el('img', { alt: cap });
       signed(c, path).then(u => { if (u) { img.src = u; img.onclick = () => window.open(u, '_blank', 'noopener'); } });
       return el('figure', { class: 'adm-shot' }, img, el('figcaption', { text: cap }));
     };
-    return el('div', { class: 'adm-shots' }, one(orig, '원본(확인용)'),
-      pub ? one(pub, '랭킹에 보일 사진') : el('p', { class: 'adm-flag', text: '다른 사람 이름을 자동으로 못 가렸어요. 반영하면 원본이 그대로 랭킹에 보여요' }));
+    const box = el('div', { class: 'adm-shots' }, one(orig, '원본(확인용)'));
+    if (pub) { box.append(one(pub, '랭킹에 보일 사진')); return box; }
+    const note = el('p', { class: 'adm-flag', text: '다른 사람 이름을 가린 사진을 만드는 중이에요' });
+    box.append(note);
+    (async () => {
+      try {
+        if (!fix || !orig) throw null;
+        const u = await signed(c, orig); if (!u) throw null;
+        const cv = await blobToCanvas(await (await fetch(u)).blob());
+        const pc = privacyBlur(cv); if (!pc) throw null;
+        const path = `${folder}/${uuid()}_p.jpg`;
+        const up = await c.storage.from('shots').upload(path, await toJpeg(pc), { contentType: 'image/jpeg', upsert: false });
+        if (up.error) throw up.error;
+        const { error } = await fix(path); if (error) throw error;
+        note.replaceWith(one(path, '랭킹에 보일 사진'));
+      } catch (e) { if (e) console.warn(e); note.textContent = '다른 사람 이름을 자동으로 못 가렸어요. 반영하면 원본이 그대로 랭킹에 보여요'; }
+    })();
+    return box;
   }
   // 관리자: 같이 올린 계산기 값(갱신이면 이전 값과 비교해 바뀐 것 표시)
   function inputsView(inputs, prev) {
@@ -721,7 +738,7 @@
     if (error) throw error;
     if (!apps.length) pend.append(el('p', { class: 'rank-note', text: '기다리는 신청이 없어요' }));
     for (const a of apps) {
-      const img = shotPair(c, a.shot_path, a.pub_path);
+      const img = shotPair(c, a.shot_path, a.pub_path, (p) => c.rpc('admin_set_app_pub', { p_id: a.id, p_path: p }), 'apply');
       const ok = el('button', { type: 'button', class: 'btn primary', text: '승인' });
       const no = el('button', { type: 'button', class: 'btn', text: '거절' });
       const item = el('div', { class: 'adm-item' }, img, el('div', { class: 'adm-info' },
@@ -775,7 +792,7 @@
     };
     const updItem = (h) => {
       const p = h.players || {};
-      const img = shotPair(c, h.shot_path, h.pub_path);
+      const img = shotPair(c, h.shot_path, h.pub_path, (p) => c.rpc('admin_set_hist_pub', { p_id: h.id, p_path: p }), 'update');
       const diff = h.prev_cp ? (h.cp - h.prev_cp) / h.prev_cp * 100 : 0;
       const acts = el('div', { class: 'adm-acts' });
       const setBtn = adminSetting(p.nickname || '', h.cls, h.inputs);
