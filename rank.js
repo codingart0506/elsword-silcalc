@@ -68,6 +68,35 @@
     c.getContext('2d').drawImage(bmp, 0, 0);
     return c;
   }
+  // 랭킹에 보일 사진: 캐릭터 창(장비 칸까지)·상세 스탯 창만 또렷하게 두고 나머지(채팅·배경·다른 사람 이름표·전투력 줄 위 채팅)는 흐리게.
+  // 장비창의 초록 악세서리 칸(2열 6행)으로 창 위치를 잡음. 상세 스탯 창은 캐릭터 창 오른쪽에 붙어서 열림. 못 찾으면 null(원본을 씀)
+  function privacyBlur(src) {
+    let G = null;
+    try { G = window.SilGear && window.SilGear.detectGrid(src); } catch (e) { G = null; }
+    if (!G || G.cells.length < 12) return null;
+    const W = src.width, H = src.height, P = G.pitch;
+    const xs = G.cells.map(c => c.x), xa = Math.min(...xs), xb = Math.max(...xs), y0 = Math.min(...G.cells.map(c => c.y));
+    const top = y0 - 8.3 * P, left = xa - 13.85 * P, mid = xb + 1.5 * P, right = mid + 16.5 * P;
+    if (left < -3 * P || top < -3 * P || mid > W + P) return null;
+    const keep = [[left, top, mid, y0 + 7.45 * P], [mid, top, right, y0 + 11.15 * P]];
+    // 흐리게: 크게 줄였다가 다시 키움(모든 브라우저에서 됨)
+    const step = (from, w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(from, 0, 0, w, h); return c; };
+    const small = step(step(src, Math.max(16, Math.round(W / 5)), Math.max(16, Math.round(H / 5))), Math.max(8, Math.round(W / 18)), Math.max(8, Math.round(H / 18)));
+    const out = step(step(small, Math.max(16, Math.round(W / 5)), Math.max(16, Math.round(H / 5))), W, H);
+    const g = out.getContext('2d');
+    for (const [x0, y0_, x1, y1] of keep) {
+      const a = Math.max(0, Math.round(x0)), b = Math.max(0, Math.round(y0_)), c = Math.min(W, Math.round(x1)), d = Math.min(H, Math.round(y1));
+      if (c > a && d > b) g.drawImage(src, a, b, c - a, d - b, a, b, c - a, d - b);
+    }
+    return out;
+  }
+  // 관리자: 랭킹에 보일(흐리게 한) 사진 열기. 못 가린 사진이면 그렇게 알려 줌
+  function pubLink(c, path) {
+    if (!path) return el('small', { class: 'adm-flag', text: '다른 사람 이름을 자동으로 못 가렸어요. 승인하면 원본이 그대로 랭킹에 보여요' });
+    const b = el('button', { type: 'button', class: 'txt sm', text: '랭킹에 보일 사진 보기' });
+    b.onclick = async () => { const u = await signed(c, path); if (u) window.open(u, '_blank', 'noopener'); };
+    return b;
+  }
   function genCode() { return 'SIL-' + String(1000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 9000)); }
   function genToken() {
     const AL = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -484,13 +513,15 @@
     if (!(cp > 0)) { toast('실투력이 계산되지 않았어요'); return; }
     const old = $('#applyDlg'); if (old) old.remove();
     const code = genCode();
-    let img = null;
+    let img = null, pub = null;
     const nick = el('input', { type: 'text', class: 'nick', maxlength: '20', placeholder: '게임 닉네임', value: A.nick() || (A.rank() || {}).nickname || '' });
     const file = el('input', { type: 'file', accept: 'image/*', hidden: '' });
     const shotBox = el('div', { class: 'apply-shot', tabindex: '0', role: 'button' }, el('span', { text: '여기를 눌러 사진을 고르거나 Ctrl + V로 붙여 넣으세요' }));
     const setImg = async (blob) => {
       try {
-        img = await toJpeg(await blobToCanvas(blob));
+        const cv = await blobToCanvas(blob);
+        img = await toJpeg(cv);
+        const pc = privacyBlur(cv); pub = pc ? await toJpeg(pc) : null;
         shotBox.innerHTML = ''; shotBox.classList.add('has');
         shotBox.append(el('img', { src: URL.createObjectURL(img), alt: '올릴 스크린샷' }), el('span', { text: '다른 사진으로 바꾸려면 다시 누르세요' }));
       } catch (e) { toast('사진을 읽지 못했어요'); }
@@ -526,12 +557,15 @@
       send.disabled = true; send.textContent = '보내는 중';
       try {
         const c = await sb();
-        const path = `apply/${uuid()}.jpg`;
+        const id = uuid(), path = `apply/${id}.jpg`;
         const up = await c.storage.from('shots').upload(path, img, { contentType: 'image/jpeg', upsert: false });
         if (up.error) throw up.error;
+        // 랭킹에 보일 사진(캐릭터·상세 스탯 창 밖을 흐리게). 원본은 관리자만 봄
+        const pubPath = pub ? `apply/${id}_p.jpg` : null;
+        if (pubPath) { const u2 = await c.storage.from('shots').upload(pubPath, pub, { contentType: 'image/jpeg', upsert: false }); if (u2.error) throw u2.error; }
         const token = genToken();
-        const { error } = await c.rpc('submit_application', {
-          p_nickname: n, p_server: '', p_cls: A.cls(), p_cp: cp, p_inputs: A.rankInputs(), p_code: code, p_shot: path, p_token: token,
+        const { error } = await c.rpc('submit_application_v2', {
+          p_nickname: n, p_server: '', p_cls: A.cls(), p_cp: cp, p_inputs: A.rankInputs(), p_code: code, p_shot: path, p_token: token, p_pub: pubPath,
         });
         if (error) throw error;
         if (A.nick() !== n) A.setNick(n);
@@ -563,10 +597,12 @@
     if (!ok) return;
     try {
       const c = await sb();
-      const path = `update/${uuid()}.jpg`;
+      const id = uuid(), path = `update/${id}.jpg`;
       const up = await c.storage.from('shots').upload(path, await toJpeg(shot), { contentType: 'image/jpeg', upsert: false });
       if (up.error) throw up.error;
-      const { data: res, error } = await c.rpc('update_cp', { p_token: r.token, p_cls: A.cls(), p_cp: cp, p_inputs: A.rankInputs(), p_shot: path, p_edited: edited });
+      let pubPath = null;
+      try { const pc = privacyBlur(shot); if (pc) pubPath = `update/${id}_p.jpg`; if (pubPath) { const u2 = await c.storage.from('shots').upload(pubPath, await toJpeg(pc), { contentType: 'image/jpeg', upsert: false }); if (u2.error) throw u2.error; } } catch (e) { console.warn(e); pubPath = null; }
+      const { data: res, error } = await c.rpc('update_cp_v2', { p_token: r.token, p_cls: A.cls(), p_cp: cp, p_inputs: A.rankInputs(), p_shot: path, p_edited: edited, p_pub: pubPath });
       if (error) throw error;
       if (res === 'held') {
         Object.assign(r, { upd: 'held', updCp: cp, updMemo: '' }); A.setRank(r); renderLine();
@@ -649,7 +685,7 @@
     const hist = el('div', { class: 'adm-sec' }, el('h3', { text: '최근 갱신' }));
     body.append(pend, hist);
 
-    const { data: apps, error } = await c.from('applications').select('id,nickname,cls,cp,inputs,verify_code,shot_path,created_at').eq('status', 'pending').order('created_at');
+    const { data: apps, error } = await c.from('applications').select('id,nickname,cls,cp,inputs,verify_code,shot_path,pub_path,created_at').eq('status', 'pending').order('created_at');
     if (error) throw error;
     if (!apps.length) pend.append(el('p', { class: 'rank-note', text: '기다리는 신청이 없어요' }));
     for (const a of apps) {
@@ -663,6 +699,7 @@
         el('span', { text: `초월:강렬 비율 ${shareText(a.inputs)}` }),
         el('span', { class: 'code' }, '인증 코드 ', el('b', { text: a.verify_code })),
         el('small', { class: 'adm-flag', text: '채팅의 인증 코드, 닉네임, PC방 아이콘 OFF, 지애 버프 없음을 확인하세요' }),
+        pubLink(c, a.pub_path),
         el('small', { text: new Date(a.created_at).toLocaleString('ko-KR') }),
         el('div', { class: 'adm-acts' }, ok, no)));
       ok.onclick = async () => {
@@ -770,8 +807,31 @@
     const all = el('div', { class: 'adm-sec' }, el('h3', { text: '랭킹에 올라간 캐릭터' }),
       el('p', { class: 'rank-note', text: '숨기면 랭킹에서 빠지고 그 사람은 랭킹도 못 봐요(분탕 차단). 삭제하면 랭킹, 갱신 기록, 사진이 모두 지워지고 되돌릴 수 없어요.' }));
     body.append(all);
-    const { data: ps, error: e3 } = await c.from('players').select('id,nickname,cls,cp,hidden,hide_reason,updated_at').order('cp', { ascending: false }).limit(500);
+    const { data: ps, error: e3 } = await c.from('players').select('id,nickname,cls,cp,hidden,hide_reason,updated_at,shot_path').order('cp', { ascending: false }).limit(500);
     if (e3) throw e3;
+    // 예전에 올라간 사진 중 흐린 사본이 아닌 것: 다른 사람 이름을 가린 사본으로 바꿈(원본은 갱신 기록에 남음)
+    const raw = ps.filter(p => p.shot_path && !/_p\.jpg$/.test(p.shot_path));
+    if (raw.length) {
+      const fix = el('button', { type: 'button', class: 'btn', text: `예전 랭킹 사진 ${raw.length}장 이름 가리기` });
+      fix.onclick = async () => {
+        fix.disabled = true; let done = 0, miss = [];
+        for (const p of raw) {
+          try {
+            const u = await signed(c, p.shot_path); if (!u) throw new Error('사진 없음');
+            const cv = await blobToCanvas(await (await fetch(u)).blob());
+            const pc = privacyBlur(cv); if (!pc) { miss.push(p.nickname); continue; }
+            const path = `apply/${uuid()}_p.jpg`;
+            const up = await c.storage.from('shots').upload(path, await toJpeg(pc), { contentType: 'image/jpeg', upsert: false });
+            if (up.error) throw up.error;
+            const { error: e } = await c.rpc('admin_set_pub', { p_id: p.id, p_path: path });
+            if (e) throw e;
+            p.shot_path = path; done++;
+          } catch (e) { console.warn(e); miss.push(p.nickname); }
+        }
+        fix.textContent = `${done}장 가렸어요${miss.length ? `, 못 가린 사진: ${miss.join(', ')}` : ''}`;
+      };
+      all.append(fix);
+    }
     if (!ps.length) all.append(el('p', { class: 'rank-note', text: '아직 올라간 캐릭터가 없어요' }));
     ps.forEach((p, i) => {
       const tag = () => p.hidden ? ` (숨김${p.hide_reason ? ': ' + p.hide_reason : ''})` : '';
@@ -793,9 +853,16 @@
         const why = await A.dialog({ title: `${p.nickname} 삭제`, text: '랭킹, 갱신 기록, 사진이 모두 지워지고 되돌릴 수 없어요. 지운 사람이 사이트를 열면 아래 사유가 창으로 보여요(비워 둬도 돼요).', input: '', ok: '삭제', danger: true });
         if (why === null) return;
         hide.disabled = del.disabled = true;
+        // 흐린 사본(pub_path) 파일도 같이 지우려고 먼저 모아 둠
+        let pubs = [];
+        try {
+          const [h1, h2] = await Promise.all([c.from('cp_history').select('pub_path').eq('player_id', p.id), c.from('applications').select('pub_path').ilike('nickname', p.nickname)]);
+          pubs = [...(h1.data || []), ...(h2.data || [])].map(x => x.pub_path).filter(Boolean);
+        } catch (e) { console.warn(e); }
         const { data: paths, error: e } = await c.rpc('admin_delete_player', { p_id: p.id, p_reason: String(why).trim() });
         if (e) { toast(errMsg(e)); hide.disabled = del.disabled = false; return; }
-        if (paths && paths.length) { const { error: re } = await c.storage.from('shots').remove(paths); if (re) console.warn(re); }
+        const rm = [...new Set([...(paths || []), ...pubs])];
+        if (rm.length) { const { error: re } = await c.storage.from('shots').remove(rm); if (re) console.warn(re); }
         item.remove(); toast(`${p.nickname} 랭킹을 지웠어요`);
       };
       all.append(item);
