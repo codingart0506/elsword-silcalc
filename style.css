@@ -318,7 +318,16 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .rk-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; font: inherit; color: inherit; text-align: left; background: none; border: 0; padding: 12px 6px; border-radius: 12px; cursor: pointer; }
 .rk-row:hover { background: var(--fill); }
 .rk-no { font-size: 17px; font-weight: 700; color: var(--mute); text-align: center; font-variant-numeric: tabular-nums; }
-.rank-list li:nth-child(-n+3) .rk-no { color: var(--blue); }
+.rk-no.crown { display: flex; flex-direction: column; align-items: center; gap: 0; line-height: 1; }
+.rk-no.crown svg { width: 26px; height: 26px; fill: currentColor; }
+.rk-no.crown .n { font-size: 12px; margin-top: 1px; }
+.rk-no.gold { color: #e6a700; }
+.rk-no.silver { color: #98a2ae; }
+.rk-no.bronze { color: #c27a3e; }
+.rank-pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 14px 0 4px; }
+.rank-pager span { font-size: 14px; color: var(--mute); font-variant-numeric: tabular-nums; min-width: 72px; text-align: center; }
+.rank-pager .btn { padding: 8px 14px; font-size: 14px; }
+.rank-pager .btn:disabled { opacity: .4; cursor: default; }
 .rk-who { display: flex; flex-direction: column; min-width: 0; }
 .rk-name { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rk-meta { font-size: 13px; color: var(--mute); display: flex; gap: 8px; flex-wrap: wrap; }

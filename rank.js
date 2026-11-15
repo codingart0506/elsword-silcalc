@@ -94,12 +94,14 @@
   views.addEventListener('click', (e) => { const b = e.target.closest('button[data-view]'); if (b) setView(b.dataset.view); });
 
   // ---------- 랭킹 목록 ----------
-  const PAGE = 50;
-  let rkCls = '', rkCount = 0, rkDone = false, rkBusy = false;
+  // 10등씩 쪽으로 나눠 보여 줌(이전·다음)
+  const PAGE = 10;
+  let rkCls = '', rkPage = 0, rkBusy = false;
   async function loadRank(reset) {
     if (rkBusy) return; rkBusy = true;
-    const list = $('#rankList'), empty = $('#rankEmpty');
-    if (reset) { list.innerHTML = ''; rkCount = 0; rkDone = false; empty.hidden = false; empty.textContent = '불러오는 중이에요'; }
+    const list = $('#rankList'), empty = $('#rankEmpty'), pager = $('#rankPager');
+    if (reset) { rkPage = 0; list.innerHTML = ''; pager.hidden = true; empty.hidden = false; empty.textContent = '불러오는 중이에요'; }
+    let more = false;
     try {
       const c = await sb();
       if (reset) {
@@ -110,23 +112,37 @@
           const wait = Object.values(A.ranks()).some(r => r && r.token && r.status === 'pending');
           const gone = Object.values(A.ranks()).find(r => r && (r.status === 'hidden' || r.status === 'removed'));
           empty.hidden = false;
-          empty.textContent = gone ? `관리자가 랭킹에서 ${gone.status === 'hidden' ? '내려서' : '삭제해서'} 랭킹을 볼 수 없어요. 사유: ${gone.memo || '따로 적지 않았어요'}`
+          empty.textContent = gone ? `관리자가 랭킹에서 ${gone.status === 'hidden' ? '내려서' : '삭제해서'} 랭킹을 볼 수 없어요.${gone.memo ? ` 사유: ${gone.memo}` : ''}`
             : wait ? '신청을 확인하고 있어요. 관리자가 승인하면 랭킹을 볼 수 있어요.'
             : '랭킹은 랭킹에 올라간 사람만 볼 수 있어요. 계산기에서 "랭킹에 올리기"로 신청해서 승인되면 볼 수 있어요. 다른 기기에서 승인받았다면 아래 "갱신 코드 입력"에 그때 받은 갱신 코드를 넣어 주세요.';
-          rkDone = true; $('#btnRankMore').hidden = true; rkBusy = false; return;
+          pager.hidden = true; rkBusy = false; return;
         }
       }
-      const { data, error } = await c.rpc('rank_list', { p_cls: rkCls || null, p_offset: rkCount, p_limit: PAGE });
+      // 한 명 더 받아서 다음 쪽이 있는지 알아봄
+      const { data, error } = await c.rpc('rank_list', { p_cls: rkCls || null, p_offset: rkPage * PAGE, p_limit: PAGE + 1 });
       if (error) throw error;
-      renderRows(data, rkCount);
-      rkCount += data.length; rkDone = data.length < PAGE;
-      empty.hidden = rkCount > 0;
-      if (!rkCount) empty.textContent = rkCls ? `${rkCls} 랭킹에 아직 아무도 없어요` : '아직 올라온 캐릭터가 없어요. 계산기에서 "랭킹에 올리기"로 첫 번째가 되어 보세요';
+      if (!data.length && rkPage > 0) { rkPage--; rkBusy = false; return loadRank(false); }
+      more = data.length > PAGE;
+      list.innerHTML = '';
+      renderRows(data.slice(0, PAGE), rkPage * PAGE);
+      empty.hidden = data.length > 0;
+      if (!data.length) empty.textContent = rkCls ? `${rkCls} 랭킹에 아직 아무도 없어요` : '아직 올라온 캐릭터가 없어요. 계산기에서 "랭킹에 올리기"로 첫 번째가 되어 보세요';
     } catch (e) {
       empty.hidden = false; empty.textContent = '랭킹을 불러오지 못했어요. ' + errMsg(e);
     }
-    $('#btnRankMore').hidden = rkDone;
+    const n = list.children.length;
+    pager.hidden = !(rkPage > 0 || more);
+    $('#btnRankPrev').disabled = rkPage === 0; $('#btnRankNext').disabled = !more;
+    $('#rankPageNo').textContent = n ? `${rkPage * PAGE + 1}~${rkPage * PAGE + n}위` : '';
     rkBusy = false;
+  }
+  // 1·2·3등은 금·은·동 왕관
+  const CROWN = ['gold', 'silver', 'bronze'];
+  function rankNo(n) {
+    const box = el('span', { class: 'rk-no' + (n <= 3 ? ' crown ' + CROWN[n - 1] : ''), 'aria-label': `${n}위` });
+    if (n <= 3) box.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.2 8.6 7.6 12 12 5.6l4.4 6.4 4.4-3.4-1.7 8.9H4.9z"/><circle cx="3.2" cy="7.4" r="1.7"/><circle cx="12" cy="4.2" r="1.7"/><circle cx="20.8" cy="7.4" r="1.7"/><rect x="4.9" y="18.6" width="14.2" height="2.2" rx="1.1"/></svg>';
+    box.append(el('span', { class: 'n', text: String(n) }));
+    return box;
   }
   function renderRows(rows, start) {
     const mine = new Set(Object.values(A.ranks()).filter(r => r && r.status === 'approved').map(r => String(r.nickname).toLowerCase()));
@@ -135,7 +151,7 @@
       const li = el('li', { class: mine.has(r.nickname.toLowerCase()) ? 'me' : '' });
       li.append(
         el('button', { type: 'button', class: 'rk-row', 'aria-expanded': 'false', onclick: (e) => toggleDetail(li, r, e.currentTarget) },
-          el('span', { class: 'rk-no', text: String(start + i + 1) }),
+          rankNo(start + i + 1),
           el('span', { class: 'rk-who' },
             el('span', { class: 'rk-name', text: r.nickname }),
             el('span', { class: 'rk-meta' }, el('span', { text: r.cls + mark }), el('span', { text: ago(r.updated_at) }))),
@@ -206,9 +222,9 @@
       g.drawImage(bmp, 0, 0);
       const m = document.createElement('canvas'); m.width = w; m.height = h;
       const mg = m.getContext('2d', { willReadFrequently: true });
-      const t = stamp(), fs = Math.max(14, Math.round(w / 40));
+      const t = stamp(), fs = Math.max(18, Math.round(w / 28));
       mg.font = `700 ${fs}px sans-serif`; mg.fillStyle = '#fff'; mg.textAlign = 'center'; mg.textBaseline = 'middle';
-      const cols = Math.max(2, Math.round(w / (mg.measureText(t).width * 1.15))), rows = Math.max(3, Math.round(h / (fs * 4.5)));
+      const cols = Math.max(2, Math.round(w / (mg.measureText(t).width * 1.05))), rows = Math.max(4, Math.round(h / (fs * 3)));
       for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
         const x = (q + 0.3 + Math.random() * 0.4) * w / cols, y = (r + 0.2 + Math.random() * 0.6) * h / rows;
         mg.save(); mg.translate(x, y); mg.rotate((-30 + Math.random() * 20) * Math.PI / 180); mg.fillText(t, 0, 0); mg.restore();
@@ -216,9 +232,10 @@
       const md = mg.getImageData(0, 0, w, h).data, img = g.getImageData(0, 0, w, h), d = img.data;
       for (let i = 0; i < d.length; i += 4) {
         const a = md[i + 3]; if (!a) continue;
-        // 어두운 곳은 조금만(어두운 바탕에선 작은 변화도 눈에 띔), 밝은 곳은 조금 더
-        const amp = (3 + 7 * d[i + 2] / 255) * a / 255;
-        d[i + 2] += d[i + 2] >= amp ? -amp : amp;
+        // 밝기를 조금(압축돼도 남게) + 파랑을 조금 더. 어두운 곳은 작은 변화도 눈에 띄어서 덜, 밝은 곳은 조금 더
+        const k = a / 255, lum = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
+        const L = (2 + 3 * lum) * k, B = L + (2 + 5 * lum) * k;
+        d[i] += d[i] >= L ? -L : L; d[i + 1] += d[i + 1] >= L ? -L : L; d[i + 2] += d[i + 2] >= B ? -B : B;
       }
       g.putImageData(img, 0, 0);
       const out = await new Promise(r => cv.toBlob(r, 'image/png'));
@@ -293,16 +310,18 @@
     let m = v.querySelector('.rk-wm');
     if (!m) { m = el('div', { class: 'rk-wm', 'aria-hidden': 'true' }); v.append(m); }
     const t = stamp().replace(/[<>&"']/g, '');
-    // 노란색을 아주 옅게: 흰 바탕에서 파랑만 몇 칸 빠져서 눈에는 안 띄고, '워터마크 찾기'의 색 차이로 드러남
-    const fs = 38, mc = document.createElement('canvas').getContext('2d');
+    // 아주 옅은 누런색 글자를 크게, 촘촘히: 흰 바탕에서 밝기 3~4칸·파랑 7칸쯤만 빠져서 눈에는 거의 안 띄고,
+    // 카톡처럼 사진을 압축해 보내도 '워터마크 찾기'의 밝기 차이로 드러남(색 차이는 압축하면 잘 사라짐)
+    const WM = window.SIL_WM || { fs: 56, fill: 'rgb(150,140,0)', op: 0.03, a: [18, 110, 70], b: [30, 150, 120] };
+    const fs = WM.fs, mc = document.createElement('canvas').getContext('2d');
     mc.font = `900 ${fs}px sans-serif`;
     const tw = Math.ceil(mc.measureText(t).width);
     const tile = (deg, padX, padY) => {
       const r = deg * Math.PI / 180, w = Math.ceil(tw * Math.cos(r)) + padX, h = Math.ceil(tw * Math.sin(r)) + fs + padY;
       const x = Math.round(padX / 2), y = h - Math.round(padY / 2);
-      return { w, h, url: 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><text x="${x}" y="${y}" transform="rotate(${-deg} ${x} ${y})" font-family="sans-serif" font-weight="900" font-size="${fs}" fill="rgb(255,230,0)" fill-opacity="0.02">${t}</text></svg>`) + '")' };
+      return { w, h, url: 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><text x="${x}" y="${y}" transform="rotate(${-deg} ${x} ${y})" font-family="sans-serif" font-weight="900" font-size="${fs}" fill="${WM.fill}" fill-opacity="${WM.op}">${t}</text></svg>`) + '")' };
     };
-    const A1 = tile(16, 220, 150), A2 = tile(26, 300, 260);
+    const A1 = tile(...WM.a), A2 = tile(...WM.b);
     m.style.backgroundImage = A1.url + ',' + A2.url;
     m.style.backgroundPosition = `0 0, ${Math.round(A1.w / 2)}px ${Math.round(A1.h / 2)}px`;
   }
@@ -377,7 +396,9 @@
   function showClass(cls) { setMode('cls', cls); window.scrollTo(0, 0); }
   $('#rankMode').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) setMode(b.dataset.v); });
   clsSel.onchange = () => setMode('cls', clsSel.value);
-  $('#btnRankMore').onclick = () => loadRank(false);
+  const goPage = (d) => { if (rkBusy) return; rkPage = Math.max(0, rkPage + d); loadRank(false).then(() => $('#rankList').scrollIntoView({ block: 'nearest', behavior: 'smooth' })); };
+  $('#btnRankPrev').onclick = () => goPage(-1);
+  $('#btnRankNext').onclick = () => goPage(1);
 
   // ---------- 실투력 카드 아래 랭킹 줄 ----------
   const line = $('#rankLine');
@@ -400,7 +421,7 @@
         el('span', { class: 'acts' }, btn('다시 신청', openApply)));
     } else if (r.status === 'hidden' || r.status === 'removed') {
       // 관리자가 내린 경우: 사유를 보여 줌(처음 한 번은 창으로)
-      line.append(el('span', { class: 'rk-state' }, r.status === 'hidden' ? '관리자가 랭킹에서 내렸어요' : '관리자가 랭킹에서 삭제했어요', el('small', { text: r.memo ? `사유: ${r.memo}` : '사유는 따로 적지 않았어요' })),
+      line.append(el('span', { class: 'rk-state' }, r.status === 'hidden' ? '관리자가 랭킹에서 내렸어요' : '관리자가 랭킹에서 삭제했어요', r.memo ? el('small', { text: `사유: ${r.memo}` }) : null),
         el('span', { class: 'acts' }, r.status === 'removed' ? btn('다시 신청', () => { A.setRank(null); renderLine(); openApply(); }) : btn('갱신 코드', showToken, true)));
       noticeRemoved(r);
     } else {
@@ -417,7 +438,7 @@
     if (r.seen === k) return;
     r.seen = k; A.setRank(r);
     A.dialog({ title: r.status === 'hidden' ? '랭킹에서 내려졌어요' : '랭킹에서 삭제됐어요',
-      text: `${r.nickname} 캐릭터를 관리자가 랭킹에서 ${r.status === 'hidden' ? '내렸어요. 랭킹도 볼 수 없어요' : '삭제했어요'}.\n사유: ${r.memo || '따로 적지 않았어요'}`, ok: '확인' });
+      text: `${r.nickname} 캐릭터를 관리자가 랭킹에서 ${r.status === 'hidden' ? '내렸어요. 랭킹도 볼 수 없어요' : '삭제했어요'}.${r.memo ? `\n사유: ${r.memo}` : ''}`, ok: '확인' });
   }
 
   async function positions(c, r) {
