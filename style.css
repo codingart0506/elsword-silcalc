@@ -250,6 +250,8 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 
 .foot { padding: 8px 6px; color: var(--mute); font-size: 12px; }
 .foot p { margin: 2px 0; }
+.foot a { color: var(--text, inherit); text-decoration: underline; text-underline-offset: 2px; }
+.foot-id { color: var(--text, inherit); font-weight: 600; user-select: all; -webkit-user-select: all; }
 
 @media (max-width: 480px) {
   /* iOS에서 입력칸을 누를 때 화면이 확대되지 않도록 16px 이상 */
