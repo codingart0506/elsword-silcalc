@@ -463,8 +463,8 @@
     for (let i = 0; i < 24; i++) w.append(el('span', { text: t }));
     return w;
   }
-  // 눈에 거의 안 보이는 워터마크: 보는 사람 닉네임·시각을 사진 곳곳(자리·기울기 무작위)에 픽셀로 박음
-  // 파랑 채널을 조금, 밝기를 아주 조금만 바꿔서 눈으로는 안 보이고, 관리자 화면 '워터마크 찾기'에 넣으면 글자가 드러남
+  // 눈에 안 보이는 워터마크: 보는 사람 닉네임·시각을 사진 곳곳(자리·기울기 무작위)에 픽셀로 박음
+  // 밝기를 1~2칸만 바꾸고 테두리를 뭉개서 눈으로는 안 보이고, 관리자 화면 '워터마크 찾기'에 캡처 원본을 넣으면 글자가 드러남
   async function bakeShot(url) {
     try {
       const res = await fetch(url); if (!res.ok) return null;
@@ -489,7 +489,7 @@
         const a = md[i + 3]; if (!a) continue;
         // 밝기를 조금(압축돼도 남게) + 파랑을 조금 더. 어두운 곳은 작은 변화도 눈에 띄어서 덜, 밝은 곳은 조금 더
         const k = a / 255, lum = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
-        const L = (2 + 3 * lum) * k, B = L + (1 + 2 * lum) * k;
+        const L = (1 + 1.5 * lum) * k, B = L;
         d[i] += d[i] >= L ? -L : L; d[i + 1] += d[i + 1] >= L ? -L : L; d[i + 2] += d[i + 2] >= B ? -B : B;
       }
       g.putImageData(img, 0, 0);
@@ -505,7 +505,7 @@
     const W = w + 1, S = new Float64Array(W * (h + 1));
     for (let y = 0; y < h; y++) { let row = 0; for (let x = 0; x < w; x++) { row += v[y * w + x]; S[(y + 1) * W + x + 1] = S[y * W + x + 1] + row; } }
     const M = Math.max(w, h), faint = mode === 'faint';
-    const R = faint ? Math.max(6, Math.round(M / 50)) : Math.max(4, Math.round(M / 120)), gain = faint ? 28 : mode === 'lum' ? 14 : 10;
+    const R = faint ? Math.max(6, Math.round(M / 50)) : Math.max(4, Math.round(M / 120)), gain = faint ? 60 : mode === 'lum' ? 14 : 10;
     const out = document.createElement('canvas'); out.width = w; out.height = h;
     const og = out.getContext('2d'), od = og.createImageData(w, h), o = od.data;
     const res = new Float32Array(w * h);
@@ -515,7 +515,7 @@
         const x0 = Math.max(0, x - R), x1 = Math.min(w, x + R + 1);
         const mean = (S[y1 * W + x1] - S[y0 * W + x1] - S[y1 * W + x0] + S[y0 * W + x0]) / ((y1 - y0) * (x1 - x0));
         const r = mean - v[y * w + x];
-        res[y * w + x] = faint ? Math.max(-8, Math.min(8, r)) : r;
+        res[y * w + x] = faint ? Math.max(-2.5, Math.min(2.5, r)) : r;
       }
     }
     let fin = res;
@@ -558,7 +558,7 @@
         const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
         c.getContext('2d').drawImage(bmp, 0, 0);
         view.textContent = '';
-        view.append(el('p', { text: '아주 옅은 글자 찾기(랭킹 목록 캡처)' }), revealMark(c, 'faint'), el('p', { text: '밝기 차이로 찾기(스크린샷 사진)' }), revealMark(c, 'lum'), el('p', { text: '색 차이로 찾기' }), revealMark(c, 'chroma'));
+        view.append(el('p', { text: '안 보이는 글자 찾기(랭킹 화면 캡처 원본)' }), revealMark(c, 'faint'), el('p', { text: '밝기 차이로 찾기(스크린샷 사진)' }), revealMark(c, 'lum'), el('p', { text: '색 차이로 찾기' }), revealMark(c, 'chroma'));
       } catch (e) { view.textContent = '이미지를 열지 못했어요'; }
     };
     const fin = el('input', { type: 'file', accept: 'image/*', hidden: '' });
@@ -579,9 +579,9 @@
     let m = v.querySelector('.rk-wm');
     if (!m) { m = el('div', { class: 'rk-wm', 'aria-hidden': 'true' }); v.append(m); }
     const [l1, l2] = stampLines().map(x => String(x).replace(/[<>&"']/g, ''));
-    // 아주 옅은 회색 글자(닉네임 / 시각 두 줄)를 촘촘히: 흰 바탕에서 밝기가 2~3칸쯤만 빠지고 글자 테두리도 뭉개서 눈에는 거의 안 띄고,
-    // 카톡처럼 사진을 압축해 보내도 '워터마크 찾기'의 '아주 옅은 글자' 칸에서 드러남(굵은 덩어리라 압축에도 남음)
-    const WM = window.SIL_WM || { fs: 60, fill: 'rgb(0,0,0)', op: 0.012, blur: 3, a: [18, 70, 50], b: [30, 110, 90] };
+    // 눈에는 안 보이는 글자(닉네임 / 시각 두 줄)를 촘촘히: 밝기를 딱 1칸(255→254)만 낮춤. 사람 눈으로는 구별이 안 되고,
+    // 캡처 원본(PNG)을 관리자 화면 '워터마크 찾기'의 '안 보이는 글자 찾기'에 넣으면 드러남. 겹치면 2칸이 되니 한 겹만 씀
+    const WM = window.SIL_WM || { fs: 60, fill: 'rgb(0,0,0)', op: 0.005, blur: 1.5, a: [18, 70, 50], b: null };
     const fs = WM.fs, lh = Math.round(fs * 1.15), mc = document.createElement('canvas').getContext('2d');
     mc.font = `900 ${fs}px sans-serif`;
     const tw = Math.ceil(Math.max(mc.measureText(l1).width, mc.measureText(l2).width));
@@ -595,9 +595,9 @@
       const grp = `<g transform="rotate(${-deg} ${x} ${y})"${WM.blur ? ' filter="url(#f)"' : ''}>${txt(l1, 0)}${txt(l2, lh)}</g>`;
       return { w, h, url: 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${flt}${grp}</svg>`) + '")' };
     };
-    const A1 = tile(...WM.a), A2 = tile(...WM.b);
-    m.style.backgroundImage = A1.url + ',' + A2.url;
-    m.style.backgroundPosition = `0 0, ${Math.round(A1.w / 2)}px ${Math.round(A1.h / 2)}px`;
+    const A1 = tile(...WM.a), A2 = WM.b ? tile(...WM.b) : null;
+    m.style.backgroundImage = A2 ? A1.url + ',' + A2.url : A1.url;
+    m.style.backgroundPosition = A2 ? `0 0, ${Math.round(A1.w / 2)}px ${Math.round(A1.h / 2)}px` : '0 0';
   }
   // 크게 보기(화면 위에 따로 뜸)에도 랭킹 화면과 같은 워터마크를 덮음
   function viewMark() {
@@ -931,9 +931,30 @@
   }
   async function adminPanel(c, body) {
     body.innerHTML = '';
-    const pend = el('div', { class: 'adm-sec' }, el('h3', { text: '승인 기다리는 신청' }));
-    const hist = el('div', { class: 'adm-sec' }, el('h3', { text: '최근 갱신' }));
-    body.append(pend, hist);
+    // 한 화면에 다 늘어놓으면 너무 길어서 탭으로 나눔(마지막에 본 탭 기억). 탭 줄은 내려도 위에 붙어 있음
+    const TABS = [['apps', '신청'], ['upd', '갱신'], ['chars', '캐릭터'], ['logs', '열람 기록'], ['wm', '워터마크 찾기']];
+    const bar = el('div', { class: 'seg adm-tabs', role: 'tablist', 'aria-label': '관리 메뉴' });
+    const panes = {}, tabBtn = {}, cntEl = {};
+    for (const [k, t] of TABS) {
+      cntEl[k] = el('b', { class: 'adm-cnt' + (k === 'apps' || k === 'upd' ? ' todo' : '') });
+      tabBtn[k] = el('button', { type: 'button', class: 'tab', role: 'tab', 'aria-selected': 'false' }, t, cntEl[k]);
+      panes[k] = el('div', { class: 'adm-pane', role: 'tabpanel' }); panes[k].hidden = true;
+      tabBtn[k].onclick = () => show(k);
+      bar.append(tabBtn[k]);
+    }
+    let cur = null;
+    const show = (k) => {
+      cur = k;
+      for (const [x] of TABS) { tabBtn[x].setAttribute('aria-selected', String(x === k)); panes[x].hidden = x !== k; }
+      try { sessionStorage.setItem('silAdmTab', k); } catch (e) { /* 무시 */ }
+      const top = bar.getBoundingClientRect().top; if (top < 0) bar.scrollIntoView({ block: 'start' });
+    };
+    const setCnt = (k, n) => { cntEl[k].textContent = n ? String(n) : ''; cntEl[k].hidden = !n; };
+    const recount = () => {
+      setCnt('apps', panes.apps.querySelectorAll('.adm-item').length);
+      setCnt('upd', panes.upd.querySelectorAll('.adm-item').length);
+    };
+    body.append(bar, ...TABS.map(([k]) => panes[k]));
     // 아무 데서도 안 쓰는 사진(거절된 신청 사진, 지운 기록의 사진 등)은 저장소에서 정리
     c.rpc('admin_orphan_shots').then(async ({ data, error }) => {
       if (error || !data || !data.length) return;
@@ -942,9 +963,14 @@
       if (!re) body.prepend(el('p', { class: 'rank-note', text: `안 쓰는 사진 ${names.length}장(거절된 신청 사진 등)을 저장소에서 지웠어요` }));
     }).catch(e => console.warn(e));
 
+    // ---------- 신청 ----------
+    const pend = el('div', { class: 'adm-sec' }, el('h3', { text: '승인 기다리는 신청' }));
+    panes.apps.append(pend);
     const { data: apps, error } = await c.from('applications').select('id,nickname,cls,cp,inputs,verify_code,shot_path,pub_path,created_at').eq('status', 'pending').order('created_at');
     if (error) throw error;
-    if (!apps.length) pend.append(el('p', { class: 'rank-note', text: '기다리는 신청이 없어요' }));
+    const noApps = el('p', { class: 'rank-note', text: '기다리는 신청이 없어요' }); noApps.hidden = !!apps.length;
+    pend.append(noApps);
+    const gone = (item) => { item.remove(); recount(); noApps.hidden = !!pend.querySelector('.adm-item'); };
     for (const a of apps) {
       const img = shotPair(c, a.shot_path, a.pub_path, (p) => c.rpc('admin_set_app_pub', { p_id: a.id, p_path: p }), 'apply');
       const ok = el('button', { type: 'button', class: 'btn primary', text: '승인' });
@@ -962,7 +988,7 @@
         ok.disabled = no.disabled = true;
         const { error: e } = await c.rpc('approve_application', { p_id: a.id });
         if (e) { toast(errMsg(e)); ok.disabled = no.disabled = false; return; }
-        item.remove(); toast(`${a.nickname} 승인했어요`);
+        gone(item); toast(`${a.nickname} 승인했어요`);
       };
       no.onclick = async () => {
         const memo = await A.dialog({ title: '거절 이유', text: '신청한 사람 화면에 보여요. 비워 둬도 돼요.', input: '', ok: '거절' });
@@ -973,16 +999,17 @@
         // 거절한 신청 사진은 남겨 둘 필요가 없어서 바로 지움(사유는 남음)
         const rm = [a.shot_path, a.pub_path].filter(Boolean);
         if (rm.length) { const { error: re } = await c.storage.from('shots').remove(rm); if (re) console.warn(re); }
-        item.remove(); toast(`${a.nickname} 신청을 거절했어요`);
+        gone(item); toast(`${a.nickname} 신청을 거절했어요`);
       };
       pend.append(item);
     }
 
+    // ---------- 갱신 ----------
     const held = el('div', { class: 'adm-sec' }, el('h3', { text: '확인 기다리는 갱신' }),
       el('p', { class: 'rank-note', text: '실투력이 오른 갱신이나 손으로 고친 값이 있는 갱신이에요. 사진을 보고 반영해야 랭킹에 올라가요.' }));
     const live = el('div', { class: 'adm-sec' }, el('h3', { text: '바로 반영된 갱신' }),
       el('p', { class: 'rank-note', text: '실투력이 그대로거나 내려간 갱신이라 바로 반영됐어요. 사진을 보고 확인하거나, 이상하면 되돌려요.' }));
-    body.insertBefore(held, hist); body.insertBefore(live, hist); hist.remove();
+    panes.upd.append(held, live);
     const { data: hs, error: e2 } = await c.from('cp_history')
       .select('id,cp,prev_cp,cls,inputs,prev_inputs,edited,status,created_at,shot_path,pub_path,player_id,players(nickname,hidden)')
       .in('status', ['held', 'live']).order('created_at', { ascending: false }).limit(60);
@@ -999,7 +1026,7 @@
       for (const b of item.querySelectorAll('button')) b.disabled = true;
       const { error: e } = await c.rpc('review_update', { p_id: h.id, p_action: action, p_memo: memo || '' });
       if (e) { toast(errMsg(e)); for (const b of item.querySelectorAll('button')) b.disabled = false; return; }
-      item.remove(); toast(done);
+      item.remove(); recount(); toast(done);
     };
     const updItem = (h) => {
       const p = h.players || {};
@@ -1033,43 +1060,79 @@
     };
     for (const h of hsHeld) held.append(updItem(h));
     for (const h of hsLive) live.append(updItem(h));
+    recount();
 
-    body.append(wmFinder(c));
-    // 열람 기록: 누가 언제 무엇을 봤는지 + 기기 수(갱신 코드 돌려쓰기 확인). 이상하면 그 사람을 아래에서 숨기면 랭킹도 못 봐요
-    const logs = el('div', { class: 'adm-sec' }, el('h3', { text: '열람 기록' }),
-      el('p', { class: 'rank-note', text: '랭킹 목록과 상세(사진·세팅)를 본 기록이에요. 최근 300개, 180일 지나면 지워져요. 이름을 누르면 그 사람 기록만 보여요. 한 사람이 최근 7일 동안 기기 4대 이상에서 봤으면 갱신 코드를 나눠 줬을 수 있어요.' }));
-    body.append(logs);
-    const { data: lg, error: e4 } = await c.from('view_log').select('at,viewer,viewer_nick,kind,target_nick,dev').order('at', { ascending: false }).limit(300);
-    if (e4) throw e4;
+    // 목록 아래 쪽수 넘기기
+    const pager = (onGo) => {
+      const prev = el('button', { type: 'button', class: 'btn', text: '이전' }), next = el('button', { type: 'button', class: 'btn', text: '다음' });
+      const no = el('span', { class: 'adm-pageno' });
+      prev.onclick = () => onGo(-1); next.onclick = () => onGo(1);
+      const box = el('div', { class: 'adm-pager' }, prev, no, next);
+      box.set = (pg, pages) => { box.hidden = pages <= 1; no.textContent = `${pg + 1} / ${pages}`; prev.disabled = pg <= 0; next.disabled = pg >= pages - 1; };
+      return box;
+    };
+    const searchBox = (ph) => el('input', { type: 'search', class: 'adm-search', placeholder: ph, autocomplete: 'off', enterkeyhint: 'search' });
+    const has = (s, q) => String(s || '').toLowerCase().includes(q);
+
+    // ---------- 열람 기록 ----------
+    // 누가 언제 무엇을 봤는지 + 기기 수(갱신 코드 돌려쓰기 확인). 이상하면 그 사람을 캐릭터 탭에서 숨기면 랭킹도 못 봐요
+    const LOG_PAGE = 40;
+    const logs = el('div', { class: 'adm-sec' },
+      el('p', { class: 'rank-note', text: '랭킹 목록과 상세(사진·세팅)를 본 기록이에요. 180일 지나면 지워져요. 이름을 누르면 그 사람 기록만 보여요. 최근 7일 동안 기기 4대 이상에서 봤으면 갱신 코드를 나눠 줬을 수 있고, 하루에 서로 다른 캐릭터 상세를 30명 넘게 봤으면 세팅을 긁어 가는 것일 수 있어서 빨갛게 보여요.' }));
+    const logQ = searchBox('닉네임 검색(본 사람 또는 본 캐릭터)');
+    const logInfo = el('p', { class: 'rank-note adm-found' });
     const logBox = el('div', { class: 'adm-logs' });
-    let only = null;
+    let lg = [], only = null, logPg = 0;
+    const logPager = pager((d) => { logPg += d; drawLogs(); logs.scrollIntoView({ block: 'start' }); });
+    logs.append(el('div', { class: 'adm-find' }, logQ), logInfo, logBox, logPager);
+    panes.logs.append(logs);
     const kindText = (l) => l.kind === 'detail' ? `${l.target_nick || '지워진 캐릭터'} 상세` : l.kind === 'list' ? '전체 랭킹' : `${l.kind.slice(5)} 랭킹`;
     const drawLogs = () => {
       logBox.textContent = '';
       const rows = only ? lg.filter(l => l.viewer === only) : lg;
-      if (only) logBox.append(el('button', { type: 'button', class: 'txt sm', text: '전체 기록 보기', onclick: () => { only = null; drawLogs(); } }));
-      if (!rows.length) logBox.append(el('p', { class: 'rank-note', text: '아직 기록이 없어요' }));
-      const cnt = {}, devs = {};
+      if (only) logBox.append(el('button', { type: 'button', class: 'txt sm', text: '전체 기록 보기', onclick: () => { only = null; logPg = 0; drawLogs(); } }));
+      if (!rows.length) logBox.append(el('p', { class: 'rank-note', text: logQ.value.trim() ? '찾는 기록이 없어요' : '아직 기록이 없어요' }));
+      // 하루 동안 상세를 본 횟수·서로 다른 캐릭터 수, 7일 동안 쓴 기기 수
+      const cnt = {}, uniq = {}, devs = {};
       for (const l of lg) {
-        if (l.kind === 'detail' && Date.now() - new Date(l.at) < 864e5) cnt[l.viewer] = (cnt[l.viewer] || 0) + 1;
+        if (l.kind === 'detail' && Date.now() - new Date(l.at) < 864e5) { cnt[l.viewer] = (cnt[l.viewer] || 0) + 1; (uniq[l.viewer] = uniq[l.viewer] || new Set()).add(l.target_nick); }
         if (l.dev && Date.now() - new Date(l.at) < 7 * 864e5) (devs[l.viewer] = devs[l.viewer] || new Set()).add(l.dev);
       }
-      for (const l of rows) {
-        const nDev = devs[l.viewer] ? devs[l.viewer].size : 0, many = cnt[l.viewer] >= 30 || nDev >= 4;
+      const pages = Math.max(1, Math.ceil(rows.length / LOG_PAGE)); logPg = Math.min(Math.max(0, logPg), pages - 1);
+      for (const l of rows.slice(logPg * LOG_PAGE, (logPg + 1) * LOG_PAGE)) {
+        const nDev = devs[l.viewer] ? devs[l.viewer].size : 0, nU = uniq[l.viewer] ? uniq[l.viewer].size : 0, many = nU >= 30 || nDev >= 4;
         logBox.append(el('div', { class: 'adm-log' + (many ? ' many' : '') },
-          el('button', { type: 'button', class: 'txt sm nm', text: l.viewer_nick || '지워진 캐릭터', onclick: () => { only = l.viewer; drawLogs(); } }),
+          el('button', { type: 'button', class: 'txt sm nm', text: l.viewer_nick || '지워진 캐릭터', onclick: () => { only = l.viewer; logPg = 0; drawLogs(); } }),
           el('span', { text: kindText(l) }),
-          el('small', { text: `${ago(l.at)}${nDev ? `, 기기 ${nDev}대(7일)` : ''}${cnt[l.viewer] >= 30 ? ', 하루 상세 ' + cnt[l.viewer] + '번' : ''}` })));
+          el('small', { text: `${ago(l.at)}${nDev ? `, 기기 ${nDev}대(7일)` : ''}${cnt[l.viewer] ? `, 오늘 상세 ${cnt[l.viewer]}번(${nU}명)` : ''}` })));
       }
+      logPager.set(logPg, pages);
     };
-    drawLogs(); logs.append(logBox);
+    let logSeq = 0;
+    const loadLogs = async () => {
+      const q = logQ.value.trim().replace(/[,()%*\\]/g, ''), my = ++logSeq;
+      let qy = c.from('view_log').select('at,viewer,viewer_nick,kind,target_nick,dev').order('at', { ascending: false }).limit(q ? 500 : 300);
+      if (q) qy = qy.or(`viewer_nick.ilike.%${q}%,target_nick.ilike.%${q}%`);
+      const { data, error: e4 } = await qy;
+      if (my !== logSeq) return;
+      if (e4) { logInfo.textContent = '기록을 불러오지 못했어요. ' + errMsg(e4); return; }
+      lg = data || []; only = null; logPg = 0;
+      logInfo.textContent = q ? `'${q}' 기록 ${lg.length}개${lg.length >= 500 ? '(최근 500개까지)' : ''}` : `최근 기록 ${lg.length}개`;
+      drawLogs();
+    };
+    let logT = 0; logQ.oninput = () => { clearTimeout(logT); logT = setTimeout(loadLogs, 350); };
+    await loadLogs();
 
-    // 랭킹에 올라간 캐릭터: 숨기기 / 삭제(랭킹·갱신 기록·사진 모두)
-    const all = el('div', { class: 'adm-sec' }, el('h3', { text: '랭킹에 올라간 캐릭터' }),
+    // ---------- 캐릭터 ----------
+    // 랭킹에 올라간 캐릭터: 검색 / 숨기기 / 삭제(랭킹·갱신 기록·사진 모두) / 그 캐릭터 열람 기록 보기
+    const CH_PAGE = 20;
+    const all = el('div', { class: 'adm-sec' },
       el('p', { class: 'rank-note', text: '숨기면 랭킹에서 빠지고 그 사람은 랭킹도 못 봐요(분탕 차단). 삭제하면 랭킹, 갱신 기록, 사진이 모두 지워지고 되돌릴 수 없어요.' }));
-    body.append(all);
-    const { data: ps, error: e3 } = await c.from('players').select('id,nickname,cls,cp,hidden,hide_reason,updated_at,shot_path').order('cp', { ascending: false }).limit(500);
+    panes.chars.append(all);
+    const { data: ps, error: e3 } = await c.from('players').select('id,nickname,cls,cp,hidden,hide_reason,updated_at,shot_path').order('cp', { ascending: false }).limit(1000);
     if (e3) throw e3;
+    ps.forEach((p, i) => { p.rank = i + 1; });
+    setCnt('chars', ps.length);
     // 예전에 올라간 사진 중 흐린 사본이 아닌 것: 다른 사람 이름을 가린 사본으로 바꿈(원본은 갱신 기록에 남음)
     const raw = ps.filter(p => p.shot_path && !/_p\.jpg$/.test(p.shot_path));
     if (raw.length) {
@@ -1093,21 +1156,29 @@
       };
       all.append(fix);
     }
-    if (!ps.length) all.append(el('p', { class: 'rank-note', text: '아직 올라간 캐릭터가 없어요' }));
-    ps.forEach((p, i) => {
+    const chQ = searchBox('닉네임 또는 전직 검색');
+    const onlyHid = el('input', { type: 'checkbox' });
+    const chInfo = el('p', { class: 'rank-note adm-found' });
+    const chBox = el('div');
+    let chPg = 0;
+    const chPager = pager((d) => { chPg += d; drawChars(); all.scrollIntoView({ block: 'start' }); });
+    all.append(el('div', { class: 'adm-find' }, chQ, el('label', { class: 'adm-chk' }, onlyHid, '숨긴 캐릭터만')), chInfo, chBox, chPager);
+    const charItem = (p) => {
       const tag = () => p.hidden ? ` (숨김${p.hide_reason ? ': ' + p.hide_reason : ''})` : '';
-      const nm = el('span', { class: 'nm', text: `${i + 1}. ${p.nickname}${tag()}` });
+      const nm = el('span', { class: 'nm', text: `${p.rank}. ${p.nickname}${tag()}` });
       const hide = el('button', { type: 'button', class: 'btn', text: p.hidden ? '다시 보이기' : '숨기기' });
       const del = el('button', { type: 'button', class: 'btn danger', text: '삭제' });
+      const seeLog = el('button', { type: 'button', class: 'btn', text: '열람 기록' });
+      seeLog.onclick = () => { logQ.value = p.nickname; show('logs'); loadLogs(); };
       const item = el('div', { class: 'adm-item adm-plain' }, el('div', { class: 'adm-info' }, nm,
         el('span', { text: `${p.cls}, 실투력 ${fmtInt(p.cp)}` }),
         el('small', { text: `${ago(p.updated_at)} 갱신` }),
-        el('div', { class: 'adm-acts' }, hide, del)));
+        el('div', { class: 'adm-acts' }, hide, seeLog, del)));
       hide.onclick = async () => {
         const nv = !p.hidden;
         const why = await setHidden(c, p.id, nv); if (why === null) return;
         p.hidden = nv; p.hide_reason = nv ? why : null; hide.textContent = nv ? '다시 보이기' : '숨기기';
-        nm.textContent = `${i + 1}. ${p.nickname}${tag()}`;
+        nm.textContent = `${p.rank}. ${p.nickname}${tag()}`;
         toast(nv ? '랭킹에서 숨겼어요' : '다시 보이게 했어요');
       };
       del.onclick = async () => {
@@ -1124,10 +1195,33 @@
         if (e) { toast(errMsg(e)); hide.disabled = del.disabled = false; return; }
         const rm = [...new Set([...(paths || []), ...pubs])];
         if (rm.length) { const { error: re } = await c.storage.from('shots').remove(rm); if (re) console.warn(re); }
-        item.remove(); toast(`${p.nickname} 랭킹을 지웠어요`);
+        ps.splice(ps.indexOf(p), 1); setCnt('chars', ps.length); drawChars();
+        toast(`${p.nickname} 랭킹을 지웠어요`);
       };
-      all.append(item);
-    });
+      return item;
+    };
+    const drawChars = () => {
+      const q = chQ.value.trim().toLowerCase();
+      const rows = ps.filter(p => (!onlyHid.checked || p.hidden) && (!q || has(p.nickname, q) || has(p.cls, q)));
+      const pages = Math.max(1, Math.ceil(rows.length / CH_PAGE)); chPg = Math.min(Math.max(0, chPg), pages - 1);
+      chBox.textContent = '';
+      if (!ps.length) chBox.append(el('p', { class: 'rank-note', text: '아직 올라간 캐릭터가 없어요' }));
+      else if (!rows.length) chBox.append(el('p', { class: 'rank-note', text: '찾는 캐릭터가 없어요' }));
+      for (const p of rows.slice(chPg * CH_PAGE, (chPg + 1) * CH_PAGE)) chBox.append(charItem(p));
+      chInfo.textContent = q || onlyHid.checked ? `${rows.length}명 찾았어요` : `모두 ${ps.length}명`;
+      chPager.set(chPg, pages);
+    };
+    chQ.oninput = () => { chPg = 0; drawChars(); };
+    onlyHid.onchange = () => { chPg = 0; drawChars(); };
+    drawChars();
+
+    // ---------- 워터마크 찾기 ----------
+    panes.wm.append(wmFinder(c));
+
+    // 처음 열 탭: 마지막에 보던 탭, 없으면 할 일이 있는 탭
+    let first = null; try { first = sessionStorage.getItem('silAdmTab'); } catch (e) { /* 무시 */ }
+    if (!panes[first]) first = apps.length ? 'apps' : hsHeld.length ? 'upd' : 'chars';
+    show(first);
   }
   $('#btnAdminOut').onclick = async () => { const c = await sb(); await c.auth.signOut(); adminInit(); };
 

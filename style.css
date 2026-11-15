@@ -554,3 +554,26 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .kp-gap { flex: 1; }
 .kp .btn:not(.primary) { background: rgba(255,255,255,0.12); color: #fff; }
 .kp .btn:not(.primary):hover { background: rgba(255,255,255,0.2); }
+/* 관리자 탭·검색·쪽수 */
+.adm-tabs { position: sticky; top: 0; z-index: 20; margin: 6px 0 0; overflow-x: auto; scrollbar-width: none; box-shadow: 0 0 0 6px #fff; }
+.adm-tabs::-webkit-scrollbar { display: none; }
+.adm-tabs .tab { flex: 1 0 auto; padding: 8px 12px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.adm-cnt { font-size: 12px; font-weight: 700; color: var(--mute); }
+.adm-cnt.todo { color: #fff; background: var(--up); border-radius: 999px; padding: 1px 7px; min-width: 20px; }
+.adm-pane > .adm-sec:first-child { margin-top: 14px; }
+.adm-find { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0 2px; }
+.adm-search { flex: 1; min-width: 180px; font: inherit; font-size: 15px; color: var(--text); background: var(--fill); border: 0; border-radius: 10px; padding: 10px 12px; }
+.adm-search:focus { outline: 2px solid var(--blue); outline-offset: 0; }
+.adm-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--sub); white-space: nowrap; cursor: pointer; }
+.adm-chk input { width: 16px; height: 16px; margin: 0; }
+.adm-found { margin: 6px 0 4px; }
+.adm-pager { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 14px; }
+.adm-pager .btn { padding: 8px 16px; font-size: 14px; }
+.adm-pageno { font-size: 14px; color: var(--sub); font-variant-numeric: tabular-nums; }
+.adm-plain .btn { padding: 8px 12px; font-size: 14px; }
+@media (min-width: 700px) {
+  .adm-plain { padding: 10px 0; }
+  .adm-plain .adm-info { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; row-gap: 2px; }
+  .adm-plain .adm-info > * { grid-column: 1; }
+  .adm-plain .adm-info > .adm-acts { grid-column: 2; grid-row: 1 / span 3; align-self: center; margin-top: 0; }
+}
