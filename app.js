@@ -959,8 +959,27 @@
     simWb.invalidate();
     const v = simWb.get(SH, 'C36'); return typeof v === 'number' ? v : NaN;
   }
+  // 관리자 화면용: 올린 계산기 값을 탭 순서대로 이름·보기 좋은 값으로(한 줄에 두 칸인 항목은 한 줄로 묶음)
+  function describeInputs(inp) {
+    inp = inp || {};
+    const out = [], has = (c) => inp[c] !== undefined && inp[c] !== null && inp[c] !== '';
+    const fmtV = (c, v) => typeof v === 'boolean' ? (v ? '켬' : '끔') : (typeof v === 'number' ? (PCT.has(c) ? `${+(v * 100).toFixed(2)}%` : fmtInt(v)) : String(v));
+    if (has('C6')) out.push({ tab: '전직', c: 'C6', name: '전직', txt: String(inp.C6) });
+    for (const t of TABS) for (const gr of t.groups) gr.fields.forEach((item, i) => {
+      const row = (Array.isArray(item) ? item : [item]).filter(f => f && f.c);
+      const got = row.filter(f => has(f.c));
+      if (!got.length) return;
+      const f0 = row[0], many = gr.fields.length > 1;
+      const name = f0.t || (f0.lab ? label(f0.lab) : '') || (gr.bar || gr.sub || f0.c) + (many ? ` ${i + 1}` : '');
+      const parts = got.map(f => fmtV(f.c, inp[f.c]));
+      const txt = /강화/.test(gr.bar || '') && got.length === 2 ? `${parts[0]} +${parts[1]}` : parts.join(' ');
+      out.push({ tab: t.name, c: f0.c, name, txt });
+    });
+    return out;
+  }
   window.SilApp = {
     inputs: () => Object.assign({}, inputs),
+    describeInputs,
     cp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
     cpWith,
     // 랭킹도 계산기에 넣은 그대로(강렬:초월 점유율을 직접 넣었으면 그 비율로) 반영

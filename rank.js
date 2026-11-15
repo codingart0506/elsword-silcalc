@@ -101,6 +101,22 @@
     return el('div', { class: 'adm-shots' }, one(orig, '원본(확인용)'),
       pub ? one(pub, '랭킹에 보일 사진') : el('p', { class: 'adm-flag', text: '다른 사람 이름을 자동으로 못 가렸어요. 반영하면 원본이 그대로 랭킹에 보여요' }));
   }
+  // 관리자: 같이 올린 계산기 값(갱신이면 이전 값과 비교해 바뀐 것 표시)
+  function inputsView(inputs, prev) {
+    const rows = A.describeInputs ? A.describeInputs(inputs) : [];
+    const before = prev ? new Map(A.describeInputs(prev).map(r => [r.c, r.txt])) : null;
+    const changed = before ? rows.filter(r => before.has(r.c) && before.get(r.c) !== r.txt).length : 0;
+    const box = el('details', { class: 'adm-inputs' }, el('summary', { text: `올린 계산기 값 보기 (${rows.length}개${before ? `, 바뀐 값 ${changed}개` : ''})` }));
+    const tb = el('table', { class: 'adm-in-table' });
+    let tab = '';
+    for (const r of rows) {
+      if (r.tab !== tab) { tab = r.tab; tb.append(el('tr', { class: 'grp' }, el('th', { colspan: '2', text: tab }))); }
+      const old = before && before.has(r.c) && before.get(r.c) !== r.txt ? before.get(r.c) : null;
+      tb.append(el('tr', { class: old ? 'chg' : '' }, el('td', { text: r.name }), el('td', { text: old ? `${old} → ${r.txt}` : r.txt })));
+    }
+    box.append(tb);
+    return box;
+  }
   // 관리자: 신청·갱신한 세팅을 계산기에서 열어 실투력이 맞는지 확인
   function adminSetting(nick, cls, inputs) {
     return el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => { setView('calc'); A.openShared({ n: cls, k: nick, i: inputs || {} }); } });
@@ -714,6 +730,7 @@
         el('span', { text: `초월:강렬 비율 ${shareText(a.inputs)}` }),
         el('span', { class: 'code' }, '인증 코드 ', el('b', { text: a.verify_code })),
         el('small', { class: 'adm-flag', text: '채팅의 인증 코드와 닉네임을 확인하세요' }),
+        inputsView(a.inputs),
         el('small', { text: new Date(a.created_at).toLocaleString('ko-KR') }),
         el('div', { class: 'adm-acts' }, ok, no, adminSetting(a.nickname, a.cls, a.inputs))));
       ok.onclick = async () => {
@@ -739,7 +756,7 @@
       el('p', { class: 'rank-note', text: '실투력이 그대로거나 내려간 갱신이라 바로 반영됐어요. 사진을 보고 확인하거나, 이상하면 되돌려요.' }));
     body.insertBefore(held, hist); body.insertBefore(live, hist); hist.remove();
     const { data: hs, error: e2 } = await c.from('cp_history')
-      .select('id,cp,prev_cp,cls,inputs,edited,status,created_at,shot_path,pub_path,player_id,players(nickname,hidden)')
+      .select('id,cp,prev_cp,cls,inputs,prev_inputs,edited,status,created_at,shot_path,pub_path,player_id,players(nickname,hidden)')
       .in('status', ['held', 'live']).order('created_at', { ascending: false }).limit(60);
     if (e2) throw e2;
     const hsHeld = hs.filter(h => h.status === 'held'), hsLive = hs.filter(h => h.status === 'live');
@@ -767,6 +784,7 @@
         el('span', { text: `${h.cls || ''}, ${h.prev_cp ? fmtInt(h.prev_cp) + ' → ' : ''}${fmtInt(h.cp)}${h.prev_cp ? ` (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%)` : ''}` }),
         el('span', { text: `초월:강렬 비율 ${shareText(h.inputs)}` }),
         h.edited ? el('span', { class: 'adm-flag', text: '스크린샷 적용 뒤 손으로 고친 값 있음' }) : null,
+        inputsView(h.inputs, h.prev_inputs),
         el('small', { text: ago(h.created_at) }), acts));
       if (h.status === 'held') {
         acts.append(el('button', { type: 'button', class: 'btn primary', text: '반영', onclick: () => act(h, 'approve', item, `${p.nickname} 갱신을 반영했어요`) }),

@@ -366,6 +366,13 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .adm-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .adm-item.adm-plain { grid-template-columns: 1fr; }
 .adm-shots { display: grid; gap: 8px; align-content: start; }
+.adm-inputs { margin: 4px 0; font-size: 13px; }
+.adm-inputs summary { cursor: pointer; color: var(--blue); font-weight: 600; }
+.adm-in-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.adm-in-table td { padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.adm-in-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.adm-in-table tr.grp th { text-align: left; padding: 10px 6px 4px; font-size: 12px; color: var(--mute); font-weight: 600; }
+.adm-in-table tr.chg td { background: var(--blue-weak); font-weight: 600; }
 .adm-shot { margin: 0; }
 .adm-shot img { width: 100%; border-radius: 10px; background: var(--fill); cursor: zoom-in; display: block; }
 .adm-shot figcaption { font-size: 12px; color: var(--mute); margin-top: 3px; }
