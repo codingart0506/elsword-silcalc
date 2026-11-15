@@ -1041,6 +1041,87 @@
       el('br'), '실질 전투력 ' + fmtInt(r.cpOpt) + ' ', el('span', { class: 'up', text: '(▲ ' + fmtInt(r.cpOpt - cp) + ')' }));
   }
 
+  // ---------- 소켓 배분 최적화 (엑셀 "최적 소켓 배분 계산"): 바꿀 수 있는 소켓 칸을 옵션별로 다시 나눠 실투력이 가장 높은 배분을 찾음 ----------
+  // 유강강초는 강렬·초월 스킬 데미지에 둘 다 붙는 옵션으로 계산
+  const SOCK = [
+    { k: 'crit', t: '크리티컬', cells: ['C17'], v: 6 }, { k: 'max', t: '극대화', cells: ['C19'], v: 6 }, { k: 'boss', t: '보스 데미지', cells: ['C21'], v: 3 },
+    { k: 'all', t: '모든 스킬 데미지', cells: ['C33'], v: 2 }, { k: 'brv', t: '초월 스킬 데미지', cells: ['C30'], v: 2.5 }, { k: 'str', t: '강렬 스킬 데미지', cells: ['C29'], v: 2.5 },
+    { k: 'both', t: '강렬·초월(유강강초)', cells: ['C29', 'C30'], v: 2 },
+  ];
+  function sockCfg() {
+    store.sock = store.sock || {};
+    const c = store.sock[store.current] = store.sock[store.current] || { v: {}, n: {} };
+    return c;
+  }
+  let sockRes = null;
+  function wireSock() {
+    if (!$('#sockCard')) return;
+    $('#btnSock').onclick = () => {
+      const b = $('#btnSock'); b.disabled = true; b.textContent = '계산 중…';
+      setTimeout(() => { try { sockRes = Object.assign(runSock(), { key: store.current }); } catch (e) { console.error(e); sockRes = { err: '계산하다 문제가 생겼어요' }; } b.disabled = false; b.textContent = '최적 배분 계산하기'; renderSock(); }, 30);
+    };
+  }
+  function runSock() {
+    const cfg = sockCfg(), val = SOCK.map(o => Number(cfg.v[o.k] ?? o.v) || 0), cur = SOCK.map(o => Math.max(0, Math.round(Number(cfg.n[o.k]) || 0)));
+    const N = cur.reduce((a, b) => a + b, 0);
+    if (!N) return { err: '바꿀 수 있는 소켓 칸 수를 먼저 넣어 주세요' };
+    // 지금 소켓을 뺀 값에서 시작
+    const base = {};
+    SOCK.forEach((o, i) => { for (const c of o.cells) base[c] = (base[c] ?? (Number(inputs[c]) || 0)) - cur[i] * val[i] / 100; });
+    const over = (alloc) => { const o = Object.assign({}, base); SOCK.forEach((s, i) => { for (const c of s.cells) o[c] = Math.round((o[c] + alloc[i] * val[i] / 100) * 1e6) / 1e6; }); return o; };
+    const memo = new Map(), cpOf = (alloc) => { const k = alloc.join(','); if (!memo.has(k)) memo.set(k, cpWith(over(alloc))); return memo.get(k); };
+    const now = cpOf(cur);
+    // 한 칸씩 가장 많이 오르는 옵션에 넣고(탐욕), 한 칸 옮기기로 더 오르는 게 없을 때까지 다듬음
+    let a = SOCK.map(() => 0);
+    for (let s = 0; s < N; s++) {
+      let bi = 0, bv = -Infinity;
+      SOCK.forEach((o, i) => { if (!val[i]) return; const t = a.slice(); t[i]++; const v = cpOf(t); if (v > bv) { bv = v; bi = i; } });
+      a[bi]++;
+    }
+    const polish = (start) => {
+      let x = start.slice(), xv = cpOf(x), moved = true;
+      while (moved) {
+        moved = false;
+        for (let i = 0; i < SOCK.length; i++) for (let j = 0; j < SOCK.length; j++) {
+          if (i === j || !x[i] || !val[j]) continue;
+          for (const d of [1, 2]) {
+            if (x[i] < d) continue;
+            const t = x.slice(); t[i] -= d; t[j] += d; const v = cpOf(t);
+            if (v > xv + 1e-6) { x = t; xv = v; moved = true; }
+          }
+        }
+      }
+      return [x, xv];
+    };
+    let [best, bestV] = polish(a);
+    const [b2, v2] = polish(cur); if (v2 > bestV) { best = b2; bestV = v2; }
+    return { cur, best, now, cp: bestV, N, evals: memo.size };
+  }
+  function renderSock() {
+    const card = $('#sockCard'); if (!card) return;
+    const bad = isEmptySetting(inputs) || !(Number(g('C11')) > 0) || !(Number(g('C12')) > 0) || !(Number(g('C13')) > 0) || typeof g('C36') !== 'number';
+    card.hidden = bad || !!shared; if (card.hidden) return;
+    const cfg = sockCfg(), body = $('#sockBody'); body.textContent = '';
+    const res = sockRes && !sockRes.err && sockRes.key === store.current ? sockRes : null;
+    SOCK.forEach((o, i) => {
+      const vIn = el('input', { type: 'text', inputmode: 'decimal', class: 'num', value: String(cfg.v[o.k] ?? o.v), 'aria-label': o.t + ' 한 칸 수치' });
+      vIn.onchange = () => { const v = Number(String(vIn.value).replace(',', '.')); cfg.v[o.k] = isFinite(v) && v >= 0 ? v : o.v; vIn.value = cfg.v[o.k]; persist(); sockRes = null; renderSock(); };
+      const nIn = el('input', { type: 'text', inputmode: 'numeric', class: 'num', value: String(cfg.n[o.k] || 0), 'aria-label': o.t + ' 지금 칸 수' });
+      nIn.onchange = () => { const v = Math.max(0, Math.round(Number(nIn.value) || 0)); cfg.n[o.k] = v; nIn.value = v; persist(); sockRes = null; renderSock(); };
+      const best = res ? res.best[i] : null, d = res ? best - res.cur[i] : 0;
+      body.append(el('tr', null, el('th', { scope: 'row', text: o.t }),
+        el('td', null, el('span', { class: 'sock-in' }, vIn, el('span', { text: '%' }))),
+        el('td', null, el('span', { class: 'sock-in' }, nIn, el('span', { text: '칸' }))),
+        el('td', { class: res ? (d > 0 ? 'up' : d < 0 ? 'down' : 'same') : 'same', text: res ? `${best}칸${d ? ` (${d > 0 ? '+' : '−'}${Math.abs(d)})` : ''}` : '-' })));
+    });
+    const gain = $('#sockGain'); gain.textContent = ''; gain.className = 'opt-gain';
+    if (sockRes && sockRes.err) { gain.className = 'opt-gain warn'; gain.textContent = sockRes.err; return; }
+    if (!res) return;
+    if (res.cp - res.now < 1) { gain.textContent = '지금 배분이 이미 가장 좋아요'; return; }
+    gain.append('최적으로 바꾸면 실투력 ', el('b', { text: fmtInt(res.now) }), ' → ', el('b', { class: 'up', text: fmtInt(res.cp) }), ` (+${((res.cp / res.now - 1) * 100).toFixed(2)}%)`);
+  }
+  hooks.push(() => { if (sockRes && sockRes.key !== store.current) sockRes = null; renderSock(); });
+
   // ---------- 시작 ----------
   function selfTest() {
     const t = new E.Workbook(M); const v = t.get(SH, 'C36'); const exp = M.check['<Main>!C36'];
@@ -1055,7 +1136,7 @@
     n.readOnly = !!shared;
     n.value = shared ? (shared.nk || '') : nickOf(store.current);
   }
-  renderForms(); renderProfiles(); wireProfiles(); syncNick(); wireSelection(); wireCapture(); wireShare(); wireOpt();
+  renderForms(); renderProfiles(); wireProfiles(); syncNick(); wireSelection(); wireCapture(); wireShare(); wireOpt(); wireSock();
   refresh();
   openHash();
   selfTest();

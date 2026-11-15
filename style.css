@@ -504,3 +504,8 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .av-fix-acts { justify-content: flex-end; padding-top: 8px; }
 .av-fix-acts .av-hint { text-align: right; }
 #dlgText { white-space: pre-line; }
+.sock-table td { vertical-align: middle; }
+.sock-in { display: inline-flex; align-items: center; gap: 4px; justify-content: flex-end; }
+.sock-in input { width: 58px; text-align: right; padding: 6px 8px; }
+.sock-in span { font-size: 13px; color: var(--mute); }
+#btnSock { margin-top: 14px; }
