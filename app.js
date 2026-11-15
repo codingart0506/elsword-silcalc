@@ -1048,6 +1048,11 @@
     { k: 'all', t: '모든 스킬 데미지', cells: ['C33'], v: 2 }, { k: 'brv', t: '초월 스킬 데미지', cells: ['C30'], v: 2.5 }, { k: 'str', t: '강렬 스킬 데미지', cells: ['C29'], v: 2.5 },
     { k: 'both', t: '유강강초', cells: ['C29', 'C30'], v: 2 },
   ];
+  // 스탯창 ↔ 원래 수치 (크리: <계산기> Q38·Q39, 극대: V27·V28. 스탯창 쪽은 100%에서 자르지 않음)
+  const SOCK_CI = w => w >= .86 ? (w - .86) * 2.5 + 1.05 : w >= .68 ? (w - .68) * 5 / 3 + .75 : w >= .4 ? (w - .4) * 1.25 + .4 : w;
+  const SOCK_CW = x => x <= .4 ? x : x <= .75 ? (x - .4) * .8 + .4 : x <= 1.05 ? (x - .75) * .6 + .68 : (x - 1.05) * .4 + .86;
+  const SOCK_MI = w => w < .4 ? w : w < .7 ? (w - .4) * 4 / 3 + .4 : w < .9 ? (w - .7) * 2 + .8 : (w - .9) * 4 + 1.2;
+  const SOCK_MW = x => x < .4 ? x : x < .8 ? (x - .4) * .75 + .4 : x < 1.2 ? (x - .8) * .5 + .7 : (x - 1.2) * .25 + .9;
   function sockCfg() {
     store.sock = store.sock || {};
     const c = store.sock[store.current] = store.sock[store.current] || { v: {}, n: {} };
@@ -1065,10 +1070,16 @@
     const cfg = sockCfg(), val = SOCK.map(o => Number(cfg.v[o.k] ?? o.v) || 0), cur = SOCK.map(o => Math.max(0, Math.round(Number(cfg.n[o.k]) || 0)));
     const N = cur.reduce((a, b) => a + b, 0);
     if (!N) return { err: '바꿀 수 있는 소켓 칸 수를 먼저 넣어 주세요' };
-    // 지금 소켓을 뺀 값에서 시작
+    // 지금 소켓을 뺀 값에서 시작. 크리·극대는 스탯창 값이 감소 효율을 거친 값이라 원래 수치로 바꿔서 더하고 다시 스탯창 값으로 돌림(시트 Q38·V27과 같은 식)
+    const RAW = { C17: [SOCK_CI, SOCK_CW], C19: [SOCK_MI, SOCK_MW] };
     const base = {};
-    SOCK.forEach((o, i) => { for (const c of o.cells) base[c] = (base[c] ?? (Number(inputs[c]) || 0)) - cur[i] * val[i] / 100; });
-    const over = (alloc) => { const o = Object.assign({}, base); SOCK.forEach((s, i) => { for (const c of s.cells) o[c] = Math.round((o[c] + alloc[i] * val[i] / 100) * 1e6) / 1e6; }); return o; };
+    SOCK.forEach((o, i) => { for (const c of o.cells) { const v0 = Number(inputs[c]) || 0; base[c] = (base[c] ?? (RAW[c] ? RAW[c][0](v0) : v0)) - cur[i] * val[i] / 100; } });
+    const over = (alloc) => {
+      const o = Object.assign({}, base);
+      SOCK.forEach((s, i) => { for (const c of s.cells) o[c] += alloc[i] * val[i] / 100; });
+      for (const c in o) o[c] = Math.round((RAW[c] ? RAW[c][1](Math.max(0, o[c])) : o[c]) * 1e6) / 1e6;
+      return o;
+    };
     const memo = new Map(), cpOf = (alloc) => { const k = alloc.join(','); if (!memo.has(k)) memo.set(k, cpWith(over(alloc))); return memo.get(k); };
     const now = cpOf(cur);
     // 한 칸씩 가장 많이 오르는 옵션에 넣고(탐욕), 한 칸 옮기기로 더 오르는 게 없을 때까지 다듬음
