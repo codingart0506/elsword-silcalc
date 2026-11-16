@@ -322,6 +322,21 @@
     return s;
   }
 
+  // 사이트가 업데이트됐는데 예전 화면을 계속 띄워 두고 있으면(워터마크·갱신 방식이 예전 것) 랭킹을 열 때 새로 불러옴
+  let freshAt = 0;
+  async function checkFresh(view) {
+    if (Date.now() - freshAt < 60000) return; freshAt = Date.now();
+    try {
+      const cur = [...document.scripts].map(x => x.src || '').find(u => /rank\.js\?v=/.test(u)); if (!cur) return;
+      const html = await (await fetch(location.pathname + '?fresh=' + Date.now(), { cache: 'no-store' })).text();
+      const m = html.match(/rank\.js\?v=([0-9a-f]+)/); if (!m || cur.endsWith('v=' + m[1])) return;
+      if (sessionStorage.getItem('silReloaded') === m[1]) return;
+      sessionStorage.setItem('silReloaded', m[1]);
+      toast('사이트가 새로 바뀌어서 다시 불러와요');
+      setTimeout(() => location.replace(location.pathname + '?' + view), 700);
+    } catch (e) { /* 다음에 다시 */ }
+  }
+
   // ---------- 화면 전환 ----------
   const views = $('#views'); views.hidden = false;
   function setView(v) {
@@ -333,7 +348,7 @@
     if (v === 'avatar' && window.SilAvatar) window.SilAvatar.render();
     $('#adminView').hidden = v !== 'admin';
     for (const b of views.querySelectorAll('button')) b.setAttribute('aria-current', b.dataset.view === v ? 'page' : 'false');
-    if (v === 'rank') { markView(); loadRank(true); }
+    if (v === 'rank') { checkFresh('rank'); markView(); loadRank(true); }
     if (v === 'admin') adminInit();
     window.scrollTo(0, 0);
   }
@@ -416,7 +431,7 @@
   const nf = (v) => String(Math.round(Number(v) * 100) / 100);
   function shareText(i) {
     i = i || {};
-    if (i.L42 === true) return `${nf(i.K46 ?? 65)} : ${nf(i.I46 ?? 35)} (${/이후/.test(i.M46 || '') ? '딜 미터로 잰 딜 비율' : '스킬 쓰는 비율'})`;
+    if (i.L42 === true) return `${nf(i.K46 ?? 65)} : ${nf(i.I46 ?? 35)} (${/이후/.test(i.M46 || '') ? '딜 미터로 잰 비율' : '보통 비율'})`;
     return `자동 (${Number(i.C29) > Number(i.C30) ? '강렬' : '초월'} 주력)`;
   }
   async function playerDetail(c, r) {
@@ -543,12 +558,12 @@
     return G;
   }
   // 캡처(leak) 안에서 원본(orig)이 놓인 자리: { s(원본→캡처 배율), tx, ty, q(맞는 정도) }
-  async function locate(orig, leak, tick) {
-    const M0 = 256, f = M0 / Math.max(leak.width, leak.height);
+  async function locate(orig, leak, tick, coarse) {
+    const M0 = coarse ? 160 : 256, f = M0 / Math.max(leak.width, leak.height);
     const lw = Math.max(8, Math.round(leak.width * f)), lh = Math.max(8, Math.round(leak.height * f));
     const GL = gradOf(leak, lw, lh);
     let best = null;
-    const ws = []; for (let wpx = 0.12 * Math.max(lw, lh); wpx <= 1.7 * Math.max(lw, lh); wpx *= 1.035) ws.push(wpx);
+    const ws = []; for (let wpx = 0.12 * Math.max(lw, lh); wpx <= 1.7 * Math.max(lw, lh); wpx *= coarse ? 1.06 : 1.035) ws.push(wpx);
     for (let n = 0; n < ws.length; n++) {
       const ow = Math.max(6, Math.round(ws[n] * orig.width / Math.max(orig.width, orig.height))), oh = Math.max(6, Math.round(ws[n] * orig.height / Math.max(orig.width, orig.height)));
       const W = pow2(lw + ow), H = pow2(lh + oh);
@@ -568,6 +583,7 @@
       if (tick && n % 6 === 0) { tick(n / ws.length); await new Promise(r => setTimeout(r, 0)); }
     }
     if (!best) return null;
+    if (coarse) return best;
     // 크게 놓고 다듬기: 배율 ±3%, 자리 ±3칸(캡처 해상도 절반)
     const k2 = Math.min(1, 900 / Math.max(leak.width, leak.height)), lw2 = Math.round(leak.width * k2), lh2 = Math.round(leak.height * k2);
     const G2 = gradOf(leak, lw2, lh2);
@@ -608,36 +624,56 @@
     g.drawImage(orig, Math.round(at.tx), Math.round(at.ty), ow, oh);
     const O = g.getImageData(0, 0, W, H).data, Ld = leak.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
     const x0 = Math.max(1, Math.round(at.tx)), y0 = Math.max(1, Math.round(at.ty)), x1 = Math.min(W - 1, Math.round(at.tx) + ow - 1), y1 = Math.min(H - 1, Math.round(at.ty) + oh - 1);
-    // 캡처의 색이 조금 다를 수 있어 파랑을 원본 파랑의 1차식으로 맞춤(테두리처럼 크게 바뀌는 곳은 빼고)
+    // 캡처의 색이 조금 다를 수 있어(화면 색 보정·감마) 원본 파랑 → 캡처 파랑 대응표를 만들어 맞춤(테두리처럼 크게 바뀌는 곳은 빼고)
     const lum = (A, i) => A[i] * 0.3 + A[i + 1] * 0.59 + A[i + 2] * 0.11;
     const gradAt = (i) => Math.abs(lum(O, i + 4) - lum(O, i - 4)) + Math.abs(lum(O, i + W * 4) - lum(O, i - W * 4));
-    let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
-    for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) { const i = (y * W + x) * 4; if (gradAt(i) > 12) continue; const a = O[i + 2], b = Ld[i + 2]; n++; sx += a; sy += b; sxx += a * a; sxy += a * b; }
+    const NB = 64, bs = new Float64Array(NB), bn = new Float64Array(NB);
+    let n = 0;
+    for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) { const i = (y * W + x) * 4; if (gradAt(i) > 12) continue; const k = O[i + 2] >> 2; bs[k] += Ld[i + 2]; bn[k]++; n++; }
     if (n < 500) return null;
-    const al = (n * sxy - sx * sy) / Math.max(1e-6, n * sxx - sx * sx), be = (sy - al * sx) / n;
+    const ctr = [], val = [];
+    for (let k = 0; k < NB; k++) if (bn[k] >= 8) { ctr.push(k * 4 + 1.5); val.push(bs[k] / bn[k]); }
+    if (ctr.length < 2) return null;
+    const lut = new Float64Array(256);
+    for (let v = 0; v < 256; v++) {
+      let k = 0; while (k < ctr.length - 2 && ctr[k + 1] < v) k++;
+      const t = (v - ctr[k]) / (ctr[k + 1] - ctr[k]); lut[v] = val[k] + (val[k + 1] - val[k]) * t;
+    }
+    const slope = (v) => Math.max(0.3, Math.min(2, (lut[Math.min(255, v + 6)] - lut[Math.max(0, v - 6)]) / (Math.min(255, v + 6) - Math.max(0, v - 6))));
     const { B, gw, gh } = wmGrid('', orig.width, orig.height);
-    const Rg = new Float64Array(gw * gh), Ng = new Float64Array(gw * gh);
-    const vw = x1 - x0, vh = y1 - y0, RM = new Float32Array(vw * vh);
+    const vw = x1 - x0, vh = y1 - y0, RM = new Float32Array(vw * vh), WM = new Float32Array(vw * vh);
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
-      const i = (y * W + x) * 4, gr = gradAt(i);
-      const wt = 1 / (1 + (gr / 6) ** 2); if (wt < 0.05) continue;
-      let r = Ld[i + 2] - (al * O[i + 2] + be); if (r > 12) r = 12; else if (r < -12) r = -12;
-      RM[(y - y0) * vw + (x - x0)] = r * wt;
-      const ox = (x - at.tx) / s / B, oy = (y - at.ty) / s / B, gx = Math.floor(ox), gy = Math.floor(oy), tx = ox - gx, ty = oy - gy;
+      const i = (y * W + x) * 4, wt = 1 / (1 + (gradAt(i) / 6) ** 2); if (wt < 0.05) continue;
+      let r = Ld[i + 2] - lut[O[i + 2]]; if (r > 12) r = 12; else if (r < -12) r = -12;
+      const j = (y - y0) * vw + (x - x0); RM[j] = r * wt; WM[j] = wt;
+    }
+    // 넓게 번지는 색 차이(밝기 보정·압축 얼룩)는 빼고 무늬 크기의 차이만 남김: 주변(무늬 칸 3개쯤) 가중 평균을 뺌
+    const Rh = Math.max(3, Math.round(3 * B * s)), SW = vw + 1;
+    const SR = new Float64Array(SW * (vh + 1)), SWt = new Float64Array(SW * (vh + 1));
+    for (let y = 0; y < vh; y++) { let a = 0, b = 0; for (let x = 0; x < vw; x++) { a += RM[y * vw + x]; b += WM[y * vw + x]; SR[(y + 1) * SW + x + 1] = SR[y * SW + x + 1] + a; SWt[(y + 1) * SW + x + 1] = SWt[y * SW + x + 1] + b; } }
+    const box = (S, xa, ya, xb, yb) => S[yb * SW + xb] - S[ya * SW + xb] - S[yb * SW + xa] + S[ya * SW + xa];
+    const HP = new Float32Array(vw * vh);
+    const Rg = new Float64Array(gw * gh), Ng = new Float64Array(gw * gh);
+    for (let y = 0; y < vh; y++) for (let x = 0; x < vw; x++) {
+      const j = y * vw + x, wt = WM[j]; if (!wt) continue;
+      const xa = Math.max(0, x - Rh), xb = Math.min(vw, x + Rh + 1), ya = Math.max(0, y - Rh), yb = Math.min(vh, y + Rh + 1);
+      const sw = box(SWt, xa, ya, xb, yb), m = sw > 0 ? box(SR, xa, ya, xb, yb) / sw : 0;
+      const r = RM[j] / wt - m; HP[j] = r * wt;
+      const X = x + x0, Y = y + y0, i = (Y * W + X) * 4;
+      const ox = (X - at.tx) / s / B, oy = (Y - at.ty) / s / B, gx = Math.floor(ox), gy = Math.floor(oy), tx = ox - gx, ty = oy - gy;
       if (gx < 0 || gy < 0 || gx >= gw - 1 || gy >= gh - 1) continue;
-      const a = wmAmp(O[i], O[i + 1], O[i + 2]) * al;
-      const k = gy * gw + gx;
+      const a = wmAmp(O[i], O[i + 1], O[i + 2]) * slope(O[i + 2]), k = gy * gw + gx;
       for (const [kk, hw] of [[k, (1 - tx) * (1 - ty)], [k + 1, tx * (1 - ty)], [k + gw, (1 - tx) * ty], [k + gw + 1, tx * ty]]) { Rg[kk] += wt * r * a * hw; Ng[kk] += wt * (a * hw) ** 2; }
     }
-    // 남은 차이를 눈으로 보는 그림(살짝 뭉개서 크게 키움): 예전 방식(글자) 워터마크는 여기에 글자로 드러남
+    // 남은 차이를 눈으로 보는 그림(살짝 뭉개서 키움): 예전 방식(글자) 워터마크는 여기에 글자로 드러남
     const view = document.createElement('canvas'); view.width = vw; view.height = vh;
-    const vg = view.getContext('2d'), vd = vg.createImageData(vw, vh), q = vd.data, rr = Math.max(1, Math.round(Math.max(vw, vh) / 500));
+    const vg = view.getContext('2d'), vd = vg.createImageData(vw, vh), q = vd.data, rr = Math.max(1, Math.round(Math.max(vw, vh) / 600));
     const S2 = new Float64Array((vw + 1) * (vh + 1));
-    for (let y = 0; y < vh; y++) { let row = 0; for (let x = 0; x < vw; x++) { row += RM[y * vw + x]; S2[(y + 1) * (vw + 1) + x + 1] = S2[y * (vw + 1) + x + 1] + row; } }
+    for (let y = 0; y < vh; y++) { let row = 0; for (let x = 0; x < vw; x++) { row += HP[y * vw + x]; S2[(y + 1) * (vw + 1) + x + 1] = S2[y * (vw + 1) + x + 1] + row; } }
     for (let y = 0; y < vh; y++) for (let x = 0; x < vw; x++) {
       const ya = Math.max(0, y - rr), yb = Math.min(vh, y + rr + 1), xa = Math.max(0, x - rr), xb = Math.min(vw, x + rr + 1);
       const m = (S2[yb * (vw + 1) + xb] - S2[ya * (vw + 1) + xb] - S2[yb * (vw + 1) + xa] + S2[ya * (vw + 1) + xa]) / ((yb - ya) * (xb - xa));
-      const k = (y * vw + x) * 4; q[k] = q[k + 1] = q[k + 2] = Math.max(0, Math.min(255, 128 + m * 40)); q[k + 3] = 255;
+      const k = (y * vw + x) * 4; q[k] = q[k + 1] = q[k + 2] = Math.max(0, Math.min(255, 128 + m * 24)); q[k + 3] = 255;
     }
     vg.putImageData(vd, 0, 0);
     return { Rg, Ng, gw, gh, B, view };
@@ -696,7 +732,7 @@
   function wmFinder(c, ps) {
     ps = ps || [];
     // 1) 퍼진 사진: 어느 캐릭터 사진인지 고르면, 원본과 맞대어 누구 무늬인지 찾음
-    const who = el('input', { type: 'search', class: 'adm-search', placeholder: '퍼진 사진 속 캐릭터 닉네임(랭킹 캐릭터)', list: 'wmChars', autocomplete: 'off' });
+    const who = el('input', { type: 'search', class: 'adm-search', placeholder: '사진 속 캐릭터 닉네임(비워 두면 자동으로 찾아요)', list: 'wmChars', autocomplete: 'off' });
     const dl = el('datalist', { id: 'wmChars' }); for (const p of ps) dl.append(el('option', { value: p.nickname }));
     const out = el('div', { class: 'wm-out wm-result' });
     const old = el('details', { class: 'wm-old' }, el('summary', { text: '예전 방식으로 보기(랭킹 목록 캡처, 예전 글자 무늬)' }));
@@ -707,27 +743,46 @@
       const nm = who.value.trim();
       const p = ps.find(x => x.nickname === nm) || ps.find(x => x.nickname.toLowerCase() === nm.toLowerCase());
       out.textContent = '';
-      if (!nm) { out.append(el('p', { class: 'rank-note', text: '위 칸에 사진 속 캐릭터 닉네임을 고르면, 그 캐릭터 원본 사진과 맞대어 누가 본 화면인지 찾아요.' })); return; }
-      if (!p) { out.append(el('p', { class: 'adm-flag', text: '랭킹 캐릭터 목록에서 골라 주세요.' })); return; }
+      if (nm && !p) { out.append(el('p', { class: 'adm-flag', text: '랭킹 캐릭터 목록에서 골라 주세요. 모르면 비워 두면 자동으로 찾아요.' })); return; }
       busy = true;
       const note = el('p', { class: 'rank-note', text: '원본 사진을 불러오는 중이에요' }); out.append(note);
       try {
-        const { data: hs } = await c.from('cp_history').select('shot_path,pub_path,created_at').eq('player_id', p.id).order('created_at', { ascending: false }).limit(20);
-        const paths = [...new Set([p.shot_path, ...(hs || []).map(h => h.pub_path || h.shot_path)].filter(Boolean))].slice(0, 6);
-        let best = null, n = 0;
+        const loadShot = async (path) => { const u = await signed(c, path); return u ? blobToCanvas(await (await fetch(u)).blob()) : null; };
+        let best = null, found = p;
+        if (!p) {
+          // 사진 속 캐릭터를 모르면: 랭킹 캐릭터 사진마다 대충 맞대 보고(작게) 가장 잘 맞는 캐릭터를 고름
+          const list = ps.filter(x => x.shot_path); let top = [];
+          for (let k = 0; k < list.length; k++) {
+            note.textContent = `사진 속 캐릭터를 찾는 중이에요 (${k + 1}/${list.length})`;
+            try { const o = await loadShot(list[k].shot_path); if (!o) continue; const at = await locate(o, leakCv, null, true); if (at) top.push({ p: list[k], pk: at.pk }); } catch (e) { /* 넘어감 */ }
+            await new Promise(r => setTimeout(r, 0));
+          }
+          top.sort((a, b) => b.pk - a.pk); top = top.slice(0, 2);
+          if (!top.length) { note.textContent = '퍼진 사진 안에서 랭킹 사진을 못 찾았어요.'; busy = false; return; }
+          found = top[0].p;
+          for (const t of top) {
+            const o = await loadShot(t.p.shot_path);
+            const at = await locate(o, leakCv, (f) => { note.textContent = `${t.p.nickname} 사진을 맞대는 중이에요 ${Math.round(f * 100)}%`; });
+            if (at && (!best || at.q > best.at.q)) { best = { path: t.p.shot_path, o, at }; found = t.p; }
+          }
+        }
+        const pp = found;
+        const { data: hs } = await c.from('cp_history').select('shot_path,pub_path,created_at').eq('player_id', pp.id).order('created_at', { ascending: false }).limit(20);
+        const paths = [...new Set([pp.shot_path, ...(hs || []).map(h => h.pub_path || h.shot_path)].filter(Boolean))].slice(0, 6).filter(x => !best || x !== best.path);
+        let n = 0;
         for (const path of paths) {
           n++;
-          const u = await signed(c, path); if (!u) continue;
-          const o = await blobToCanvas(await (await fetch(u)).blob());
-          const at = await locate(o, leakCv, (f) => { note.textContent = `사진 ${n}/${paths.length}장째를 맞대는 중이에요 ${Math.round(f * 100)}%`; });
+          const o = await loadShot(path); if (!o) continue;
+          const at = await locate(o, leakCv, (f) => { note.textContent = `${pp.nickname} 사진 ${n}/${paths.length}장째를 맞대는 중이에요 ${Math.round(f * 100)}%`; });
           if (at && (!best || at.q > best.at.q)) best = { path, o, at };
         }
-        if (!best || best.at.q < 0.3) { note.textContent = `퍼진 사진 안에서 ${p.nickname} 랭킹 사진을 못 찾았어요. 다른 캐릭터 사진이거나, 너무 작게 잘렸을 수 있어요.`; busy = false; return; }
+        const p2 = pp;
+        if (!best || best.at.q < 0.3) { note.textContent = `퍼진 사진 안에서 ${p2.nickname} 랭킹 사진을 못 찾았어요. 다른 캐릭터 사진이거나, 너무 작게 잘렸을 수 있어요.`; busy = false; return; }
         note.textContent = '누구 무늬인지 비교하는 중이에요';
         await new Promise(r => setTimeout(r, 0));
         const res = residualGrid(best.o, leakCv, best.at);
         if (!res) { note.textContent = '사진이 너무 작게 들어 있어서 비교할 수 없어요.'; busy = false; return; }
-        const { data: vl } = await c.from('view_log').select('viewer_nick,at').eq('kind', 'detail').eq('target', p.id).order('at', { ascending: false }).limit(1000);
+        const { data: vl } = await c.from('view_log').select('viewer_nick,at').eq('kind', 'detail').eq('target', p2.id).order('at', { ascending: false }).limit(1000);
         const names = [...new Set(['관리자', ...ps.map(x => x.nickname), ...(vl || []).map(v => v.viewer_nick).filter(Boolean)])];
         const sc = scoreNames(res, best.o.width, best.o.height, best.path, names);
         const top = sc[0], second = sc[1] ? sc[1].z : 0, gap = top.z - second;
@@ -737,9 +792,9 @@
           sure ? `${top.name} 님이 본 화면이에요` : likely ? `${top.name} 님일 가능성이 높아요` : '누가 본 화면인지 가려내지 못했어요',
           el('small', { text: sure || likely ? ` (점수 ${z1(top.z)}, 다음 후보 ${z1(second)})` : ' (예전 방식 무늬였거나 사진이 너무 많이 줄었을 수 있어요. 아래 남은 차이 그림에 글자가 보이면 그 글자가 본 사람이에요)' })));
         const seen = (vl || []).filter(v => v.viewer_nick === top.name).slice(0, 5).map(v => new Date(v.at).toLocaleString('ko-KR'));
-        if ((sure || likely) && seen.length) out.append(el('p', { class: 'rank-note', text: `${top.name} 님이 ${p.nickname} 상세를 본 기록: ${seen.join(', ')}${(vl || []).filter(v => v.viewer_nick === top.name).length > 5 ? ' 외' : ''}` }));
+        if ((sure || likely) && seen.length) out.append(el('p', { class: 'rank-note', text: `${top.name} 님이 ${p2.nickname} 상세를 본 기록: ${seen.join(', ')}${(vl || []).filter(v => v.viewer_nick === top.name).length > 5 ? ' 외' : ''}` }));
         out.append(el('ol', { class: 'wm-cands' }, ...sc.slice(0, 5).map(x => el('li', { text: `${x.name}  ${z1(x.z)}` }))));
-        out.append(el('p', { class: 'rank-note', text: `후보 ${names.length}명 중 점수가 높은 순서예요. 무늬가 없는 사람은 0 근처(대개 3 아래)이고, 본 사람은 6을 훌쩍 넘어요. 맞대기 정도 ${Math.round(best.at.q * 100)}%` }));
+        out.append(el('p', { class: 'rank-note', text: `사진 속 캐릭터: ${p2.nickname}. 후보 ${names.length}명 중 점수가 높은 순서예요. 무늬가 없는 사람은 0 근처(대개 3 아래)이고, 본 사람은 6을 훌쩍 넘어요. 맞대기 정도 ${Math.round(best.at.q * 100)}%` }));
         const fig = el('figure', { class: 'wm-res' }, res.view, el('figcaption', { text: '원본을 빼고 남은 차이(밝게 키움)' }));
         out.append(fig);
       } catch (e) { console.warn(e); out.textContent = '찾지 못했어요. ' + errMsg(e); }
@@ -779,7 +834,7 @@
     zone.addEventListener('dragover', (e) => e.preventDefault());
     zone.addEventListener('drop', (e) => { e.preventDefault(); show([...e.dataTransfer.files].find(f => f.type.startsWith('image/'))); });
     return el('div', { class: 'adm-sec' }, el('h3', { text: '워터마크 찾기' }),
-      el('p', { class: 'rank-note', text: '랭킹 사진에는 보는 사람마다 다른 무늬가 눈에 안 띄게 깔려 있어요. 퍼진 캡처나 휴대폰으로 찍은 사진을 넣고 사진 속 캐릭터를 고르면, 원본 사진과 맞대어 누가 본 화면인지 찾아요. 줄이거나 다시 저장한 사진도 대개 찾을 수 있어요(이 방식은 이번 업데이트 뒤에 본 화면부터 돼요).' }),
+      el('p', { class: 'rank-note', text: '랭킹 사진에는 보는 사람마다 다른 무늬가 눈에 안 띄게 깔려 있어요. 퍼진 캡처나 휴대폰으로 찍은 사진을 넣으면, 사진 속 랭킹 캐릭터의 원본 사진과 맞대어 누가 본 화면인지 찾아요. 아래 칸은 퍼뜨린 사람이 아니라 사진에 찍힌 캐릭터예요(알면 빨라지고, 비워 두면 자동으로 찾아요). 줄이거나 다시 저장한 사진도 대개 찾을 수 있어요. 11월 17일 업데이트 전 화면(예전 글자 무늬)은 아래 남은 차이 그림에 글자로 보일 수 있어요.' }),
       zone, el('div', { class: 'adm-find' }, who, dl), out, old,
       el('h3', { text: '복사한 글에서 찾기' }), txt, txtOut);
   }
