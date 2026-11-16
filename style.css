@@ -332,20 +332,18 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .rk-no.gold { color: #e6a700; }
 .rk-no.silver { color: #98a2ae; }
 .rk-no.bronze { color: #c27a3e; }
-.rank-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 12px; padding: 14px 0 4px; }
-.rank-pager .btn { padding: 8px 14px; font-size: 14px; }
-.rank-pager .btn:disabled { opacity: .4; cursor: default; }
+.rank-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 4px; padding: 14px 0 4px; }
+.rk-arrow { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--text); cursor: pointer; }
+.rk-arrow svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.rk-arrow:hover:not(:disabled) { background: var(--fill); }
+.rk-arrow:disabled { opacity: .25; cursor: default; }
 .rk-pages { display: flex; align-items: center; gap: 4px; }
 .rk-pg { font: inherit; font-size: 14px; font-weight: 600; min-width: 34px; height: 34px; padding: 0 6px; border: 0; border-radius: 10px; background: transparent; color: var(--sub); cursor: pointer; font-variant-numeric: tabular-nums; }
 .rk-pg:hover { background: var(--fill); }
 .rk-pg.on { background: var(--blue); color: #fff; cursor: default; }
-.rk-pg:focus-visible, .rank-pager .btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.rk-pg:focus-visible, .rk-arrow:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .rk-gap { color: var(--mute); min-width: 16px; text-align: center; }
 .rk-range { flex-basis: 100%; font-size: 13px; color: var(--mute); font-variant-numeric: tabular-nums; text-align: center; }
-@media (max-width: 520px) {
-  .rk-pages { order: -1; flex-basis: 100%; justify-content: center; }
-  .rk-prev { order: 1; } .rk-next { order: 2; } .rk-range { order: 3; }
-}
 .rk-who { display: flex; flex-direction: column; min-width: 0; }
 .rk-name { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rk-meta { font-size: 13px; color: var(--mute); display: flex; gap: 8px; flex-wrap: wrap; }
