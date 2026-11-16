@@ -223,6 +223,7 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 .srow.multi:has(> .lab) .ctl { flex: 0 1 auto; justify-content: flex-end; margin-left: auto; }
 .srow.multi .ctl select:first-child { flex: 0 1 auto; min-width: 0; max-width: 240px; }
 .srow.multi .ctl select + select { max-width: 124px; }
+.grp.wide .srow.multi .ctl select + select { max-width: 210px; }
 .srow.changed .lab::after { content: ''; width: 6px; height: 6px; background: var(--blue); border-radius: 50%; flex: none; }
 .srow.muted { display: none; }
 .srow.spacer { display: none; }
@@ -347,6 +348,8 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .rk-who { display: flex; flex-direction: column; min-width: 0; }
 .rk-name { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rk-meta { font-size: 13px; color: var(--mute); display: flex; gap: 8px; flex-wrap: wrap; }
+.rk-old { font-size: 12px; font-weight: 600; color: #b25e09; background: #fff4e5; border-radius: 6px; padding: 0 6px; }
+.rk-old-note { color: #b25e09; }
 .rk-cp { text-align: right; display: flex; flex-direction: column; }
 .rk-cp b { font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .rk-cp small { font-size: 12px; color: var(--mute); }
@@ -515,7 +518,7 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .share-def small { font-size: 11px; font-weight: 500; color: var(--mute); }
 .share-def:hover { filter: brightness(.97); }
 .share-def:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-@media (max-width: 480px) { .srow.multi .ctl select + select { max-width: 92px; } }
+@media (max-width: 480px) { .srow.multi .ctl select + select { max-width: 92px; } .grp.wide .srow.multi .ctl select + select { max-width: 150px; } }
 
 /* 가열기 아바타 추천 */
 .av-head { display: grid; grid-template-columns: 84px 1fr 52px; gap: 8px; font-size: 13px; color: var(--mute); padding: 0 0 6px; border-bottom: 1px solid var(--line); }
@@ -639,6 +642,7 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .wm-res canvas { display: block; max-width: 100%; height: auto; border-radius: 8px; background: #808080; }
 .wm-res figcaption { font-size: 12px; color: var(--mute); margin-top: 4px; }
 .adm-admins .adm-item { margin-bottom: 8px; }
-.cart-row .atma-sel select:first-child { width: 168px; }
-.cart-row .atma-sel select:last-child { width: 88px; }
-@media (max-width: 420px) { .cart-row .atma-sel select:first-child { width: 140px; } }
+.cart-row > span { white-space: nowrap; }
+.cart-row .atma-sel select:first-child { width: 150px; }
+.cart-row .atma-sel select:last-child { width: 160px; }
+@media (max-width: 520px) { .cart-row .atma-sel { width: 100%; } .cart-row .atma-sel select:first-child, .cart-row .atma-sel select:last-child { width: auto; flex: 1; min-width: 0; } }

@@ -436,6 +436,8 @@
     box.append(el('span', { class: 'n', text: String(n) }));
     return box;
   }
+  // 지금 계산 방식(A.calcVer) 전에 올린 기록: 다시 갱신하면 사라짐
+  const oldCalc = (r) => !!A.calcVer && (r.calc ?? null) !== A.calcVer();
   function renderRows(rows, start) {
     const me = new Set(Object.values(A.ranks()).filter(r => r && r.status === 'approved').map(r => String(r.nickname).toLowerCase()));
     const myIds = new Set(mine.map(m => m.id));
@@ -447,7 +449,7 @@
           rankNo(start + i + 1),
           el('span', { class: 'rk-who' },
             el('span', { class: 'rk-name', text: r.nickname }),
-            el('span', { class: 'rk-meta' }, el('span', { text: r.cls + mark }), el('span', { text: ago(r.updated_at) }))),
+            el('span', { class: 'rk-meta' }, el('span', { text: r.cls + mark }), el('span', { text: ago(r.updated_at) }), oldCalc(r) ? el('span', { class: 'rk-old', text: '실투력 업데이트 전 지표' }) : null)),
           el('span', { class: 'rk-cp' }, el('b', { text: fmtInt(r.cp) }), el('small', { text: korUnit(r.cp) }))));
       list.append(li);
     });
@@ -879,6 +881,7 @@
       el('div', { class: 'rk-side' },
         cap,
         el('p', { class: 'rk-cap', text: `실투력 ${fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신${textMark()}` }),
+        oldCalc(r) ? el('p', { class: 'rk-cap rk-old-note', text: '실투력 계산이 바뀌기 전에 올린 기록이에요. 지금 계산 방식으로 다시 잰 값이고, 다시 갱신하면 이 표시가 없어져요' }) : null,
         shareP,
         el('div', { class: 'rk-btns' },
           el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => openPlayer(r) }),
@@ -1056,11 +1059,11 @@
     A.dialog({ title: '갱신 코드', text: '다른 기기나 브라우저에서 갱신할 때 이 코드가 필요해요. 다른 사람에게 알려 주지 마세요.', code: r.token, ok: '닫기' });
   }
 
-  // 피시방·에너지드링크·지애·이벤트 버프를 켠 세팅은 랭킹에 올리지 않음(서버에도 안 보냄)
+  // 피시방·에너지드링크·지애·이벤트 버프, 추피 보정·가동률 DPS 전환을 켠 세팅은 랭킹에 올리지 않음(서버에도 안 보냄)
   function buffBlocked() {
     const bf = A.rankBuffs ? A.rankBuffs() : [];
     if (!bf.length) return false;
-    A.dialog({ title: '랭킹에 올릴 수 없어요', text: `${bf.join(', ')}이(가) 켜져 있어요. 이 버프를 켠 세팅은 랭킹에 올릴 수 없어요. 세팅의 스킬·장비 탭 '도핑'에서 끈 뒤(이벤트 버프는 '미적용'으로) 다시 눌러 주세요.`, ok: '확인' });
+    A.dialog({ title: '랭킹에 올릴 수 없어요', text: `${bf.join(', ')}이(가) 켜져 있어요. 이걸 켠 세팅은 랭킹에 올릴 수 없어요. 계산기의 스킬·장비 탭에서 끈 뒤(이벤트 버프는 '미적용'으로) 다시 눌러 주세요.`, ok: '확인' });
     return true;
   }
 

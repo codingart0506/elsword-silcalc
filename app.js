@@ -66,17 +66,17 @@
       { bar: '아티팩트', fields: [{ c: 'G32', t: '아티팩트' }] },
     ] },
     { id: 'gear', name: '스킬·장비', groups: [
-      { bar: '캐릭터 버프 스킬', note: '직업 고유 패시브·버프는 직업에 맞게 자동으로 들어가요', fields: [{ c: 'L11', lab: 'I11' }, { c: 'L15', lab: 'I15' }] },
+      { bar: '캐릭터 버프 스킬', note: '직업 고유 패시브·버프는 직업에 맞게 자동으로 들어가요', fields: [{ c: 'L11', lab: 'I11' }] },
       { bar: '도핑', fields: [{ c: 'J17', lab: 'I17' }, { c: 'J18', lab: 'I18' }, { c: 'J19', lab: 'I19' }, { c: 'J20', lab: 'I20' }, { c: 'J21', lab: 'I21' }, { c: 'J22', lab: 'I22' }, { c: 'J23', lab: 'I23' },
         { c: 'ZB1', t: '피시방 버프' }, { c: 'ZB3', t: '에너지드링크' }, { c: 'ZB2', t: '지애 버프' }] },
       { bar: '장비 종류와 강화', fields: [[{ c: 'J26', lab: 'I26' }, { c: 'L26' }], [{ c: 'J27', lab: 'I27' }, { c: 'L27' }], [{ c: 'J28', lab: 'I28' }, { c: 'L28' }], [{ c: 'J29', lab: 'I29' }, { c: 'L29' }], [{ c: 'J30', lab: 'I30' }, { c: 'L30' }],
         { c: 'G33', t: '세트 효과' }, [{ c: 'G34', t: '아트마' }, { c: 'H34' }]] },
-      { bar: '카트리지', note: '종류와 단계', wide: true, fields: [[{ c: 'J31', lab: 'I31' }, { c: 'L31' }], [{ c: 'J32', lab: 'I32' }, { c: 'L32' }], [{ c: 'J33', lab: 'I33' }, { c: 'L33' }], [{ c: 'J34', lab: 'I34' }, { c: 'L34' }]] },
+      { bar: '카트리지', note: '종류와 수치(단계)', wide: true, fields: [[{ c: 'J31', lab: 'I31' }, { c: 'L31' }], [{ c: 'J32', lab: 'I32' }, { c: 'L32' }], [{ c: 'J33', lab: 'I33' }, { c: 'L33' }], [{ c: 'J34', lab: 'I34' }, { c: 'L34' }]] },
       { bar: '전투력 출력 기준 필드', fields: [{ c: 'I8', t: '필드' }], extra: 'field' },
       { bar: '강렬:초월 스킬 비율', note: '강렬 스킬과 초월 스킬을 얼마나 쓰는지예요.\n기본은 강렬 35 : 초월 65예요. 내 비율을 알면 고쳐 주세요. 비율만 맞으면 되고, 합이 100이 아니어도 돼요.\n끄면 시트의 자동 비율로 계산해요.', noteCell: 'A_A9',
         fields: [{ c: 'A_B4', t: '직접 넣기' }, { c: 'A_B5', t: '입력 기준' }, { c: 'A_B6', t: '강렬 스킬' }, { c: 'A_B7', t: '초월 스킬' }] },
-      { bar: '추피 보정', note: '싸움이 짧아 추가 지속 피해가 다 안 들어갈 때', fields: [{ c: 'A_E4', t: '켜기' }, { c: 'A_E5', t: '평균 딜타임 (초)' }] },
-      { bar: '가동률 DPS 전환', note: '스킬을 더 자주 쓰는 효과를 실투력에 넣는 비율', noteCell: 'A_G7', fields: [{ c: 'A_H4', t: '직접 넣기' }, { c: 'A_H5', t: '전환 계수' }] },
+      { bar: '추피 보정', note: '싸움이 짧아 추가 지속 피해가 다 안 들어갈 때. 켜면 랭킹에 올릴 수 없어요', fields: [{ c: 'A_E4', t: '켜기' }, { c: 'A_E5', t: '평균 딜타임 (초)' }] },
+      { bar: '가동률 DPS 전환', note: '스킬을 더 자주 쓰는 효과를 실투력에 넣는 비율. 켜면 랭킹에 올릴 수 없어요', noteCell: 'A_G7', fields: [{ c: 'A_H4', t: '직접 넣기' }, { c: 'A_H5', t: '전환 계수' }] },
     ] },
   ];
 
@@ -97,6 +97,7 @@
       if (a.startsWith('_') || a === 'C27' || !/^(A_)?[A-Z]{1,2}\d+$/.test(a)) continue; // 피시방 등 체크칸(ZB1~3)도 <Main> 빈 칸에 적어 둠(계산은 extraCells)
       const [sh, c] = sheetOf(a); o[sh + '!' + c] = toSheet(a, v);
     }
+    o['<Main>!L15'] = '미사용'; // 포스스킬 육참골단은 칸을 없애고 늘 미사용으로 계산
     extraCells(inp || {}, (sh, c, v) => { o[sh + '!' + c] = v; });
     return o;
   }
@@ -169,6 +170,9 @@
     v._s35 = 1;
     return v;
   }
+
+  // 실투력 계산 방식 버전: 계산이 바뀔 때 올림. 랭킹에 올린 세팅에 같이 적어서, 예전 방식으로 올린 기록은 랭킹에 '업데이트 전 지표'로 표시
+  const CALC_VER = '3.0.17b';
 
   // ---------- 상태 / 저장 ----------
   const LS = 'silcalc.v1';
@@ -349,15 +353,32 @@
       $('#pane-' + t.id).hidden = !on;
     }
   }
+  // 카트리지 단계 → 게임에 보이는 수치(시트 '미표시 효과' 카트리지·레벨 표). 수치가 단계에 따라 안 바뀌는 종류는 단계만
+  const fmtP = (x) => +(x).toFixed(2) + '%';
+  function cartLevelText(type, lv) {
+    const t = String(type || ''), i = lv - 1;
+    if (!(lv >= 1 && lv <= 6)) return null;
+    if (/오버플로우/.test(t)) return `모스뎀 ${fmtP(0.5 * lv)}`;
+    if (/엑셀레이션/.test(t)) return `쿨감 ${fmtP([1, 1.5, 2, 2.5, 3, 5][i])} · ${[10, 9, 8, 7, 5, 4][i]}초`;
+    if (/서플라이/.test(t)) return `${[40, 35, 30, 25, 20, 12][i]}초마다`;
+    if (/^서포트 (1형|카트리지 Type - 1)$/.test(t)) return `공용 물마공 ${fmtP(0.5 * lv)}`;
+    if (/^서포트 (2형|카트리지 Type - 2)$/.test(t)) return `공용 모스뎀 ${fmtP(0.5 * lv)}`;
+    return null;
+  }
   // 보기 글자를 짧게(값은 시트 그대로): 금빛 각인석 '물리 공격력 (%)' → '물리 공격력'
-  function optText(a, o) {
+  function optText(a, o, type) {
     const s = String(o);
     if (/^D2[0-2]$/.test(a)) return s.replace(/\s*\(%\)$/, '');
     if (a === 'J21') return s.replace(/\s*\(.*\)$/, '');          // 효과는 ? 도움말에
     // 강렬:초월 비율 기준: 시트 용어(강초뎀 적용 이전/이후) 대신 무엇을 넣는지로
     if (a === 'A_B5') return /이후/.test(s) ? '딜 미터로 잰 비율 (강초뎀 적용 이후)' : /이전/.test(s) ? '대충 감으로 넣는 비율 (강초뎀 적용 이전)' : s;
     if (a === 'G33') return s.replace(/^엑사&네블론\s*-\s*/, '');    // '엑사&네블론 - 연산' → '연산'
-    if (/^L3[1-4]$/.test(a)) return typeof o === 'number' ? o + '단계' : s === NONE ? '-' : s;
+    if (/^L3[1-4]$/.test(a)) {
+      if (s === NONE) return '-';
+      const lv = Number(o); if (!(lv > 0)) return s;
+      const v = cartLevelText(type !== undefined ? type : g('J' + a.slice(1)), lv);
+      return v ? `${v} (${lv}단계)` : lv + '단계';
+    }
     if (/^L(2[6-9]|30)$/.test(a) && typeof o === 'number') return '+' + o;
     if (a === 'I8') return s.replace(/\s*\n\s*/g, ' ');
     if (/^H2[0-2]$/.test(a) && /강화수치/.test(s)) return '0.5% × 강화 수치';
@@ -366,7 +387,7 @@
   function fillSelect(node, a) {
     const opts = optionsOf(a) || [];
     const cur = g(a);
-    const key = opts.join('\u0001');
+    const key = opts.join('\u0001') + (/^L3[1-4]$/.test(a) ? '\u0002' + g('J' + a.slice(1)) : ''); // 카트리지 단계 글자는 종류에 따라 다름
     if (node._key !== key) {
       node.innerHTML = '';
       for (const o of opts) node.append(el('option', { value: String(o), text: typeof o === 'number' && PCT.has(a) ? +(o * 100).toFixed(2) + '%' : optText(a, o) }));
@@ -393,6 +414,11 @@
     document.querySelectorAll('[data-labcell]').forEach(n => { const t = label(n.getAttribute('data-labcell')); if (n.textContent !== t) n.textContent = t; });
     // 고를 스킬이 없는 직업은 그 줄을 숨김
     if (controls.L11 && controls.L11.row) controls.L11.row.hidden = !label('I11');
+    // 카트리지는 그 부위 방어구가 네블론일 때만 있어서, 아닌 부위 줄은 숨김(골라 둔 카트리지가 있으면 보여 줌)
+    for (const [arm, jc] of [['J27', 'J31'], ['J28', 'J32'], ['J29', 'J33'], ['J30', 'J34']]) {
+      const c = controls[jc]; if (!c || !c.row) continue;
+      c.row.hidden = String(g(arm)) !== '네블론' && String(g(jc) ?? NONE) === NONE;
+    }
     // 기본 강렬:초월 비율 안내(직업·스탯마다 다름)
     document.querySelectorAll('[data-notecell]').forEach(n => { const c = n.getAttribute('data-notecell'); const t = c === 'A_A9' && inputs.A_B4 === true ? '' : label(c); if (n.textContent !== t) n.textContent = t; n.hidden = !t; });
   }
@@ -712,7 +738,6 @@
       let gear = null;
       try { if (window.SilGear) { pt.textContent = '악세서리 아이콘 보는 중'; gear = window.SilGear.recognize(shot); } } catch (e) { console.error(e); }
       try { if (window.SilAvatar) { pt.textContent = '아바타 아이콘 보는 중'; await window.SilAvatar.fromShot(shot, gear); } } catch (e) { console.error(e); }
-      try { if (gear && gear.cls) { pt.textContent = '칭호 읽는 중'; res.title = await O.readTitle(shot, gear.cls); } } catch (e) { console.error(e); }
       try { if (gear && gear.cls && !shared) { pt.textContent = '캐릭터 이름 읽는 중'; res.name = await O.readName(shot, gear.cls); } } catch (e) { console.error(e); }
       pendingExtras = { gotRange: !!(res.found && res.found.C12) };
       showOcrResult(res, gear);
@@ -734,7 +759,7 @@
     const small = shot && (shot.width < 1600 || shot.height < 900);
     const tip = $('#ocrTip');
     tip.textContent = small ? `사진이 작아요(${shot.width}×${shot.height}). 글자가 작으면 잘못 읽을 수 있어요. 게임 해상도 1920×1080 이상, 전체 화면으로 찍어 주세요.`
-      : (cells.length && cells.length < 12) ? '덜 읽힌 항목이 있어요. 다른 창이 상세 스탯 창을 가리지 않게, 게임을 전체 화면으로 두고 다시 찍어 보세요.' : '';
+      : (cells.length && cells.length < 12) ? '덜 읽힌 항목이 있어요. 다른 창이나 마우스 설명 창 글자가 상세 스탯 글자와 겹치지 않게, 게임을 전체 화면으로 두고 다시 찍어 보세요.' : '';
     tip.hidden = !tip.textContent;
     for (const c of cells) {
       const f = found[c], kind = PCT.has(c) ? 'pct' : 'num';
@@ -748,25 +773,7 @@
         el('td', { class: 'num dim', text: kind === 'pct' ? fmtPct(cur) : fmtInt(cur) }),
         el('td', {}, kind === 'pct' ? el('span', { class: 'pctwrap' }, inp, el('span', { class: 'suffix', text: '%' })) : inp)));
     }
-    // 칭호: 캐릭터 창 칭호 띠의 이름 (상시 칭호)
-    const titleText = (res.title || '').replace(/[^\uAC00-\uD7A3A-Za-z0-9 ]/g, '').trim();
-    const titles = (optionsOf('G24') || []).filter(t => t !== '미착용');
-    const tHit = titleText ? O.findName([{ text: titleText }], titles) : null;
-    if (tHit || (titleText.match(/[\uAC00-\uD7A3]/g) || []).length >= 2) {
-      res.title = titleText;
-      const cur = g('G24'), val = tHit ? tHit.name : '미착용';
-      const same = String(cur) === val;
-      const sel = el('select', { 'data-cell': 'G24', 'aria-label': '상시 칭호' });
-      for (const o of optionsOf('G24') || []) sel.append(el('option', { value: String(o), text: String(o) }));
-      sel.value = val;
-      const cb = el('input', { type: 'checkbox', checked: same ? null : 'checked', 'aria-label': '적용' });
-      sel.addEventListener('change', () => { cb.checked = String(g('G24')) !== sel.value; });
-      body.append(el('tr', { class: 'title-row' + (same ? ' same' : '') },
-        el('td', {}, cb),
-        el('td', {}, '상시 칭호', tHit ? null : el('small', { class: 'mutetag', text: ` "${res.title.slice(0, 12)}" · 계산에 안 쓰는 칭호` })),
-        el('td', { class: 'dim', text: String(cur ?? '') }),
-        el('td', { class: 'gear-pick' }, sel)));
-    }
+    // 칭호는 사진으로 고르지 않음(사용자 요청). 상시·스위칭 칭호 모두 '남은 수치' 창에서 직접 고름
     // 상세 스탯 창에 없는 값: 비어 있으면 여기서 바로 입력
     // 캐릭터 이름(캐릭터 창 맨 위) → 닉네임
     if (res.name) {
@@ -806,12 +813,12 @@
     return el('div', { class: 'ex-row atma-row' }, el('span', {}, '아트마 액세서리'),
       el('div', { class: 'atma-sel' }, sel('G34'), sel('H34')));
   }
-  // 스위칭 칭호(버프로 켜는 칭호)는 사진에 안 나와서 무기 공격력과 같이 물어봄
-  function titleRow() {
-    const s = el('select', { 'data-cell': 'G25' });
-    for (const o of optionsOf('G25') || []) s.append(el('option', { value: String(o), text: String(o) }));
-    s.value = String(inputs.G25 ?? defaultOf('G25') ?? '');
-    return el('label', { class: 'ex-row' }, el('span', {}, '스위칭 칭호'), s);
+  // 칭호(상시·스위칭)는 사진으로 고르지 않아서 무기 공격력과 같이 물어봄
+  function titleRow(c = 'G25', name = '스위칭 칭호') {
+    const s = el('select', { 'data-cell': c });
+    for (const o of optionsOf(c) || []) s.append(el('option', { value: String(o), text: String(o) }));
+    s.value = String(inputs[c] ?? defaultOf(c) ?? '');
+    return el('label', { class: 'ex-row' }, el('span', {}, name), s);
   }
   const pickSel = (c, opts, cur) => {
     const s = el('select', { 'data-cell': c });
@@ -861,14 +868,17 @@
     for (const [arm, jc, lc, part] of CART_PARTS) {
       if (String(inputs[arm] ?? '') !== '네블론') continue;
       const sel = (c) => {
-        const s = el('select', { 'data-cell': c, 'aria-label': `카트리지(${part}) ${c === jc ? '종류' : '단계'}` });
+        const s = el('select', { 'data-cell': c, 'aria-label': `카트리지(${part}) ${c === jc ? '종류' : '수치'}` });
         for (const o of optionsOf(c) || []) s.append(el('option', { value: String(o), text: optText(c, o) }));
         s.value = String(inputs[c] ?? defaultOf(c) ?? '');
         return s;
       };
       const sj = sel(jc), sl = sel(lc);
       // 종류를 골랐는데 단계가 비어 있으면 가장 높은 단계로(단계는 직접 바꿀 수 있음)
+      const relabel = () => { for (const op of sl.options) op.textContent = optText(lc, /^\d+$/.test(op.value) ? Number(op.value) : op.value, sj.value); };
+      relabel();
       sj.addEventListener('change', () => {
+        relabel();
         if (sj.value === NONE) { sl.value = NONE; sl.setAttribute('data-touched', '1'); return; }
         if (sl.value === NONE) { const nums = [...sl.options].map(o => o.value).filter(v => Number(v) > 0); if (nums.length) { sl.value = nums[nums.length - 1]; sl.setAttribute('data-touched', '1'); } }
       });
@@ -928,6 +938,7 @@
       el('p', { id: 'exNote', text: iC13 ? `사진에 안 나오는 값이에요.${during ? ' 그동안 사진을 읽고 있어요.' : ''}` : '이번 사진에서 못 찾은 값이에요.' }),
       iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '무기에 마우스를 올리면 나오는 무기 자체 수치' })), iC13) : null,
       iC13 ? cartRows() : null,
+      iC13 ? titleRow('G24', '상시 칭호') : null,
       iC13 ? titleRow() : null,
       r12 ? r12[0] : null,
       iC13 ? setRow() : null,
@@ -1166,7 +1177,8 @@
     // 직업별 쿨감 상한(%): 시트 '직업·패시브' 쿨감 상한(젬블리스 24%, 나머지 35%)
     coolCap: () => { const v = wb.get(CALC, 'C196'); return typeof v === 'number' && v > 0 ? Math.round(v * 1000) / 10 : 35; },
     // 랭킹도 계산기에 넣은 그대로(강렬:초월 점유율을 직접 넣었으면 그 비율로) 반영
-    rankInputs: () => Object.assign({}, inputs),
+    rankInputs: () => Object.assign({}, inputs, { _calc: CALC_VER }),
+    calcVer: () => CALC_VER,
     rankCp: () => { const v = cpOf(wb); return typeof v === 'number' ? Math.round(v) : NaN; },
     customShare: () => inputs.A_B4 === true,
     migrate: (i) => shareFix(migrateV2(Object.assign({}, i || {}))),
@@ -1174,8 +1186,10 @@
     sheetVersion: () => (M.meta && M.meta.version) || '',
     // 랭킹에 못 올리는 버프(피시방·에너지드링크·지애)를 켰으면 그 이름들
     // 이벤트 버프(펀치킹·할로윈 등 기간 한정)도 '미적용'이 아니면 못 올림
+    // 고급 설정의 추피 보정·가동률 DPS 전환도 랭킹에는 못 올림
     rankBuffs: () => Object.keys(EXTRA_BUFF).filter(a => inputs[a] === true).map(a => EXTRA_BUFF[a])
-      .concat((inputs.J22 ?? '미적용') !== '미적용' ? [`이벤트 버프(${inputs.J22})`] : []),
+      .concat((inputs.J22 ?? '미적용') !== '미적용' ? [`이벤트 버프(${inputs.J22})`] : [])
+      .concat(inputs.A_E4 === true ? ['추피 보정'] : [], inputs.A_H4 === true ? ['가동률 DPS 전환'] : []),
     missing: () => isEmptySetting(inputs) ? ['세팅'] : ['C12', 'C13'].filter(a => !(Number(g(a)) > 0)).map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력'),
     cls: () => inputs.C6 || '',
     val: (c) => g(c),
