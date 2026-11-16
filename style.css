@@ -604,6 +604,8 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .kp .btn:not(.primary):hover { background: rgba(255,255,255,0.2); }
 /* 관리자 탭·검색·쪽수 */
 .adm-tabs { position: sticky; top: 0; z-index: 20; margin: 6px 0 0; overflow-x: auto; scrollbar-width: none; box-shadow: 0 0 0 6px #fff; }
+/* 탭이 늘어서 한 줄에 안 들어가면 잘리지 않고 다음 줄로 */
+.seg.adm-tabs { max-width: none; flex-wrap: wrap; }
 .adm-tabs::-webkit-scrollbar { display: none; }
 .adm-tabs .tab { flex: 1 0 auto; padding: 8px 12px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
 .adm-cnt { font-size: 12px; font-weight: 700; color: var(--mute); }
