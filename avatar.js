@@ -450,13 +450,12 @@
     box.append(el('table', { class: 'av-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '부위' })), el('th', { scope: 'col', text: '지금' }), el('th', { scope: 'col', text: '추천' }))), tb));
     if (keepNow) { box.append(el('p', { class: 'av-hint', text: '조건에 맞는 다른 조합은 모두 지금 세팅보다 낮았어요' })); return; }
     box.append(el('p', { class: 'av-hint', text: `${r.best.polished ? '세트' : '3세트'}: ${r.best.setLabels.join(' · ')} | ${r.mode}${r.best.coolReal != null ? ` | 쿨감 ${r.best.coolReal}%` : ''}${changed && !r.best.polished ? ` | 시트(룰루) 점수로는 실뎀 ${g >= 0 ? '+' : ''}${g.toFixed(2)}%` : ''}` }));
-    if (r.cands && r.cands.length > 1 && r.best.cp > 0) box.append(el('p', { class: 'av-hint', text: r.best.polished ? '3세트 조합 후보들과 지금 세팅에서 부위를 더 바꿔 가며(4번째 세트 효과 포함) 계산기 실투력이 가장 높아지는 조합을 찾았어요' : `계산기 실투력 기준으로 모든 조합을 비교해서 고른 결과예요. 마지막에 후보 ${r.cands.length}개를 계산기로 정확히 다시 쟀어요` }));
+    if (r.cands && r.cands.length > 1 && r.best.cp > 0) box.append(el('p', { class: 'av-hint', text: r.best.polished ? '3세트 조합 후보들과 지금 세팅에서 부위를 더 바꿔 가며 계산기 실투력이 가장 높아지는 조합을 찾았어요. 세트 효과는 3세트까지만 쳤어요' : `계산기 실투력 기준으로 모든 조합을 비교해서 고른 결과예요. 마지막에 후보 ${r.cands.length}개를 계산기로 정확히 다시 쟀어요` }));
   }
   // 아바타 점수 상위 조합을 계산기 본체(시트와 같은 실투력 계산)에 넣어 실투력으로 다시 줄 세움
   const STAT_CELL = { '적응력': ['C14'], '초적응력': ['C15'], '강배': ['C24'], '역강배': ['C25'], '100이하': ['C26'], '추피': ['C22'], '양극화': ['C20'], '모스댐': ['C33'], '초댐증': ['C30'], '크댐증': ['C18'], '보댐증': ['C21'], '쿨감': ['C31', 'C32'], '강렬댐증': ['C29'] };
   // 후보 세팅과 지금 낀 것의 차이만큼 계산기 칸을 바꾼 값.
-  // 후보도 지금 낀 것과 같은 셈법(실제로 켜지는 세트 효과 전부)으로 셈 — 탐색 점수는 고른 3세트 효과만 치지만,
-  // 실투력은 남는 부위가 우연히 켜는 2세트 효과까지 쳐야 맞음(지금과 똑같은 조합이면 차이가 정확히 0)
+  // 후보도 지금 낀 것과 같은 셈법(세트 효과는 3세트까지만)으로 셈 — 지금과 똑같은 조합이면 차이가 정확히 0
   function overridesFor(r, worn, cand) {
     const cw = R.wornContribution(r.db, Object.assign({ '아바타5셋': cand.fiveSetDisplay }, cand.partToDisplay)).sums;
     const w = R.sumsToAddArr(R.wornContribution(r.db, worn || {}).sums), a = R.sumsToAddArr(cw), inp = APP.inputs(), o = {}, cs = curStats();
@@ -581,7 +580,7 @@
     return list.length ? list : [now];
   }
   // 마무리 탐색: 탐색이 고른 조합(3세트 + 남는 3부위)과 지금 세팅에서 출발해, 부위를 하나씩 바꾸거나 한 세트의 2~3부위를 한꺼번에 넣어 보며
-  // 실투력이 더 오르는 조합을 찾음. 세트 효과는 실제로 켜지는 것 전부(4번째 세트의 2·3세트 효과 포함)를 침.
+  // 실투력이 더 오르는 조합을 찾음. 세트 효과는 게임 규칙대로 3세트까지만 침(R.wornContribution).
   // 빠른 점수(buildScorer)로 이웃을 훑고, 마지막에는 계산기 실투력으로 다시 재서 확인함
   function polish(r, worn, base, ctx, starts, suit, bottom) {
     const db = r.db, sc = ctx.scorer, cap = APP.coolCap ? APP.coolCap() : 35;
@@ -663,7 +662,8 @@
       if (!bm) break; S = Object.assign({}, S, bm); v = bv;
     }
     const cnt = new Map(); for (const pt of R.ALL_PARTS) { const sn = db.displayToSet.get(S[pt]); if (sn) cnt.set(sn, (cnt.get(sn) || 0) + 1); }
-    return Object.assign(candOf(S), { cp: v, setLabels: [...cnt].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).map(([sn, n]) => `${sn}(${n})`) });
+    // 효과가 적용되는 세트만 보여 줌(3세트까지)
+    return Object.assign(candOf(S), { cp: v, setLabels: (R.wornContribution(db, S).sets || []).map(sn => `${sn}(${cnt.get(sn) || 0})`) });
   }
   function rerank(r, worn, base, ctx) {
     if (!r || !r.cands || !r.cands.length || !APP.cpWith) return r;

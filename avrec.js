@@ -97,8 +97,16 @@
       addSums(sums, db.statsByDisplay.get(d));
       const s = db.displayToSet.get(d); if (s) counts.set(s, (counts.get(s) || 0) + 1);
     }
-    for (const e of db.setEffects) if ((counts.get(e.set) || 0) >= e.need) { addSums(sums, db.statsByDisplay.get(e.display)); active.push(e.display); }
-    return { sums, active };
+    // 세트 효과는 3세트까지만 적용됨(게임 규칙: 무기·악세는 3부위씩 3세트만 세트 효과, 4번째 세트는 효과 없음).
+    // 효과가 켜질 만큼 낀 세트가 3개를 넘으면 3부위 이상 낀 세트 먼저, 그다음 효과가 큰 순으로 3개만 침
+    const act = new Map();
+    for (const e of db.setEffects) if ((counts.get(e.set) || 0) >= e.need) { if (!act.has(e.set)) act.set(e.set, []); act.get(e.set).push(e); }
+    const size = (st) => { let t = 0; for (const k in st) t += Number(st[k]) || 0; return t; };
+    const sets = [...act.keys()]
+      .map(x => [x, Math.min(counts.get(x), 3), act.get(x).reduce((t, e) => t + size(db.statsByDisplay.get(e.display) || {}), 0)])
+      .sort((x, y) => y[1] - x[1] || y[2] - x[2]).slice(0, 3).map(x => x[0]);
+    for (const x of sets) for (const e of act.get(x)) { addSums(sums, db.statsByDisplay.get(e.display)); active.push(e.display); }
+    return { sums, active, sets };
   }
 
   /* 순정 스탯 (설정!AK) — cur: 현재 스탯(설정 G13:G25), opt: 변수 제어 */
