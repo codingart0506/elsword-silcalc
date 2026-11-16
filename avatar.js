@@ -40,7 +40,7 @@
     const atk = num('C11'), mx = num('C12'), wep = num('C13');
     const mp = wep > 0 ? Math.round(((mx - atk) / (0.55 * wep) * 100 - 100 + (cls === '메타모르피' ? 20 : 0)) * 100) / 100 : 0;
     return { '적응력': pct('C14'), '초적응력': pct('C15'), '강배': pct('C24'), '역강배': pct('C25'), '100이하': pct('C26'), '추피': pct('C22'), '양극화': pct('C20'),
-      '물마퍼': mp, '모스댐': pct('C33'), '초댐증': pct('C30'), '크댐증': pct('C18'), '보댐증': pct('C21'), '쿨감': pct('C32') || pct('C31') };
+      '물마퍼': mp, '모스댐': pct('C33'), '초댐증': pct('C30'), '크댐증': pct('C18'), '보댐증': pct('C21'), '쿨감': pct('C32') || pct('C31'), '강렬댐증': pct('C29') };
   }
   const IMPRINT_OF = { 0.04: '4% (찬란석 하옵)', 0.05: '5% (찬란석 상옵)', 0.055: '5.5% (강수, 11강)', 0.06: '6% (강수, 12강)', 0.065: '6.5% (강수, 13강)' };
   function calcOpts() {
@@ -282,9 +282,20 @@
       renderTag();
       body.append(el('div', { class: 'av-row' }, el('span', { class: 'av-part', text: PART_LABEL[part] || part }), tag, sel, el('label', { class: 'av-fix' }, fx, el('span', { text: '고정' }))));
     }
-    const allFixed = !!p.fiveFixed && PARTS.slice(1).every(x => p.fixed[x]);
+    {
+      const sel = el('select', { 'aria-label': '일반 악세 하의 지금 착용' });
+      sel.append(el('option', { value: '', text: '모름·그 밖의 것 (추천 안 함)' }));
+      for (const d of Object.keys(BOTTOMS)) sel.append(el('option', { value: d, text: d }));
+      sel.value = p.bottom || '';
+      sel.onchange = () => { p.bottom = sel.value; save(); result = null; renderResult(); };
+      const fx = el('input', { type: 'checkbox', 'aria-label': '일반 악세 하의 고정' });
+      fx.checked = !!p.fixed['하의악세'];
+      fx.onchange = () => { p.fixed['하의악세'] = fx.checked; save(); result = null; renderResult(); };
+      body.append(el('div', { class: 'av-row' }, el('span', { class: 'av-part', text: '일반 악세 하의' }), el('span', { class: 'av-tag' }), sel, el('label', { class: 'av-fix' }, fx, el('span', { text: '고정' }))));
+    }
+    const allFixed = !!p.fiveFixed && PARTS.slice(1).every(x => p.fixed[x]) && !!p.fixed['하의악세'];
     body.append(el('div', { class: 'av-fix-acts' },
-      el('button', { type: 'button', class: 'txt sm', text: '전체 고정', onclick: () => { p.fiveFixed = true; for (const x of PARTS.slice(1)) p.fixed[x] = true; save(); result = null; render(); } }),
+      el('button', { type: 'button', class: 'txt sm', text: '전체 고정', onclick: () => { p.fiveFixed = true; for (const x of PARTS.slice(1)) p.fixed[x] = true; p.fixed['하의악세'] = true; save(); result = null; render(); } }),
       el('button', { type: 'button', class: 'txt sm mute', text: '고정 해제', onclick: () => { p.fiveFixed = false; p.fixed = {}; save(); result = null; render(); } }),
       allFixed ? el('span', { class: 'av-hint', text: '모두 고정하면 지금 세팅 그대로예요' }) : ''));
     renderStats(); renderOpts(); renderOwn(); renderResult();
@@ -304,7 +315,7 @@
     const selIn = (key, opts) => { const s = el('select'); for (const t of opts) s.append(el('option', { value: t, text: t })); s.value = o[key]; s.onchange = () => { o[key] = s.value; save(); result = null; renderResult(); }; return s; };
     const chk = (key) => { const b = el('input', { type: 'checkbox' }); b.checked = !!o[key]; b.onchange = () => { o[key] = b.checked; save(); result = null; renderResult(); }; return b; };
     const cool = el('span', { class: 'av-inline' }, numIn('cool', '56px'), el('span', { text: '%' }), el('label', { class: 'av-fix' }, chk('coolAtLeast'), el('span', { text: '이상이면 됨' })));
-    row('목표 쿨감', cool, '0이면 쿨감 조건 없이 계산해요');
+    row('목표 쿨감', cool, `0이면 쿨감 조건 없이 계산해요. ${APP.cls() || '이 직업'} 쿨감 상한은 ${APP.coolCap ? APP.coolCap() : 35}%라서 그 위는 상한까지만 맞춰요`);
     row('길드 사냥꾼의 본능', selIn('guild', OPT_SEL.guild));
     row('적응의 영약', chk('elixir'));
     row('글리터의 훈장 카트리지 세트', selIn('medal', OPT_SEL.medal));
@@ -312,6 +323,32 @@
     row('기타 보댐증(합)', numIn('bossEtc', '56px'));
     row('기타 크댐증(합)', numIn('critAdd', '56px'));
     row('기타 크댐증 곱 배율', numIn('critMul', '56px'));
+    const p = prof(); p.sr = p.sr || {};
+    const srChk = (key, label) => { const b = el('input', { type: 'checkbox' }); b.checked = p.sr[key] !== false; b.onchange = () => { p.sr[key] = b.checked; save(); result = null; renderResult(); }; return el('label', { class: 'av-fix' }, b, el('span', { text: label })); };
+    row('사룡 세트 부위', el('span', { class: 'av-inline' }, srChk('book', '운명의 예언서'), srChk('medal', 'Type-Q 여왕의 훈장')),
+      `무기는 계산기의 '${String(APP.inputs().J26 || '-')}'를 써요. 영혼의 족쇄를 끼면 세트가 몇 부위인지에 따라 세트 효과까지 따져요`);
+    {
+      const on = el('input', { type: 'checkbox' }); on.checked = !!st.buffOn;
+      on.onchange = () => { st.buffOn = on.checked; save(); result = null; renderOpts(); renderResult(); };
+      box.append(el('label', { class: 'av-fix av-own-on' }, on, el('span', { text: '버프·영약도 함께 고르기 (쓸 수 있는 것만 켜 주세요)' })));
+      if (st.buffOn) {
+        st.buffOk = st.buffOk || {};
+        for (const c of BUFF_CELLS) {
+          const all = (APP.optionsOf(c) || []).filter(x => x !== '');
+          if (!(c in st.buffOk)) st.buffOk[c] = all.slice();
+          const ok = new Set(st.buffOk[c]);
+          const chips = all.map(v => {
+            const isNow = String(APP.val(c) ?? '') === v, on2 = ok.has(v) || isNow;
+            const b = el('button', { type: 'button', class: 'av-chip' + (on2 ? ' on' : ''), text: v + (isNow ? ' (지금)' : ''), 'aria-pressed': on2 ? 'true' : 'false' });
+            if (isNow) b.disabled = true;
+            b.onclick = () => { const cur = new Set(st.buffOk[c] || []); if (cur.has(v)) cur.delete(v); else cur.add(v); st.buffOk[c] = [...cur]; save(); result = null; renderOpts(); renderResult(); };
+            return b;
+          });
+          box.append(el('div', { class: 'av-own-set' }, el('span', { class: 'av-own-name', text: buffLabel(c) }), el('div', { class: 'av-chips' }, ...chips)));
+        }
+        box.append(el('p', { class: 'av-hint', text: '파티 버프와 이벤트 버프는 계산기 탭에 넣은 그대로 써요' }));
+      }
+    }
     box.append(el('p', { class: 'av-hint', text: `계산기에서 가져온 값: 환경 디버프 ${c.env}, 집결지 ${c.rally}, 파티 크뎀증 ${c.party ? '켬' : '끔'}, 마에스트로 헤일로 ${c.maestro ? '있음' : '없음'}, 초목의 아트마 ${c.atma}, 각인석 크뎀 ${c.imprint}` }));
   }
   function renderOwn() {
@@ -325,7 +362,7 @@
     };
     const on = el('input', { type: 'checkbox' }); on.checked = !!st.ownOn;
     // 처음 켜면 전부 가진 것으로 체크해 두고, 없는 것만 끄게 함
-    on.onchange = () => { st.ownOn = on.checked; if (on.checked && !(st.own && st.own.length)) st.own = sets.flatMap(itemsOf).concat(Object.keys(SUITS).filter(n => !SUITS[n].limited)); save(); result = null; renderOwn(); renderResult(); };
+    on.onchange = () => { st.ownOn = on.checked; if (on.checked && !(st.own && st.own.length)) st.own = sets.flatMap(itemsOf).concat(Object.keys(SUITS).filter(n => !SUITS[n].limited), Object.keys(BOTTOMS)); save(); result = null; renderOwn(); renderResult(); };
     box.append(el('label', { class: 'av-fix av-own-on' }, on, el('span', { text: '가진 것만으로 추천 (없는 아이템은 체크를 꺼 주세요)' })));
     if (!st.ownOn) return;
     const own = new Set(st.own || []);
@@ -359,6 +396,13 @@
     const sName = el('button', { type: 'button', class: 'av-own-name', text: '한벌 아바타', title: sAll ? '모두 빼기' : '모두 고르기' });
     sName.onclick = () => { const cur = new Set(st.own || []); for (const d of sn) { if (sAll) cur.delete(d); else cur.add(d); } setOwn([...cur]); };
     box.append(el('div', { class: 'av-own-set' }, sName, el('div', { class: 'av-chips' }, ...sChips)));
+    const bn = Object.keys(BOTTOMS);
+    const bChips = bn.map(d => {
+      const b = el('button', { type: 'button', class: 'av-chip' + (own.has(d) || p.bottom === d ? ' on' : ''), text: d, 'aria-pressed': own.has(d) || p.bottom === d ? 'true' : 'false' });
+      b.onclick = () => { const cur = new Set(st.own || []); if (cur.has(d)) cur.delete(d); else cur.add(d); setOwn([...cur]); };
+      return b;
+    });
+    box.append(el('div', { class: 'av-own-set' }, el('span', { class: 'av-own-name', text: '일반 악세 하의' }), el('div', { class: 'av-chips' }, ...bChips)));
   }
   function renderResult() {
     const box = $('#avResult'); if (!box) return; box.textContent = '';
@@ -386,12 +430,15 @@
       const same = now === want;
       tb.append(el('tr', { class: same ? '' : 'chg' }, el('th', { scope: 'row', text: PART_LABEL[part] || part }), el('td', { text: short(now) || '-' }), el('td', { class: same ? 'same' : 'to', text: same ? '그대로' : short(want) })));
     }
+    const extraRow = (label, now, want) => { const same = now === want; tb.append(el('tr', { class: same ? '' : 'chg' }, el('th', { scope: 'row', text: label }), el('td', { text: now || '-' }), el('td', { class: same ? 'same' : 'to', text: same ? '그대로' : (want || '-') }))); };
+    if (r.best.bottom != null && (p.bottom || r.best.bottom)) extraRow('하의 악세', p.bottom || '', r.best.bottom);
+    for (const [c, v] of Object.entries(r.best.buffs || {})) extraRow(buffLabel(c), String(APP.val(c) ?? ''), v);
     box.append(el('table', { class: 'av-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '부위' })), el('th', { scope: 'col', text: '지금' }), el('th', { scope: 'col', text: '추천' }))), tb));
     box.append(el('p', { class: 'av-hint', text: `3세트: ${r.best.setLabels.join(' · ')} | ${r.mode}${r.best.coolReal != null ? ` | 쿨감 ${r.best.coolReal}%` : ''} | 시트(룰루) 점수로는 실뎀 ${g >= 0 ? '+' : ''}${g.toFixed(2)}%` }));
     if (r.cands && r.cands.length > 1 && r.best.cp > 0) box.append(el('p', { class: 'av-hint', text: `계산기 실투력 기준으로 모든 조합을 비교해서 고른 결과예요. 마지막에 후보 ${r.cands.length}개를 계산기로 정확히 다시 쟀어요` }));
   }
   // 아바타 점수 상위 조합을 계산기 본체(시트와 같은 실투력 계산)에 넣어 실투력으로 다시 줄 세움
-  const STAT_CELL = { '적응력': ['C14'], '초적응력': ['C15'], '강배': ['C24'], '역강배': ['C25'], '100이하': ['C26'], '추피': ['C22'], '양극화': ['C20'], '모스댐': ['C33'], '초댐증': ['C30'], '크댐증': ['C18'], '보댐증': ['C21'], '쿨감': ['C31', 'C32'] };
+  const STAT_CELL = { '적응력': ['C14'], '초적응력': ['C15'], '강배': ['C24'], '역강배': ['C25'], '100이하': ['C26'], '추피': ['C22'], '양극화': ['C20'], '모스댐': ['C33'], '초댐증': ['C30'], '크댐증': ['C18'], '보댐증': ['C21'], '쿨감': ['C31', 'C32'], '강렬댐증': ['C29'] };
   // 후보 세팅의 스탯(탐색과 같은 셈법)과 지금 낀 것의 차이만큼 계산기 칸을 바꾼 값
   function overridesFor(r, worn, cand) {
     const w = R.sumsToAddArr(R.wornContribution(r.db, worn || {}).sums), a = cand.addArr, inp = APP.inputs(), o = {}, cs = curStats();
@@ -400,22 +447,23 @@
       if (k === '물마퍼') { const m = (100 + cs['물마퍼'] + d) / (100 + cs['물마퍼']); o.C11 = Math.round(num('C11') * m); o.C12 = Math.round(num('C12') * m); return; }
       for (const c of STAT_CELL[k]) o[c] = Math.round(((Number(inp[c]) || 0) + d / 100) * 1e6) / 1e6;
     });
-    const dc = Math.min(cand.coolReal, 35) - cs['쿨감'];
+    const dc = Math.min(cand.coolReal, APP.coolCap ? APP.coolCap() : 35) - cs['쿨감'];
     if (dc) for (const c of STAT_CELL['쿨감']) o[c] = Math.round(((Number(inp[c]) || 0) + dc / 100) * 1e6) / 1e6;
     return o;
   }
   // 탐색 점수를 계산기 실투력에 맞춤: 지금 세팅에서 스탯을 조금씩 바꿔 실투력(로그)이 얼마나 변하는지 재서 씀.
   // 적응력·양극화·쿨감은 상한이 있어서 구간별로 재고, 나머지는 1%p당 변화량. 모두 늘면 줄지 않게(상한 건너뛰기에 필요)
-  const AIDX = ['적응력', '초적응력', '강배', '역강배', '100이하', '추피', '양극화', '물마퍼', '모스댐', '초댐증', '크댐증', '보댐증'];
-  function buildScorer(db, worn) {
+  const AIDX = ['적응력', '초적응력', '강배', '역강배', '100이하', '추피', '양극화', '물마퍼', '모스댐', '초댐증', '크댐증', '보댐증', '강렬댐증'];
+  function buildScorer(db, worn, base) {
     if (!APP.cpWith) return null;
-    const cp0 = APP.cpWith({}); if (!(cp0 > 0)) return null;
+    base = base || {};
+    const cp0 = APP.cpWith(base); if (!(cp0 > 0)) return null;
     const L0 = Math.log(cp0), inp = APP.inputs(), cs = curStats(), mp = cs['물마퍼'], curCool = cs['쿨감'];
     const over = (stat, d) => {
       if (stat === '물마퍼') { const k = (100 + mp + d) / (100 + mp); return { C11: Math.round(num('C11') * k), C12: Math.round(num('C12') * k) }; }
       const o = {}; for (const c of STAT_CELL[stat]) o[c] = Math.round(((Number(inp[c]) || 0) + d / 100) * 1e6) / 1e6; return o;
     };
-    const lg = (stat, d) => { const v = APP.cpWith(over(stat, d)); return v > 0 ? Math.log(v) - L0 : 0; };
+    const lg = (stat, d) => { const v = APP.cpWith(Object.assign({}, base, over(stat, d))); return v > 0 ? Math.log(v) - L0 : 0; };
     const table = (stat, lo, hi, step) => {
       const xs = [], ys = []; let m = -Infinity;
       for (let d = lo; d <= hi + 1e-9; d += step) { xs.push(d); m = Math.max(m, d === 0 ? 0 : lg(stat, d)); ys.push(m); }
@@ -430,29 +478,79 @@
     const w = R.sumsToAddArr(R.wornContribution(db, worn || {}).sums);
     const lin = AIDX.map((k, i) => (i === 0 || i === 6) ? 0 : Math.max(0, lg(k, 2) / 2));
     const tAdapt = table('적응력', -20, 20, 2.5), tPolar = table('양극화', -20, 20, 2.5);
-    const lo = Math.max(0, Math.floor(curCool) - 20), tCool = table('쿨감', lo - curCool, 35 - curCool, 1);
+    const cap = APP.coolCap ? APP.coolCap() : 35;
+    const lo = Math.max(0, Math.floor(curCool) - 20), tCool = table('쿨감', lo - curCool, Math.max(cap, curCool) - curCool, 1);
     return (a, cool) => {
       let L = 0;
-      for (let i = 0; i < 12; i++) if (lin[i]) L += lin[i] * (a[i] - w[i]);
+      for (let i = 0; i < AIDX.length; i++) if (lin[i]) L += lin[i] * ((a[i] || 0) - (w[i] || 0));
       L += tAdapt(a[0] - w[0]) + tPolar(a[6] - w[6]);
-      if (cool != null) L += tCool(Math.min(cool, 35) - curCool);
+      if (cool != null) L += tCool(Math.min(cool, cap) - curCool);
       return L * 1000;
     };
   }
   // 한벌 아바타를 from → to로 바꿨을 때 계산기 칸 변화(o에 더함). 공격력은 물마퍼까지 곱해진 창 값이라 그만큼 키움
-  function suitOver(o, from, to) {
-    const a = SUITS[from] || {}, b = SUITS[to] || {};
-    if (from === to) return o;
+  function statOver(o, delta) {
     const inp = APP.inputs(), cs = curStats();
     const val = (c) => (c in o ? Number(o[c]) : Number(inp[c])) || 0;
-    for (const [k, c] of Object.entries(SUIT_CELL)) { const d = (b[k] || 0) - (a[k] || 0); if (d) o[c] = Math.round((val(c) + d / 100) * 1e6) / 1e6; }
-    const dmp = (b.mp || 0) - (a.mp || 0), datk = (b.atk || 0) - (a.atk || 0);
+    for (const [k, c] of Object.entries(SUIT_CELL)) {
+      const d = delta[k] || 0; if (!d) continue;
+      o[c] = APP.addRaw ? APP.addRaw(c, val(c), d / 100) : Math.round((val(c) + d / 100) * 1e6) / 1e6;
+    }
+    const dmp = delta.mp || 0, datk = delta.atk || 0;
     if (dmp || datk) {
       const c11 = val('C11') || num('C11'), c12 = val('C12') || num('C12'), mp = cs['물마퍼'];
       const k = (100 + mp + dmp) / (100 + mp), add = datk * (1 + (mp + dmp) / 100);
       o.C11 = Math.round(c11 * k + add); o.C12 = Math.round(c12 * k + add * (c11 > 0 ? c12 / c11 : 1));
     }
     return o;
+  }
+  const diffStats = (a, b) => { const d = {}; for (const k of new Set([...Object.keys(a || {}), ...Object.keys(b || {})])) { const v = ((b || {})[k] || 0) - ((a || {})[k] || 0); if (v && typeof v === 'number') d[k] = v; } return d; };
+  function suitOver(o, from, to) { return from === to ? o : statOver(o, diffStats(SUITS[from], SUITS[to])); }
+  // 일반 악세 하의: 영혼의 족쇄(사룡 세트 부위)·글로잉 플라워. 사룡 세트(공중 요새의 유산)는 2·3부위에서 단계별로 켜짐
+  // 사룡 세트 부위: 무기(사룡무 = 계산기 무기 칸) · 운명의 예언서 · Type-Q 여왕의 훈장 · 영혼의 족쇄. 계산기는 이 세트를 따로 계산하지 않아서(스탯창에만 들어 있음) 바꿀 때 차이만큼 더함
+  const BOTTOMS = { '영혼의 족쇄': { mos: 5, sr: true }, '글로잉 플라워': { crit: 10, adapt: 2 } };
+  const SR_STAGE = [[2, { crit: 5, boss: 7 }], [3, { pol: 5, dot: 5 }]];
+  const srSet = (n) => { const o = {}; for (const [need, fx] of SR_STAGE) if (n >= need) for (const [k, v] of Object.entries(fx)) o[k] = (o[k] || 0) + v; return o; };
+  function srFixed() { const p = prof(), sr = p.sr || {}; return (String(APP.inputs().J26 || '') === '사룡무' ? 1 : 0) + (sr.book !== false ? 1 : 0) + (sr.medal !== false ? 1 : 0); }
+  function bottomOver(o, from, to) {
+    if (from === to) return o;
+    const k = srFixed(), isSr = (n) => !!(BOTTOMS[n] && BOTTOMS[n].sr);
+    const d = diffStats(BOTTOMS[from], BOTTOMS[to]), ds = diffStats(srSet(k + (isSr(from) ? 1 : 0)), srSet(k + (isSr(to) ? 1 : 0)));
+    for (const [x, v] of Object.entries(ds)) d[x] = (d[x] || 0) + v;
+    delete d.sr;
+    return statOver(o, d);
+  }
+  function bottomChoices() {
+    const p = prof(), now = p.bottom || '';
+    if (p.fixed['하의악세'] || !now) return [now];
+    const own = st.ownOn ? new Set(st.own || []) : null;
+    const list = [now].concat(Object.keys(BOTTOMS).filter(n => n !== now && (!own || own.has(n))));
+    return [...new Set(list)];
+  }
+  // 버프·영약(계산기 도핑 칸): 쓸 수 있다고 고른 것 중에서 실투력이 가장 높은 조합
+  // 파티 버프(J21)는 파티에 따라 정해지고, 이벤트 버프(J22)는 기간 한정이라 넣지 않음
+  const BUFF_CELLS = ['J17', 'J18', 'J19', 'J20', 'J23'];
+  const buffLabel = (c) => { const v = APP.val('I' + c.slice(1)); return v && !String(v).startsWith('#') ? String(v).trim() : c; };
+  function buffOptions(c) {
+    const now = String(APP.val(c) ?? '');
+    const ok = (st.buffOk || {})[c];
+    const all = (APP.optionsOf ? APP.optionsOf(c) : []) || [];
+    const list = ok && ok.length ? all.filter(x => ok.includes(x)) : [];
+    return [...new Set([now].concat(list))].filter(x => x !== '');
+  }
+  // 바깥 루프 후보: 쓸 수 있는 버프 조합을 지금 아바타로 먼저 재서 위에서 M개만 안쪽(아바타 탐색)으로 넘김
+  function buffBases(M) {
+    if (!st.buffOn) return [{}];
+    const cats = BUFF_CELLS.map(c => [c, buffOptions(c)]).filter(([, l]) => l.length > 1);
+    let combos = [{}];
+    for (const [c, list] of cats) combos = combos.flatMap(o => list.map(v => Object.assign({}, o, { [c]: v })));
+    const scored = combos.slice(0, 2000).map(b => {
+      const o = {}; for (const [k, v] of Object.entries(b)) if (String(APP.val(k) ?? '') !== String(v)) o[k] = v;
+      return { o, v: APP.cpWith(o) };
+    }).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+    const out = [], seen = new Set();
+    for (const x of scored) { const k = JSON.stringify(x.o); if (seen.has(k)) continue; seen.add(k); out.push(x.o); if (out.length >= M) break; }
+    return out.length ? out : [{}];
   }
   // 추천에 넣을 한벌 아바타: 고정이면 지금 것만, 보유 필터를 켜면 가진 것만. 기간제(성장 부스팅 투명 아바타)는 입고 있거나 보유로 고른 때만
   function suitChoices(worn) {
@@ -462,17 +560,32 @@
     const list = Object.keys(SUITS).filter(n => n === now || ((!own || own.has(n)) && (!SUITS[n].limited || (own && own.has(n)))));
     return list.length ? list : [now];
   }
-  function rerank(r, worn) {
+  function rerank(r, worn, base) {
     if (!r || !r.cands || !r.cands.length || !APP.cpWith) return r;
+    base = base || {};
     r.cpNow = APP.cpWith({});
-    // 한벌 아바타는 다른 부위와 따로라서 지금 세팅 기준으로 가장 좋은 것을 먼저 고르고, 마지막 1등에서 다시 확인
-    const now = worn['한벌'] || '', suits = suitChoices(worn);
-    let suit = now, sCp = -Infinity;
-    for (const n of suits) { const v = APP.cpWith(suitOver({}, now, n)); if (v > sCp) { sCp = v; suit = n; } }
-    for (const c of r.cands) { c.suit = suit; c.cp = APP.cpWith(suitOver(overridesFor(r, worn, c), now, suit)); }
+    // 한벌 아바타·일반 악세 하의는 다른 부위와 따로라서, 후보마다 가능한 것을 모두 대 보고 실투력으로 고름
+    const now = worn['한벌'] || '';
+    let suits = suitChoices(worn);
+    if (suits.length > 3) {
+      const sc = suits.map(n => ({ n, v: APP.cpWith(suitOver(Object.assign({}, base), now, n)) })).sort((a, b) => b.v - a.v);
+      suits = [...new Set(sc.slice(0, 3).map(x => x.n).concat(now))];
+    }
+    const bNow = prof().bottom || '', bottoms = bottomChoices();
+    for (const c of r.cands) {
+      const ov = overridesFor(r, worn, c);
+      let best = null;
+      for (const sName of suits) for (const bName of bottoms) {
+        const o = Object.assign({}, base, ov);
+        suitOver(o, now, sName); bottomOver(o, bNow, bName);
+        const v = APP.cpWith(o);
+        if (!best || v > best.cp) best = { cp: v, suit: sName, bottom: bName, over: o };
+      }
+      Object.assign(c, best);
+    }
     let top = r.cands.slice().sort((a, b) => b.cp - a.cp)[0];
     if (!(top.cp > 0)) return r;
-    for (const n of suits) { if (n === top.suit) continue; const v = APP.cpWith(suitOver(overridesFor(r, worn, top), now, n)); if (v > top.cp) { top.cp = v; top.suit = n; } }
+    top.buffs = Object.assign({}, base);
     r.scoreRank = r.cands.indexOf(top) + 1;
     r.best = top; r.mode = top.mode || r.mode;
     r.gain = (100 + (top.rScore != null ? top.rScore : top.score)) / (100 + r.cur.score) - 1;
@@ -487,10 +600,18 @@
       try {
         const p = prof(), c = calcOpts(), cur = curStats();
         const owned = st.ownOn ? new Set([...(st.own || []), ...PARTS.map(x => p.worn[x]).filter(Boolean)]) : null;
-        const db = R.prepareDb(A.items), scorer = buildScorer(db, p.worn);
-        const go = (o, fixed, fiveFixed) => rerank(R.run({ items: A.items, chars: A.chars, cls: sheetClass(APP.cls()), cur, worn: p.worn, fixed, fiveFixed, opt: Object.assign({ topK: 50, scorer }, st.o, c, o) }), p.worn);
+        const db = R.prepareDb(A.items);
+        let base = {}, scorer = null;
+        const go = (o, fixed, fiveFixed) => rerank(R.run({ items: A.items, chars: A.chars, cls: sheetClass(APP.cls()), cur, worn: p.worn, fixed, fiveFixed, opt: Object.assign({ topK: 50, scorer, coolCap: APP.coolCap ? APP.coolCap() : 35 }, st.o, c, o) }), p.worn, base);
         const fx = p.fixed || {}, f5 = !!p.fiveFixed, anyFix = f5 || Object.values(fx).some(Boolean);
-        const r = go({ owned }, fx, f5);
+        // 바깥: 버프·영약 조합(위에서 3개) · 안쪽: 아바타 탐색 + 한벌·하의 악세. 실투력이 가장 높은 것을 고름
+        let r = null, keep = null;
+        for (const b of buffBases(3)) {
+          base = b; scorer = buildScorer(db, p.worn, b);
+          const r1 = go({ owned }, fx, f5);
+          if (!r || (r1.best && (!r.best || (r1.best.cp || 0) > (r.best.cp || 0)))) { r = r1; keep = [b, scorer]; }
+        }
+        [base, scorer] = keep;
         result = { r };
         if (!r.best) {
           // 어떤 조건 때문에 막혔는지 하나씩 풀어 보며 찾음

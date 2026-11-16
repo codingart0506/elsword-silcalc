@@ -1,21 +1,23 @@
 /* 가열기 아바타/액세서리 추천 계산 — 룰루님 시트(v1.5.1) Apps Script를 그대로 옮김 */
 (function (root) {
   'use strict';
-  const TARGET_STATS = ['적응력', '초적응력', '강배', '역강배', '100이하', '추피', '양극화', '물마퍼', '모스댐', '초댐증', '크댐증', '보댐증', '쿨감'];
+  // 강렬댐증(맹호기담 2세트·베리타스 페르소나 3세트·팬텀 베일 반지)은 계산기 실투력으로 잴 때만 씀(룰루 점수에는 없음)
+  const TARGET_STATS = ['적응력', '초적응력', '강배', '역강배', '100이하', '추피', '양극화', '물마퍼', '모스댐', '초댐증', '크댐증', '보댐증', '쿨감', '강렬댐증'];
   const ALL_PARTS = ['무기', '웨폰가드', '서포트유닛', '얼굴(상)', '얼굴(중)', '얼굴(하)', '상의', '하의', '팔', '귀걸이', '목걸이', '반지'];
-  const COOLDOWN_CAP = 35, COOLDOWN_STEP = 5, TOP_KEEP_RATIO = 0.3;
+  let COOLDOWN_CAP = 35; // 직업별 쿨감 상한(%). run()에서 opt.coolCap으로 바꿈
+  const COOLDOWN_STEP = 5, TOP_KEEP_RATIO = 0.3;
   const FIVESET_CATEGORY = '아바타5셋';
   const ELIOS_SET_NAME = '엘리오스 수호 기사단';
 
   const emptySums = () => { const o = {}; for (const k of TARGET_STATS) o[k] = 0; return o; };
   const addSums = (t, s) => { if (!s) return; for (const k of TARGET_STATS) t[k] += s[k] || 0; };
   const mergeSums = (a, b) => { if (!a && !b) return null; const o = emptySums(); addSums(o, a); addSums(o, b); return o; };
-  const sumsToAddArr = (s) => [s['적응력'], s['초적응력'], s['강배'], s['역강배'], s['100이하'], s['추피'], s['양극화'], s['물마퍼'], s['모스댐'], s['초댐증'], s['크댐증'], s['보댐증']];
+  const sumsToAddArr = (s) => [s['적응력'], s['초적응력'], s['강배'], s['역강배'], s['100이하'], s['추피'], s['양극화'], s['물마퍼'], s['모스댐'], s['초댐증'], s['크댐증'], s['보댐증'], s['강렬댐증'] || 0];
   function addArrPlus(arr, src) {
     if (!src) return arr.slice();
     return [arr[0] + (src['적응력'] || 0), arr[1] + (src['초적응력'] || 0), arr[2] + (src['강배'] || 0), arr[3] + (src['역강배'] || 0),
       arr[4] + (src['100이하'] || 0), arr[5] + (src['추피'] || 0), arr[6] + (src['양극화'] || 0), arr[7] + (src['물마퍼'] || 0),
-      arr[8] + (src['모스댐'] || 0), arr[9] + (src['초댐증'] || 0), arr[10] + (src['크댐증'] || 0), arr[11] + (src['보댐증'] || 0)];
+      arr[8] + (src['모스댐'] || 0), arr[9] + (src['초댐증'] || 0), arr[10] + (src['크댐증'] || 0), arr[11] + (src['보댐증'] || 0), (arr[12] || 0) + (src['강렬댐증'] || 0)];
   }
   function combinations(arr, k) {
     const out = [];
@@ -127,6 +129,7 @@
   function run(p) {
     const db = prepareDb(p.items);
     const opt = p.opt || {};
+    COOLDOWN_CAP = Number(opt.coolCap) > 0 ? Number(opt.coolCap) : 35;
     const J = wornContribution(db, p.worn || {});
     const bare = bareStats(p.cur || {}, J.sums, p.cls, p.chars || {}, opt);
     const env = Number(opt.env != null ? opt.env : 95);
