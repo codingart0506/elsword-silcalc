@@ -278,7 +278,21 @@
     return { grid, cells, cls };
   }
 
-  const api = { detectGrid, featureOf, dist, bestMatch, recognize, recognizeClass, findPortrait, teach, teachFrom, library, bytesToB64, b64ToBytes, N, MATCH };
+  // 아이콘 사전(icons.js·icons2.js, 약 500KB)은 스크린샷을 읽을 때만 받음
+  let iconP = null;
+  function load() {
+    if ((root.SIL_ICONS && root.SIL_ICONS2) || typeof document === 'undefined') return Promise.resolve();
+    if (iconP) return iconP;
+    const srcs = root.SIL_ICON_SRC || ['icons.js', 'icons2.js'];
+    iconP = Promise.all(srcs.map(src => new Promise((res, rej) => {
+      const s = document.createElement('script'); s.src = src; s.onload = res;
+      s.onerror = () => { s.remove(); rej(new Error('아이콘 파일을 받지 못했어요')); };
+      document.head.append(s);
+    }))).then(() => { LIB2 = null; }).catch((e) => { iconP = null; throw e; });
+    return iconP;
+  }
+
+  const api = { load, detectGrid, featureOf, dist, bestMatch, recognize, recognizeClass, findPortrait, teach, teachFrom, library, bytesToB64, b64ToBytes, N, MATCH };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SilGear = api;
 })(typeof window !== 'undefined' ? window : globalThis);

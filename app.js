@@ -676,6 +676,7 @@
   function showShot(c) {
     if (ocrBusy) { toast('사진을 읽는 중이에요. 다 읽은 뒤에 바꿔 주세요'); return; }
     shot = c; selRect = null;
+    if (window.SilGear && window.SilGear.load) window.SilGear.load().catch(() => {}); // 글자 읽는 동안 아이콘 사전도 미리 받음
     canvas.width = c.width; canvas.height = c.height; canvas.getContext('2d').drawImage(c, 0, 0);
     $('#dropZone').hidden = true;
     $('#stage').hidden = false; $('#sel').hidden = true; $('#ocrResult').hidden = true; $('#ocrProg').hidden = true;
@@ -744,7 +745,7 @@
       });
       if (res.auto && res.rect) { selRect = res.rect; drawSel(); }
       let gear = null;
-      try { if (window.SilGear) { pt.textContent = '악세서리 아이콘 보는 중'; gear = window.SilGear.recognize(shot); } } catch (e) { console.error(e); }
+      try { if (window.SilGear) { pt.textContent = '악세서리 아이콘 보는 중'; await window.SilGear.load(); gear = window.SilGear.recognize(shot); } } catch (e) { console.error(e); }
       try { if (window.SilAvatar) { pt.textContent = '아바타 아이콘 보는 중'; await window.SilAvatar.fromShot(shot, gear); } } catch (e) { console.error(e); }
       try { if (gear && gear.cls && !shared) { pt.textContent = '캐릭터 이름 읽는 중'; res.name = await O.readName(shot, gear.cls); } } catch (e) { console.error(e); }
       pendingExtras = { gotRange: !!(res.found && res.found.C12) };

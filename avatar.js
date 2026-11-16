@@ -246,6 +246,7 @@
     try {
       const bm = await createImageBitmap(blob);
       const c = document.createElement('canvas'); c.width = bm.width; c.height = bm.height; c.getContext('2d').drawImage(bm, 0, 0);
+      if (window.SilGear) await window.SilGear.load().catch(() => {});
       const gear = window.SilGear ? window.SilGear.recognize(c) : null;
       await fromShot(c, gear || {});
     } catch (e) { console.error(e); lastRec = { ok: false, why: '사진을 읽지 못했어요' }; render(); }

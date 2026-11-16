@@ -615,8 +615,7 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .adm-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--sub); white-space: nowrap; cursor: pointer; }
 .adm-chk input { width: 16px; height: 16px; margin: 0; }
 .adm-found { margin: 6px 0 4px; }
-.adm-pager { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 14px; }
-.adm-pager .btn { padding: 8px 16px; font-size: 14px; }
+.adm-pager { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 14px; }
 .adm-pageno { font-size: 14px; color: var(--sub); font-variant-numeric: tabular-nums; }
 .adm-plain .btn { padding: 8px 12px; font-size: 14px; }
 @media (min-width: 700px) {

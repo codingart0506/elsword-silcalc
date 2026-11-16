@@ -7,6 +7,8 @@
   const SB_URL = 'https://qaeheqbuzwxbaujrsktr.supabase.co';
   const SB_KEY = 'sb_publishable_J0YXiKlO-CdW_vK_k5UhXA_mE7kvs1N'; // 공개용 키(브라우저에 넣어도 되는 키)
   const SB_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js';
+  // CDN 파일이 바뀌면(변조) 실행하지 않음
+  const SB_SRI = 'sha384-uteMfOloLDGt042uDz+xHGF3ym63/WQ6rFq7murQRG8Ih7QrXGEGNtWd8688sb4O';
   const $ = (s, r) => (r || document).querySelector(s);
   const { el, toast, fmtInt, korUnit } = A;
 
@@ -53,7 +55,7 @@
       const make = () => res(window.supabase.createClient(SB_URL, SB_KEY, { auth: { flowType: 'implicit', persistSession: true, detectSessionInUrl: true }, global: { fetch: withCode } }));
       if (window.supabase && window.supabase.createClient) return make();
       const s = document.createElement('script');
-      s.src = SB_JS; s.async = true; s.onload = make;
+      s.src = SB_JS; s.integrity = SB_SRI; s.crossOrigin = 'anonymous'; s.async = true; s.onload = make;
       s.onerror = () => { sbP = null; rej(new Error('랭킹 서버에 연결하지 못했어요')); };
       document.head.append(s);
     });
@@ -1479,7 +1481,8 @@
 
     // 목록 아래 쪽수 넘기기
     const pager = (onGo) => {
-      const prev = el('button', { type: 'button', class: 'btn', text: '이전' }), next = el('button', { type: 'button', class: 'btn', text: '다음' });
+      const arrow = (label, d) => { const b = el('button', { type: 'button', class: 'rk-arrow', 'aria-label': label }); b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`; return b; };
+      const prev = arrow('이전 쪽', 'M15 5.5L8.5 12l6.5 6.5'), next = arrow('다음 쪽', 'M9 5.5l6.5 6.5L9 18.5');
       const no = el('span', { class: 'adm-pageno' });
       prev.onclick = () => onGo(-1); next.onclick = () => onGo(1);
       const box = el('div', { class: 'adm-pager' }, prev, no, next);
