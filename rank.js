@@ -252,7 +252,7 @@
   function shotPair(c, orig, pub, fix, folder) {
     const one = (path, cap) => {
       const img = el('img', { alt: cap });
-      signed(c, path).then(u => { if (u) { img.src = u; img.onclick = () => window.open(u, '_blank', 'noopener'); } });
+      shotUrl(c, path).then(u => { if (u) { img.src = u; img.onclick = () => window.open(u, '_blank'); } });
       return el('figure', { class: 'adm-shot' }, img, el('figcaption', { text: cap }));
     };
     const editBtn = el('button', { type: 'button', class: 'btn adm-edit', text: '가릴 곳 직접 정하기' });
@@ -263,8 +263,8 @@
     const note = (t) => put(el('p', { class: 'adm-flag', text: t }));
     let cvP = null;
     const loadOrig = () => cvP || (cvP = (async () => {
-      const u = await signed(c, orig); if (!u) throw new Error('원본 사진을 열지 못했어요');
-      return blobToCanvas(await (await fetch(u)).blob());
+      const b = await shotBlob(c, orig); if (!b) throw new Error('원본 사진을 열지 못했어요');
+      return blobToCanvas(b);
     })().catch(e => { cvP = null; throw e; }));
     const save = async (pc) => {
       const path = `${folder}/${uuid()}_p.jpg`;
@@ -738,7 +738,7 @@
       busy = true;
       const note = el('p', { class: 'rank-note', text: '원본 사진을 불러오는 중이에요' }); out.append(note);
       try {
-        const loadShot = async (path) => { const u = await signed(c, path); return u ? blobToCanvas(await (await fetch(u)).blob()) : null; };
+        const loadShot = async (path) => { const b = await shotBlob(c, path); return b ? blobToCanvas(b) : null; };
         let best = null, found = p;
         if (!p) {
           // 사진 속 캐릭터를 모르면: 랭킹 캐릭터 사진마다 대충 맞대 보고(작게) 가장 잘 맞는 캐릭터를 고름
@@ -891,7 +891,7 @@
       const c = await sb();
       await playerDetail(c, r);
       shareP.textContent = `초월:강렬 비율 ${shareText(r.inputs)}`;
-      const u = r.shot_path ? await signed(c, r.shot_path) : null;
+      const u = r.shot_path ? await shotUrl(c, r.shot_path) : null;
       const bu = u ? await bakeShot(u, viewerName() + '|' + r.shot_path) : null;
       if (bu) { marked = true; img.src = bu; }
       else if (u) { img.src = u; shot.append(watermark()); }
@@ -1255,6 +1255,21 @@
     const { data, error } = await c.storage.from('shots').createSignedUrl(path, 3600);
     return error ? null : data.signedUrl;
   }
+  // 사진은 한 번 받으면 이 브라우저에 보관해서 다시 볼 때는 서버에서 안 받음(저장소 전송량 절약).
+  // 사진 경로는 올릴 때마다 새 이름(uuid)이라 내용이 바뀌지 않음
+  const SHOT_CACHE = 'silcalc-shots-v1';
+  async function shotBlob(c, path) {
+    if (!path) return null;
+    const key = 'https://shots.silcalc.invalid/' + encodeURIComponent(path);
+    let cache = null;
+    try { cache = await caches.open(SHOT_CACHE); const hit = await cache.match(key); if (hit) return await hit.blob(); } catch (e) { cache = null; }
+    const u = await signed(c, path); if (!u) return null;
+    const res = await fetch(u); if (!res.ok) return null;
+    const blob = await res.blob();
+    if (cache) { try { await cache.put(key, new Response(blob, { headers: { 'Content-Type': blob.type || 'image/jpeg' } })); } catch (e) { /* 저장 못 해도 그냥 씀 */ } }
+    return blob;
+  }
+  async function shotUrl(c, path) { const b = await shotBlob(c, path); return b ? URL.createObjectURL(b) : null; }
   // 숨기기·삭제 사유: 그 사람이 다음에 사이트를 열면 창으로 보여 줌
   async function setHidden(c, id, nv) {
     let reason = '';
@@ -1509,8 +1524,8 @@
         fix.disabled = true; let done = 0, miss = [];
         for (const p of raw) {
           try {
-            const u = await signed(c, p.shot_path); if (!u) throw new Error('사진 없음');
-            const cv = await blobToCanvas(await (await fetch(u)).blob());
+            const b = await shotBlob(c, p.shot_path); if (!b) throw new Error('사진 없음');
+            const cv = await blobToCanvas(b);
             const pc = privacyBlur(cv); if (!pc) { miss.push(p.nickname); continue; }
             const path = `apply/${uuid()}_p.jpg`;
             const up = await c.storage.from('shots').upload(path, await toJpeg(pc), { contentType: 'image/jpeg', upsert: false });
@@ -1547,8 +1562,8 @@
           const { data: hs } = await c.from('cp_history').select('shot_path,pub_path').eq('player_id', p.id).order('created_at', { ascending: false }).limit(30);
           const h = (hs || []).find(x => x.pub_path === p.shot_path || x.shot_path === p.shot_path);
           const origPath = h ? h.shot_path : p.shot_path;
-          const u = await signed(c, origPath); if (!u) throw new Error('원본 사진을 열지 못했어요');
-          const cv = await blobToCanvas(await (await fetch(u)).blob());
+          const b = await shotBlob(c, origPath); if (!b) throw new Error('원본 사진을 열지 못했어요');
+          const cv = await blobToCanvas(b);
           const rects = await editKeep(cv, privacyRects(cv) || []);
           if (rects) {
             const path = `${/^update\//.test(origPath) ? 'update' : 'apply'}/${uuid()}_p.jpg`;
