@@ -5,7 +5,7 @@
   if (!A || !R || !APP) return;
   const $ = (s) => document.querySelector(s);
   const el = APP.el;
-  const PARTS = ['아바타5셋', '한벌', '무기', '웨폰가드', '서포트유닛', '얼굴(상)', '얼굴(중)', '얼굴(하)', '상의', '하의', '팔', '귀걸이', '목걸이', '반지'];
+  const PARTS = ['한벌', '아바타5셋', '무기', '웨폰가드', '서포트유닛', '얼굴(상)', '얼굴(중)', '얼굴(하)', '상의', '하의', '팔', '귀걸이', '목걸이', '반지'];
   const PART_LABEL = { '아바타5셋': '아바타 5셋', '한벌': '한벌 아바타', '무기': '무기 아바타' };
   // 한벌 아바타: 실투력 시트 '아이템 테이블'의 한벌 아바타 값(공은 물공·마공 같은 값, 나머지는 %). 다른 부위와 따로 입는 칸이라 세트 효과 없이 더하기만
   const SUITS = {
@@ -293,9 +293,9 @@
       fx.onchange = () => { p.fixed['하의악세'] = fx.checked; save(); result = null; renderResult(); };
       body.append(el('div', { class: 'av-row' }, el('span', { class: 'av-part', text: '일반 악세 하의' }), el('span', { class: 'av-tag' }), sel, el('label', { class: 'av-fix' }, fx, el('span', { text: '고정' }))));
     }
-    const allFixed = !!p.fiveFixed && PARTS.slice(1).every(x => p.fixed[x]) && !!p.fixed['하의악세'];
+    const allFixed = !!p.fiveFixed && PARTS.filter(x => x !== '아바타5셋').every(x => p.fixed[x]) && !!p.fixed['하의악세'];
     body.append(el('div', { class: 'av-fix-acts' },
-      el('button', { type: 'button', class: 'txt sm', text: '전체 고정', onclick: () => { p.fiveFixed = true; for (const x of PARTS.slice(1)) p.fixed[x] = true; p.fixed['하의악세'] = true; save(); result = null; render(); } }),
+      el('button', { type: 'button', class: 'txt sm', text: '전체 고정', onclick: () => { p.fiveFixed = true; for (const x of PARTS) if (x !== '아바타5셋') p.fixed[x] = true; p.fixed['하의악세'] = true; save(); result = null; render(); } }),
       el('button', { type: 'button', class: 'txt sm mute', text: '고정 해제', onclick: () => { p.fiveFixed = false; p.fixed = {}; save(); result = null; render(); } }),
       allFixed ? el('span', { class: 'av-hint', text: '모두 고정하면 지금 세팅 그대로예요' }) : ''));
     renderStats(); renderOpts(); renderOwn(); renderResult();
@@ -360,19 +360,30 @@
       for (const part of (db.setToParts.get(s) || [])) { const d = db.displayBySetPart.get(s + '||' + part); if (d) items.push(d); }
       return items;
     };
+    // 전체 선택 = 세트 아바타 + 한벌 아바타(기간제 빼고) + 일반 악세 하의. 처음 켜면 이걸로 체크해 두고, 없는 것만 끄게 함
+    const all = sets.flatMap(itemsOf).concat(Object.keys(SUITS).filter(n => !SUITS[n].limited), Object.keys(BOTTOMS));
     const on = el('input', { type: 'checkbox' }); on.checked = !!st.ownOn;
-    // 처음 켜면 전부 가진 것으로 체크해 두고, 없는 것만 끄게 함
-    on.onchange = () => { st.ownOn = on.checked; if (on.checked && !(st.own && st.own.length)) st.own = sets.flatMap(itemsOf).concat(Object.keys(SUITS).filter(n => !SUITS[n].limited), Object.keys(BOTTOMS)); save(); result = null; renderOwn(); renderResult(); };
+    on.onchange = () => { st.ownOn = on.checked; if (on.checked && !(st.own && st.own.length)) st.own = [...all]; save(); result = null; renderOwn(); renderResult(); };
     box.append(el('label', { class: 'av-fix av-own-on' }, on, el('span', { text: '가진 것만으로 추천 (없는 아이템은 체크를 꺼 주세요)' })));
     if (!st.ownOn) return;
     const own = new Set(st.own || []);
     const p = prof(); for (const part of PARTS) if (p.worn[part]) own.add(p.worn[part]);
     const setOwn = (list) => { st.own = [...new Set(list)]; save(); result = null; renderOwn(); renderResult(); };
-    const all = sets.flatMap(itemsOf).concat(Object.keys(SUITS));
     box.append(el('div', { class: 'av-own-acts' },
       el('button', { type: 'button', class: 'txt sm', text: '전체 선택', onclick: () => setOwn(all) }),
       el('button', { type: 'button', class: 'txt sm mute', text: '전체 취소', onclick: () => setOwn([]) }),
       el('span', { class: 'av-hint', text: '지금 낀 아이템은 늘 가진 것으로 쳐요. 세트 이름을 누르면 그 세트를 한꺼번에 골라요' })));
+    // 한벌 아바타(세트 없이 한 칸)
+    const sn = Object.keys(SUITS);
+    const sChips = sn.map(d => {
+      const b = el('button', { type: 'button', class: 'av-chip' + (own.has(d) ? ' on' : ''), text: d + (SUITS[d].limited ? ' (기간제)' : ''), 'aria-pressed': own.has(d) ? 'true' : 'false' });
+      b.onclick = () => { const cur = new Set(st.own || []); if (cur.has(d)) cur.delete(d); else cur.add(d); setOwn([...cur]); };
+      return b;
+    });
+    const sAll = sn.every(d => own.has(d));
+    const sName = el('button', { type: 'button', class: 'av-own-name', text: '한벌 아바타', title: sAll ? '모두 빼기' : '모두 고르기' });
+    sName.onclick = () => { const cur = new Set(st.own || []); for (const d of sn) { if (sAll) cur.delete(d); else cur.add(d); } setOwn([...cur]); };
+    box.append(el('div', { class: 'av-own-set' }, sName, el('div', { class: 'av-chips' }, ...sChips)));
     for (const s of sets) {
       const items = itemsOf(s);
       const chips = items.map(d => {
@@ -385,17 +396,6 @@
       name.onclick = () => { const cur = new Set(st.own || []); for (const d of items) { if (allOn) cur.delete(d); else cur.add(d); } setOwn([...cur]); };
       box.append(el('div', { class: 'av-own-set' }, name, el('div', { class: 'av-chips' }, ...chips)));
     }
-    // 한벌 아바타(세트 없이 한 칸)
-    const sn = Object.keys(SUITS);
-    const sChips = sn.map(d => {
-      const b = el('button', { type: 'button', class: 'av-chip' + (own.has(d) ? ' on' : ''), text: d + (SUITS[d].limited ? ' (기간제)' : ''), 'aria-pressed': own.has(d) ? 'true' : 'false' });
-      b.onclick = () => { const cur = new Set(st.own || []); if (cur.has(d)) cur.delete(d); else cur.add(d); setOwn([...cur]); };
-      return b;
-    });
-    const sAll = sn.every(d => own.has(d));
-    const sName = el('button', { type: 'button', class: 'av-own-name', text: '한벌 아바타', title: sAll ? '모두 빼기' : '모두 고르기' });
-    sName.onclick = () => { const cur = new Set(st.own || []); for (const d of sn) { if (sAll) cur.delete(d); else cur.add(d); } setOwn([...cur]); };
-    box.append(el('div', { class: 'av-own-set' }, sName, el('div', { class: 'av-chips' }, ...sChips)));
     const bn = Object.keys(BOTTOMS);
     const bChips = bn.map(d => {
       const b = el('button', { type: 'button', class: 'av-chip' + (own.has(d) || p.bottom === d ? ' on' : ''), text: d, 'aria-pressed': own.has(d) || p.bottom === d ? 'true' : 'false' });
