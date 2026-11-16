@@ -1517,45 +1517,6 @@
       };
       all.append(fix);
     }
-    // 계산기 시트 버전이 바뀌면: 올라간 세팅으로 지금 시트 실투력을 다시 계산해서 랭킹 숫자를 맞춤(신청 대기·보류 갱신 포함)
-    if (A.cpOfInputs) {
-      const rc = el('button', { type: 'button', class: 'btn', text: `실투력 다시 계산 (시트 ${A.sheetVersion ? A.sheetVersion() : ''})` });
-      const rcOut = el('p', { class: 'rank-note' });
-      rc.onclick = async () => {
-        rc.disabled = true; rcOut.textContent = '세팅을 불러오는 중이에요';
-        try {
-          const [p1, p2, p3] = await Promise.all([
-            c.from('players').select('id,nickname,cp,inputs').limit(5000),
-            c.from('applications').select('id,nickname,cp,inputs').eq('status', 'pending').limit(2000),
-            c.from('cp_history').select('id,cp,inputs,prev_cp,prev_inputs').eq('status', 'held').limit(2000)]);
-          for (const r of [p1, p2, p3]) if (r.error) throw r.error;
-          const rows = [], skip = []; let up = 0, down = 0;
-          const add = (t, r, cpOld, inp, extra) => {
-            const v = A.cpOfInputs(inp || {});
-            if (!Number.isFinite(v)) { if (t !== 'hp') skip.push(r.nickname || r.id); return null; }
-            if (v !== Number(cpOld)) { if (t === 'p') { if (v > cpOld) up++; else down++; } return v; }
-            return null;
-          };
-          for (const r of p1.data || []) { const v = add('p', r, r.cp, r.inputs); if (v != null) rows.push({ t: 'p', id: r.id, cp: v }); }
-          for (const r of p2.data || []) { const v = add('a', r, r.cp, r.inputs); if (v != null) rows.push({ t: 'a', id: r.id, cp: v }); }
-          for (const r of p3.data || []) {
-            const v = add('h', r, r.cp, r.inputs), pv = r.prev_inputs ? add('hp', r, r.prev_cp, r.prev_inputs) : null;
-            if (v != null || pv != null) rows.push({ t: 'h', id: r.id, cp: v ?? r.cp, prev_cp: pv ?? r.prev_cp });
-          }
-          if (!rows.length) { rcOut.textContent = `바뀔 실투력이 없어요${skip.length ? ` (계산 못 한 세팅 ${skip.length}개)` : ''}`; rc.disabled = false; return; }
-          rcOut.textContent = `${rows.length}개를 바꾸는 중이에요`;
-          let n = 0;
-          for (let i = 0; i < rows.length; i += 200) {
-            const { data, error } = await c.rpc('admin_recalc_cp', { p_rows: rows.slice(i, i + 200) });
-            if (error) throw error; n += data || 0;
-          }
-          rcOut.textContent = `${n}개를 새 시트 실투력으로 바꿨어요. 랭킹 캐릭터 ${up}명 오름, ${down}명 내림${skip.length ? `. 계산 못 한 세팅(공격력·극대화 범위 없음): ${skip.slice(0, 10).join(', ')}${skip.length > 10 ? ' 외' : ''}` : ''}`;
-          toast('실투력을 다시 계산했어요');
-        } catch (e) { rcOut.textContent = '다시 계산하지 못했어요. ' + errMsg(e); }
-        rc.disabled = false;
-      };
-      all.append(el('div', { class: 'adm-recalc' }, rc, rcOut));
-    }
     const chQ = searchBox('닉네임 또는 전직 검색');
     const onlyHid = el('input', { type: 'checkbox' });
     const chInfo = el('p', { class: 'rank-note adm-found' });

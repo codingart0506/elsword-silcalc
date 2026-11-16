@@ -465,7 +465,7 @@
   // 랭킹 등 저장된 세팅의 실투력(지금 시트 기준). 예전 버전 세팅은 옮긴 뒤, 직업 스킬·보기를 바로잡아 계산
   let cpWb = null;
   function cpOfInputs(raw) {
-    const inp = shareFix(migrateV2(Object.assign({}, raw || {})));
+    const inp = migrateV2(Object.assign({}, raw || {}));
     if (!cpWb) cpWb = new E.Workbook(M);
     cpWb.assign(sheetInputs(inp));
     Object.assign(inp, badOptions(inp, cpWb));
@@ -1093,7 +1093,7 @@
   }
   function toast(t) { const n = $('#toast'); n.textContent = t; n.hidden = false; clearTimeout(n._t); n._t = setTimeout(() => { n.hidden = true; }, 2200); }
   function enterShared(o) {
-    shared = { n: String(o.n || '공유된 세팅').slice(0, 30), nk: String(o.k || '').slice(0, 20), i: shareFix(migrateV2(Object.assign({}, o.i || {}))) };
+    shared = { n: String(o.n || '공유된 세팅').slice(0, 30), nk: String(o.k || '').slice(0, 20), i: migrateV2(Object.assign({}, o.i || {})) }; // 남의 세팅은 올린 비율 그대로
     inputs = Object.assign({}, shared.i);
     applyInputs(); syncClassSkill();
     $('#sharedBar').hidden = false;
@@ -1150,7 +1150,7 @@
     return (a) => { let v; try { v = gx(labWb, a); } catch (e) { v = null; } if (v == null || v === '' || String(v).startsWith('#')) return LABEL_FALLBACK[a] || ''; return String(v).trim(); };
   }
   function describeInputs(inp) {
-    inp = shareFix(migrateV2(Object.assign({}, inp || {})));
+    inp = migrateV2(Object.assign({}, inp || {}));
     const label = inp.C6 ? labelsFor(inp) : (a) => labelOf(a);
     const out = [], has = (c) => inp[c] !== undefined && inp[c] !== null && inp[c] !== '';
     const fmtV = (c, v) => typeof v === 'boolean' ? (v ? '켬' : '끔') : (typeof v === 'number' ? (PCT.has(c) ? `${+(v * 100).toFixed(2)}%` : optText(c, v) !== String(v) ? optText(c, v) : fmtInt(v)) : optText(c, v));
@@ -1187,7 +1187,7 @@
     calcVer: () => CALC_VER,
     rankCp: () => { const v = cpOf(wb); return typeof v === 'number' ? Math.round(v) : NaN; },
     customShare: () => inputs.A_B4 === true,
-    migrate: (i) => shareFix(migrateV2(Object.assign({}, i || {}))),
+    migrate: (i) => migrateV2(Object.assign({}, i || {})),
     cpOfInputs,
     sheetVersion: () => (M.meta && M.meta.version) || '',
     // 랭킹에 못 올리는 버프(피시방·에너지드링크·지애)를 켰으면 그 이름들
