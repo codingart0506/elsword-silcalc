@@ -627,6 +627,33 @@
     }
     outs.sort((a, b) => b[1] - a[1]);
     if (!outs.length || !(outs[0][1] > 0)) return null;
+    // 유망 세트 전수 조사: 출발점·마무리 결과에서 2부위 이상 쓰인 세트를 모아, 그 세트 아이템(+지금·최고 조합의 아이템)만으로
+    // 만들 수 있는 모든 조합을 빠짐없이 따짐(세트를 통째로 갈아 끼우는 조합은 한두 부위씩 바꿔서는 못 찾음)
+    try {
+      const freq = new Map();
+      const note = (S1, w) => { const c = new Map(); for (const pt of R.ALL_PARTS) { const sn = db.displayToSet.get(S1[pt]); if (sn) c.set(sn, (c.get(sn) || 0) + 1); } for (const [sn, n] of c) if (n >= 2) freq.set(sn, (freq.get(sn) || 0) + w); };
+      for (const S0 of starts) note(S0, 1);
+      for (const [S1] of outs) note(S1, 3);
+      const order = [...freq].sort((x, y) => y[1] - x[1]).map(x => x[0]), base0 = outs[0][0];
+      const optFor = (sets) => R.ALL_PARTS.map(pt => {
+        if (fixed[pt]) return [base0[pt] || ''];
+        const o = new Set([base0[pt] || '']); if (worn[pt]) o.add(worn[pt]);
+        for (const sn of sets) { const d = db.displayBySetPart.get(sn + '||' + pt); if (d && ok(pt, d)) o.add(d); }
+        return [...o];
+      });
+      let use = [], fo = null;
+      for (const sn of order) { const t = optFor(use.concat(sn)); if (t.reduce((x, o) => x * o.length, 1) > 150000) break; use.push(sn); fo = t; }
+      if (fo) {
+        const S1 = Object.assign({}, base0), top = [], P = R.ALL_PARTS;
+        const rec = (i) => {
+          if (i === P.length) { const x = fast(S1); if (x > -Infinity && (top.length < 12 || x > top[top.length - 1][0])) { top.push([x, Object.assign({}, S1)]); top.sort((m, n) => n[0] - m[0]); if (top.length > 12) top.pop(); } return; }
+          for (const d of fo[i]) { S1[P[i]] = d; rec(i + 1); }
+        };
+        rec(0);
+        for (const [, S2] of top) { const key = ['아바타5셋'].concat(P).map(pt => S2[pt] || '').join('|'); if (seen.has(key)) continue; seen.add(key); outs.push([S2, cpOf(S2)]); }
+        outs.sort((a, b) => b[1] - a[1]);
+      }
+    } catch (e) { console.error(e); }
     let [S, v] = outs[0];
     for (let pass = 0; pass < 8; pass++) {
       const list = []; moves(S, (m) => { const x = fast(Object.assign({}, S, m)); if (x > -Infinity) list.push([x, m]); });
