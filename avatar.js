@@ -449,8 +449,8 @@
     for (const [c, v] of buffs) { const now = String(APP.val(c) ?? ''); extraRow(buffLabel(c), now, keepNow ? now : v); }
     box.append(el('table', { class: 'av-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '부위' })), el('th', { scope: 'col', text: '지금' }), el('th', { scope: 'col', text: '추천' }))), tb));
     if (keepNow) { box.append(el('p', { class: 'av-hint', text: '조건에 맞는 다른 조합은 모두 지금 세팅보다 낮았어요' })); return; }
-    box.append(el('p', { class: 'av-hint', text: `3세트: ${r.best.setLabels.join(' · ')} | ${r.mode}${r.best.coolReal != null ? ` | 쿨감 ${r.best.coolReal}%` : ''}${changed ? ` | 시트(룰루) 점수로는 실뎀 ${g >= 0 ? '+' : ''}${g.toFixed(2)}%` : ''}` }));
-    if (r.cands && r.cands.length > 1 && r.best.cp > 0) box.append(el('p', { class: 'av-hint', text: `계산기 실투력 기준으로 모든 조합을 비교해서 고른 결과예요. 마지막에 후보 ${r.cands.length}개를 계산기로 정확히 다시 쟀어요` }));
+    box.append(el('p', { class: 'av-hint', text: `${r.best.polished ? '세트' : '3세트'}: ${r.best.setLabels.join(' · ')} | ${r.mode}${r.best.coolReal != null ? ` | 쿨감 ${r.best.coolReal}%` : ''}${changed && !r.best.polished ? ` | 시트(룰루) 점수로는 실뎀 ${g >= 0 ? '+' : ''}${g.toFixed(2)}%` : ''}` }));
+    if (r.cands && r.cands.length > 1 && r.best.cp > 0) box.append(el('p', { class: 'av-hint', text: r.best.polished ? '3세트 조합 후보들과 지금 세팅에서 부위를 더 바꿔 가며(4번째 세트 효과 포함) 계산기 실투력이 가장 높아지는 조합을 찾았어요' : `계산기 실투력 기준으로 모든 조합을 비교해서 고른 결과예요. 마지막에 후보 ${r.cands.length}개를 계산기로 정확히 다시 쟀어요` }));
   }
   // 아바타 점수 상위 조합을 계산기 본체(시트와 같은 실투력 계산)에 넣어 실투력으로 다시 줄 세움
   const STAT_CELL = { '적응력': ['C14'], '초적응력': ['C15'], '강배': ['C24'], '역강배': ['C25'], '100이하': ['C26'], '추피': ['C22'], '양극화': ['C20'], '모스댐': ['C33'], '초댐증': ['C30'], '크댐증': ['C18'], '보댐증': ['C21'], '쿨감': ['C31', 'C32'], '강렬댐증': ['C29'] };
@@ -580,7 +580,65 @@
     const list = Object.keys(SUITS).filter(n => n === now || ((!own || own.has(n)) && (!SUITS[n].limited || (own && own.has(n)))));
     return list.length ? list : [now];
   }
-  function rerank(r, worn, base) {
+  // 마무리 탐색: 탐색이 고른 조합(3세트 + 남는 3부위)과 지금 세팅에서 출발해, 부위를 하나씩 바꾸거나 한 세트의 2~3부위를 한꺼번에 넣어 보며
+  // 실투력이 더 오르는 조합을 찾음. 세트 효과는 실제로 켜지는 것 전부(4번째 세트의 2·3세트 효과 포함)를 침.
+  // 빠른 점수(buildScorer)로 이웃을 훑고, 마지막에는 계산기 실투력으로 다시 재서 확인함
+  function polish(r, worn, base, ctx, starts, suit, bottom) {
+    const db = r.db, sc = ctx.scorer, cap = APP.coolCap ? APP.coolCap() : 35;
+    if (!sc || !r.bare || !isFinite(r.bare.baseCooldownBare)) return null;
+    const T = Number(r.coolTarget) || 0, atLeast = st.o.coolAtLeast !== false, bare = r.bare.baseCooldownBare;
+    const fixed = ctx.fixed || {}, owned = ctx.owned || null;
+    const ok = (part, d) => !owned || owned.has(d) || d === (worn[part] || '');
+    const FREE = R.ALL_PARTS.filter(pt => !fixed[pt]);
+    const opts = {}; for (const pt of FREE) opts[pt] = [...(db.partCandidates.get(pt) || [])].filter(d => ok(pt, d));
+    const fives = ctx.fiveFixed ? [] : db.fiveSetList.map(x => db.fiveSetDisplay.get(x)).filter(d => d && ok('아바타5셋', d));
+    const setItems = [];
+    for (const [sn, parts] of db.setToParts) {
+      const xs = []; for (const pt of parts) { if (fixed[pt]) continue; const d = db.displayBySetPart.get(sn + '||' + pt); if (d && ok(pt, d)) xs.push([pt, d]); }
+      if (xs.length >= 2) setItems.push(xs);
+    }
+    const coolOf = (sums) => Math.min(bare + (sums['쿨감'] || 0), cap);
+    const fast = (S) => { const sums = R.wornContribution(db, S).sums, c = coolOf(sums); if (T && (atLeast ? c < T - 1e-9 : Math.abs(c - T) > 1e-9)) return -Infinity; return sc(R.sumsToAddArr(sums), c); };
+    const candOf = (S) => { const pd = {}; for (const pt of R.ALL_PARTS) if (S[pt]) pd[pt] = S[pt]; return { fiveSetDisplay: S['아바타5셋'] || '', partToDisplay: pd, coolReal: coolOf(R.wornContribution(db, S).sums), polished: true }; };
+    const cpOf = (S) => { const o = Object.assign({}, base, overridesFor(r, worn, candOf(S))); suitOver(o, worn['한벌'] || '', suit); bottomOver(o, prof().bottom || '', bottom); return APP.cpWith(o); };
+    const moves = (S, each) => {
+      for (const pt of FREE) for (const d of opts[pt]) if (S[pt] !== d) each({ [pt]: d });
+      for (const d of fives) if (S['아바타5셋'] !== d) each({ '아바타5셋': d });
+      for (const xs of setItems) for (let i = 0; i < xs.length; i++) for (let j = i + 1; j < xs.length; j++) {
+        const hi = S[xs[i][0]] === xs[i][1], hj = S[xs[j][0]] === xs[j][1];
+        if (!(hi && hj)) each({ [xs[i][0]]: xs[i][1], [xs[j][0]]: xs[j][1] });
+        for (let k = j + 1; k < xs.length; k++) if (!(hi && hj && S[xs[k][0]] === xs[k][1])) each({ [xs[i][0]]: xs[i][1], [xs[j][0]]: xs[j][1], [xs[k][0]]: xs[k][1] });
+      }
+    };
+    const climb = (S0) => {
+      const S = Object.assign({}, S0); let v = fast(S);
+      for (let it = 0; it < 40; it++) {
+        let bm = null, bv = v;
+        moves(S, (m) => { const x = fast(Object.assign({}, S, m)); if (x > bv + 1e-9) { bv = x; bm = m; } });
+        if (!bm) break; Object.assign(S, bm); v = bv;
+      }
+      return v > -Infinity ? S : null;
+    };
+    const seen = new Set(), outs = [];
+    for (const S0 of starts) {
+      const S = climb(S0); if (!S) continue;
+      const key = ['아바타5셋'].concat(R.ALL_PARTS).map(pt => S[pt] || '').join('|'); if (seen.has(key)) continue; seen.add(key);
+      outs.push([S, cpOf(S)]);
+    }
+    outs.sort((a, b) => b[1] - a[1]);
+    if (!outs.length || !(outs[0][1] > 0)) return null;
+    let [S, v] = outs[0];
+    for (let pass = 0; pass < 8; pass++) {
+      const list = []; moves(S, (m) => { const x = fast(Object.assign({}, S, m)); if (x > -Infinity) list.push([x, m]); });
+      list.sort((a, b) => b[0] - a[0]);
+      let bm = null, bv = v;
+      for (const [, m] of list.slice(0, 30)) { const x = cpOf(Object.assign({}, S, m)); if (x > bv + 0.5) { bv = x; bm = m; } }
+      if (!bm) break; S = Object.assign({}, S, bm); v = bv;
+    }
+    const cnt = new Map(); for (const pt of R.ALL_PARTS) { const sn = db.displayToSet.get(S[pt]); if (sn) cnt.set(sn, (cnt.get(sn) || 0) + 1); }
+    return Object.assign(candOf(S), { cp: v, setLabels: [...cnt].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).map(([sn, n]) => `${sn}(${n})`) });
+  }
+  function rerank(r, worn, base, ctx) {
     if (!r || !r.cands || !r.cands.length || !APP.cpWith) return r;
     base = base || {};
     r.cpNow = APP.cpWith({});
@@ -592,7 +650,7 @@
       suits = [...new Set(sc.slice(0, 3).map(x => x.n).concat(now))];
     }
     const bNow = prof().bottom || '', bottoms = bottomChoices();
-    for (const c of r.cands) {
+    const evalCand = (c) => {
       const ov = overridesFor(r, worn, c);
       let best = null;
       for (const sName of suits) for (const bName of bottoms) {
@@ -601,12 +659,23 @@
         const v = APP.cpWith(o);
         if (!best || v > best.cp) best = { cp: v, suit: sName, bottom: bName, over: o };
       }
-      Object.assign(c, best);
-    }
+      return Object.assign(c, best);
+    };
+    for (const c of r.cands) evalCand(c);
     let top = r.cands.slice().sort((a, b) => b.cp - a.cp)[0];
     if (!(top.cp > 0)) return r;
-    top.buffs = Object.assign({}, base);
     r.scoreRank = r.cands.indexOf(top) + 1;
+    if (ctx && ctx.scorer) {
+      try {
+        const toS = (c) => Object.assign({ '아바타5셋': c.fiveSetDisplay || '' }, c.partToDisplay);
+        const starts = r.cands.slice().sort((a, b) => b.cp - a.cp).slice(0, 5).map(toS);
+        const W = {}; for (const pt of ['아바타5셋'].concat(R.ALL_PARTS)) if (worn[pt]) W[pt] = worn[pt];
+        starts.push(W);
+        const pol = polish(r, worn, base, ctx, starts, top.suit, top.bottom);
+        if (pol && pol.cp > top.cp + 0.5) { evalCand(pol); if (pol.cp > top.cp + 0.5) { pol.score = top.score; pol.mode = '마무리 탐색'; top = pol; } }
+      } catch (e) { console.error(e); }
+    }
+    top.buffs = Object.assign({}, base);
     r.best = top; r.mode = top.mode || r.mode;
     r.gain = (100 + (top.rScore != null ? top.rScore : top.score)) / (100 + r.cur.score) - 1;
     return r;
@@ -623,7 +692,7 @@
         const owned = st.ownOn ? new Set([...(st.own || []), ...PARTS.map(x => p.worn[x]).filter(Boolean)]) : null;
         const db = R.prepareDb(A.items);
         let base = {}, scorer = null;
-        const go = (o, fixed, fiveFixed) => rerank(R.run({ items: A.items, chars: A.chars, cls: sheetClass(APP.cls()), cur, worn: p.worn, fixed, fiveFixed, opt: Object.assign({ topK: 50, scorer, coolCap: APP.coolCap ? APP.coolCap() : 35 }, st.o, c, o) }), p.worn, base);
+        const go = (o, fixed, fiveFixed) => rerank(R.run({ items: A.items, chars: A.chars, cls: sheetClass(APP.cls()), cur, worn: p.worn, fixed, fiveFixed, opt: Object.assign({ topK: 50, scorer, coolCap: APP.coolCap ? APP.coolCap() : 35 }, st.o, c, o) }), p.worn, base, { fixed, fiveFixed, owned: o.owned || null, scorer });
         const fx = p.fixed || {}, f5 = !!p.fiveFixed, anyFix = f5 || Object.values(fx).some(Boolean);
         // 바깥: 버프·영약 조합(위에서 3개) · 안쪽: 아바타 탐색 + 한벌·하의 악세. 실투력이 가장 높은 것을 고름
         let r = null, keep = null;
@@ -705,6 +774,6 @@
     APP.onRefresh(() => { const k = APP.key(); if (k !== lastKey) { lastKey = k; lastRec = null; result = null; render(); } else if (result) { result = null; renderResult(); } });
     render();
   }
-  window.SilAvatar = { fromShot, recognize, render, curStats, calcOpts, buildScorer, rerank };
+  window.SilAvatar = { fromShot, recognize, render, curStats, calcOpts, buildScorer, rerank, overridesFor };
   wire();
 })();

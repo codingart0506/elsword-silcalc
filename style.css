@@ -40,9 +40,7 @@ kbd { font-family: inherit; font-size: 13px; font-weight: 600; padding: 1px 7px;
   .main .card { padding: 28px 32px; }
   .main .rows { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; }
   .main .grp.wide .rows { grid-template-columns: 1fr; }
-  .main .grp .rows .srow { border-bottom: 1px solid var(--line); }
-  .main .grp .rows .srow.spacer.pc { display: block; border-bottom-color: transparent; }
-  .main .grp { padding-top: 20px; }
+  .main .grp .rows .srow.spacer.pc { display: block; }
   .seg { max-width: 520px; }
   .in-head { margin-bottom: 18px; }
   .hero-value { font-size: 44px; }
@@ -208,11 +206,12 @@ textarea { width: 100%; font-size: 13px; resize: vertical; }
 .seg { display: flex; background: var(--fill); border-radius: 12px; padding: 4px; gap: 2px; margin-bottom: 8px; }
 .tab { flex: 1; font: inherit; font-size: 14px; font-weight: 600; color: var(--mute); background: none; border: 0; padding: 8px 6px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
 .tab[aria-selected="true"] { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-.grp { padding-top: 14px; }
-.gtitle { font-size: 13px; font-weight: 700; color: var(--mute); margin: 0 0 2px; }
+/* 세팅 칸: 줄 사이 선 없이 묶음(파티 버프·펫 …) 사이에만 선 하나 */
+div.grp { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+div.grp:first-of-type { margin-top: 6px; padding-top: 14px; border-top: 0; }
+.gtitle { font-size: 13px; font-weight: 700; color: var(--sub); margin: 0 0 6px; }
 .gnote { font-size: 12px; color: var(--mute); margin: 0 0 4px; white-space: pre-line; line-height: 1.55; }
-.srow { display: flex; align-items: center; gap: 10px; min-height: 48px; border-bottom: 1px solid var(--line); }
-.grp .rows .srow:last-child { border-bottom: 0; }
+.srow { display: flex; align-items: center; gap: 10px; min-height: 46px; }
 .srow .lab { flex: 1; font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 6px; }
 .srow .ctl { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
 /* 보기 글자가 잘리지 않게: 상자는 글자만큼 넓히고(최대 300px), 모자라면 이름 쪽이 두 줄로 */
