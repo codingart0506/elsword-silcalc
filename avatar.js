@@ -5,10 +5,22 @@
   if (!A || !R || !APP) return;
   const $ = (s) => document.querySelector(s);
   const el = APP.el;
-  const PARTS = ['아바타5셋', '무기', '웨폰가드', '서포트유닛', '얼굴(상)', '얼굴(중)', '얼굴(하)', '상의', '하의', '팔', '귀걸이', '목걸이', '반지'];
-  const PART_LABEL = { '아바타5셋': '아바타 5셋', '무기': '무기 아바타' };
+  const PARTS = ['아바타5셋', '한벌', '무기', '웨폰가드', '서포트유닛', '얼굴(상)', '얼굴(중)', '얼굴(하)', '상의', '하의', '팔', '귀걸이', '목걸이', '반지'];
+  const PART_LABEL = { '아바타5셋': '아바타 5셋', '한벌': '한벌 아바타', '무기': '무기 아바타' };
+  // 한벌 아바타: 실투력 시트 '아이템 테이블'의 한벌 아바타 값(공은 물공·마공 같은 값, 나머지는 %). 다른 부위와 따로 입는 칸이라 세트 효과 없이 더하기만
+  const SUITS = {
+    '공존의 축제 예복': { atk: 20, mp: 1, crit: 1 },
+    '엘리오스의 고귀한 결투사 예복': { atk: 40, mos: 1 },
+    '공존의 축제 엘리아노드 의상': { atk: 20, max: 3, mos: 2 },
+    '스포티 메이드': { atk: 30, crit: 3, mos: 2 },
+    '베스마풍 공존의 축제 의상': { atk: 25, max: 3, spd: 3, dot: 2 },
+    '천하일미 덤플링 서번트 의상': { atk: 25, crit: 3, pol: 3 },
+    '동방미식 덤플링 서번트 의상': { atk: 25, max: 3, adapt: 3 },
+    '모험가 성장 부스팅 투명 아바타': { atk: 30, crit: 5, max: 5, spd: 5, mos: 4, limited: true },
+  };
+  const SUIT_CELL = { crit: 'C17', max: 'C19', spd: 'C35', mos: 'C33', pol: 'C20', adapt: 'C14', dot: 'C22' };
   const db = R.prepareDb(A.items);
-  const optionsOf = (part) => part === '아바타5셋' ? db.fiveSetList.map(s => db.fiveSetDisplay.get(s)) : [...(db.partCandidates.get(part) || [])];
+  const optionsOf = (part) => part === '아바타5셋' ? db.fiveSetList.map(s => db.fiveSetDisplay.get(s)) : part === '한벌' ? Object.keys(SUITS) : [...(db.partCandidates.get(part) || [])];
   const short = (d) => { const t = String(d || ''); const m = t.match(/^(.+?) : (.+)$/); return m ? m[2] + ' · ' + m[1] : t; };
 
   // ---------- 저장 (세팅별 착용·고정, 공용 계산 조건·보유 목록) ----------
@@ -65,6 +77,59 @@
       document.head.appendChild(s);
     });
     return loaded[k];
+  }
+  // 방어구(엑사스케일·네블론·테네브로스)·한벌 아바타 아이콘(코보덱스)
+  const loaded2 = {};
+  function loadGear2(k) {
+    if (loaded2[k]) return loaded2[k];
+    loaded2[k] = new Promise((res, rej) => {
+      if (window.SIL_GEAR2 && window.SIL_GEAR2[k]) return res(window.SIL_GEAR2[k]);
+      const s = document.createElement('script'); s.src = `av/g${k}.js?v=${A.ver || 1}2`;
+      s.onload = () => (window.SIL_GEAR2 && window.SIL_GEAR2[k]) ? res(window.SIL_GEAR2[k]) : rej(new Error('아이콘 없음'));
+      s.onerror = () => { loaded2[k] = null; rej(new Error('아이콘을 못 불러왔어요')); };
+      document.head.appendChild(s);
+    });
+    return loaded2[k];
+  }
+  // 방어구 칸은 왼쪽 위 S·자물쇠 표시와 오른쪽 아래 회로 표시를 빼고 비교
+  const MASK_ARM = new Uint8Array(F * F);
+  for (let y = 0; y < F; y++) for (let x = 0; x < F; x++) MASK_ARM[y * F + x] = ((x < 6 && y < 6) || (x >= 10 && y >= 10)) ? 0 : 1;
+  function distM(a, b, M) { let s = 0, n = 0; for (let i = 0; i < F * F; i++) { if (!M[i]) continue; const k = i * 3; s += Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]); n += 3; } return s / n; }
+  // 칸(x, y, 크기 s) 안의 아이콘을 크기·자리를 조금씩 바꿔 가며 견본들과 비교: 이름별 가장 가까운 거리
+  function scan(canvas, x0, y0, s, scales, pool, M) {
+    const byName = {}, R = Math.max(2, Math.round(s * 0.07));
+    for (const k of scales) {
+      const z = Math.round(s * k), off = Math.round((s - z) / 2);
+      for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+        const x = Math.round(x0 + off + dx), y = Math.round(y0 + off + dy);
+        if (x < 0 || y < 0 || x + z > canvas.width || y + z > canvas.height) continue;
+        const f = feat(canvas, x, y, z);
+        for (const e of pool) { const d = distM(f, e.fb, M); if (!(e.n in byName) || d < byName[e.n]) byName[e.n] = d; }
+      }
+    }
+    return Object.entries(byName).map(([n, d]) => ({ n, d })).sort((a, b) => a.d - b.d);
+  }
+  async function recognizeArmor(canvas, grid, k) {
+    const lib = await loadGear2(k);
+    const P = grid.pitch, left = grid.cells.filter(c => c.slot[0] === '좌');
+    if (!left.length) return null;
+    const ax = left[0].x, ay = Math.min(...left.map(c => c.y)), S = 1.2381 * P, top = ay - 1.9762 * P, avx = ax - 13.2857 * P;
+    const armor = {};
+    ['상의', '하의', '장갑', '신발'].forEach((part, i) => {
+      const pool = Object.entries(lib.a || {}).filter(([, v]) => v[i]).map(([n, v]) => ({ n, fb: b64(v[i]) }));
+      if (!pool.length) return;
+      const r = scan(canvas, avx + 1.2857 * P, top + (i + 2) * 1.3095 * P, S, [1.0, 1.06, 1.12], pool, MASK_ARM);
+      const best = r[0], gap = r[1] ? r[1].d - best.d : 99;
+      armor[part] = { set: best.n, d: Math.round(best.d * 10) / 10, gap: Math.round(gap * 10) / 10, ok: best.d <= 18 && gap >= 4 };
+    });
+    let suit = null;
+    const sp = (lib.s || []).map(([n, f]) => ({ n, fb: b64(f) }));
+    if (sp.length) {
+      const r = scan(canvas, avx, top, S, [0.94, 1.0, 1.06, 1.12], sp, MASK);
+      const best = r[0], gap = r[1] ? r[1].d - best.d : 99;
+      suit = { name: best.n, d: Math.round(best.d * 10) / 10, gap: Math.round(gap * 10) / 10, ok: (best.d <= 21 && gap >= 4) || (best.d <= 25 && gap >= 8) };
+    }
+    return { armor, suit };
   }
   // 전직 → 캐릭터 (캐릭터DB 순서: 캐릭터마다 4전직, 루/시엘은 9·10)
   const nsp = (t) => String(t || '').replace(/\s+/g, '');
@@ -148,12 +213,23 @@
     // 5셋: 다섯 부위 중 셋 이상 같은 세트면 그 세트
     const top5 = Object.entries(pieces).sort((a, b) => b[1] - a[1])[0];
     if (top5 && top5[1] >= 3) found['아바타5셋'] = { d: top5[0], n: top5[0], known: optionsOf('아바타5셋').includes(top5[0]), pieces: top5[1] };
-    return { ok: true, char: A.charNames[k], found, detail };
+    // 방어구 종류(계산기 장비 칸)·한벌 아바타
+    let armor = null;
+    try {
+      const g2 = await recognizeArmor(canvas, gear.grid, k);
+      if (g2) {
+        armor = g2.armor;
+        if (g2.suit && g2.suit.ok) found['한벌'] = { d: g2.suit.name, n: g2.suit.name, known: true };
+        detail.push({ part: '한벌', name: g2.suit ? g2.suit.name : '', d: g2.suit ? g2.suit.d : null, gap: g2.suit ? g2.suit.gap : null, ok: !!(g2.suit && g2.suit.ok) });
+      }
+    } catch (e) { console.warn(e); }
+    return { ok: true, char: A.charNames[k], found, detail, armor };
   }
   // 앱에서 스크린샷을 읽은 뒤 부름
   async function fromShot(canvas, gear) {
     const r = await recognize(canvas, gear);
     if (!r.ok) { lastRec = r; render(); return r; }
+    if (gear && r.armor) gear.armor = r.armor; // 계산기 인식 결과에 방어구 종류 줄로 보여 줌
     const p = prof();
     for (const part of PARTS) {
       const f = r.found[part];
@@ -248,13 +324,13 @@
     };
     const on = el('input', { type: 'checkbox' }); on.checked = !!st.ownOn;
     // 처음 켜면 전부 가진 것으로 체크해 두고, 없는 것만 끄게 함
-    on.onchange = () => { st.ownOn = on.checked; if (on.checked && !(st.own && st.own.length)) st.own = sets.flatMap(itemsOf); save(); result = null; renderOwn(); renderResult(); };
+    on.onchange = () => { st.ownOn = on.checked; if (on.checked && !(st.own && st.own.length)) st.own = sets.flatMap(itemsOf).concat(Object.keys(SUITS).filter(n => !SUITS[n].limited)); save(); result = null; renderOwn(); renderResult(); };
     box.append(el('label', { class: 'av-fix av-own-on' }, on, el('span', { text: '가진 것만으로 추천 (없는 아이템은 체크를 꺼 주세요)' })));
     if (!st.ownOn) return;
     const own = new Set(st.own || []);
     const p = prof(); for (const part of PARTS) if (p.worn[part]) own.add(p.worn[part]);
     const setOwn = (list) => { st.own = [...new Set(list)]; save(); result = null; renderOwn(); renderResult(); };
-    const all = sets.flatMap(itemsOf);
+    const all = sets.flatMap(itemsOf).concat(Object.keys(SUITS));
     box.append(el('div', { class: 'av-own-acts' },
       el('button', { type: 'button', class: 'txt sm', text: '전체 선택', onclick: () => setOwn(all) }),
       el('button', { type: 'button', class: 'txt sm mute', text: '전체 취소', onclick: () => setOwn([]) }),
@@ -271,6 +347,17 @@
       name.onclick = () => { const cur = new Set(st.own || []); for (const d of items) { if (allOn) cur.delete(d); else cur.add(d); } setOwn([...cur]); };
       box.append(el('div', { class: 'av-own-set' }, name, el('div', { class: 'av-chips' }, ...chips)));
     }
+    // 한벌 아바타(세트 없이 한 칸)
+    const sn = Object.keys(SUITS);
+    const sChips = sn.map(d => {
+      const b = el('button', { type: 'button', class: 'av-chip' + (own.has(d) ? ' on' : ''), text: d + (SUITS[d].limited ? ' (기간제)' : ''), 'aria-pressed': own.has(d) ? 'true' : 'false' });
+      b.onclick = () => { const cur = new Set(st.own || []); if (cur.has(d)) cur.delete(d); else cur.add(d); setOwn([...cur]); };
+      return b;
+    });
+    const sAll = sn.every(d => own.has(d));
+    const sName = el('button', { type: 'button', class: 'av-own-name', text: '한벌 아바타', title: sAll ? '모두 빼기' : '모두 고르기' });
+    sName.onclick = () => { const cur = new Set(st.own || []); for (const d of sn) { if (sAll) cur.delete(d); else cur.add(d); } setOwn([...cur]); };
+    box.append(el('div', { class: 'av-own-set' }, sName, el('div', { class: 'av-chips' }, ...sChips)));
   }
   function renderResult() {
     const box = $('#avResult'); if (!box) return; box.textContent = '';
@@ -292,7 +379,7 @@
       box.append(el('p', { class: 'av-gain' }, g > 0.0005 ? el('span', null, '추천대로 바꾸면 실뎀 ', el('b', { class: 'up', text: '+' + g.toFixed(2) + '%' })) : el('span', { text: '지금 세팅이 이미 가장 좋아요' })));
     }
     const tb = el('tbody');
-    const rec = Object.assign({ '아바타5셋': r.best.fiveSetDisplay }, r.best.partToDisplay);
+    const rec = Object.assign({ '아바타5셋': r.best.fiveSetDisplay, '한벌': r.best.suit != null ? r.best.suit : (p.worn['한벌'] || '') }, r.best.partToDisplay);
     for (const part of PARTS) {
       const now = p.worn[part] || '', want = rec[part] || '';
       const same = now === want;
@@ -351,12 +438,40 @@
       return L * 1000;
     };
   }
+  // 한벌 아바타를 from → to로 바꿨을 때 계산기 칸 변화(o에 더함). 공격력은 물마퍼까지 곱해진 창 값이라 그만큼 키움
+  function suitOver(o, from, to) {
+    const a = SUITS[from] || {}, b = SUITS[to] || {};
+    if (from === to) return o;
+    const inp = APP.inputs(), cs = curStats();
+    const val = (c) => (c in o ? Number(o[c]) : Number(inp[c])) || 0;
+    for (const [k, c] of Object.entries(SUIT_CELL)) { const d = (b[k] || 0) - (a[k] || 0); if (d) o[c] = Math.round((val(c) + d / 100) * 1e6) / 1e6; }
+    const dmp = (b.mp || 0) - (a.mp || 0), datk = (b.atk || 0) - (a.atk || 0);
+    if (dmp || datk) {
+      const c11 = val('C11') || num('C11'), c12 = val('C12') || num('C12'), mp = cs['물마퍼'];
+      const k = (100 + mp + dmp) / (100 + mp), add = datk * (1 + (mp + dmp) / 100);
+      o.C11 = Math.round(c11 * k + add); o.C12 = Math.round(c12 * k + add * (c11 > 0 ? c12 / c11 : 1));
+    }
+    return o;
+  }
+  // 추천에 넣을 한벌 아바타: 고정이면 지금 것만, 보유 필터를 켜면 가진 것만. 기간제(성장 부스팅 투명 아바타)는 입고 있거나 보유로 고른 때만
+  function suitChoices(worn) {
+    const p = prof(), now = worn['한벌'] || '';
+    if (p.fixed['한벌']) return [now];
+    const own = st.ownOn ? new Set(st.own || []) : null;
+    const list = Object.keys(SUITS).filter(n => n === now || ((!own || own.has(n)) && (!SUITS[n].limited || (own && own.has(n)))));
+    return list.length ? list : [now];
+  }
   function rerank(r, worn) {
     if (!r || !r.cands || !r.cands.length || !APP.cpWith) return r;
     r.cpNow = APP.cpWith({});
-    for (const c of r.cands) c.cp = APP.cpWith(overridesFor(r, worn, c));
-    const top = r.cands.slice().sort((a, b) => b.cp - a.cp)[0];
+    // 한벌 아바타는 다른 부위와 따로라서 지금 세팅 기준으로 가장 좋은 것을 먼저 고르고, 마지막 1등에서 다시 확인
+    const now = worn['한벌'] || '', suits = suitChoices(worn);
+    let suit = now, sCp = -Infinity;
+    for (const n of suits) { const v = APP.cpWith(suitOver({}, now, n)); if (v > sCp) { sCp = v; suit = n; } }
+    for (const c of r.cands) { c.suit = suit; c.cp = APP.cpWith(suitOver(overridesFor(r, worn, c), now, suit)); }
+    let top = r.cands.slice().sort((a, b) => b.cp - a.cp)[0];
     if (!(top.cp > 0)) return r;
+    for (const n of suits) { if (n === top.suit) continue; const v = APP.cpWith(suitOver(overridesFor(r, worn, top), now, n)); if (v > top.cp) { top.cp = v; top.suit = n; } }
     r.scoreRank = r.cands.indexOf(top) + 1;
     r.best = top; r.mode = top.mode || r.mode;
     r.gain = (100 + (top.rScore != null ? top.rScore : top.score)) / (100 + r.cur.score) - 1;

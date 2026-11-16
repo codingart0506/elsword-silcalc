@@ -347,6 +347,7 @@
     if (rkBusy) return; rkBusy = true;
     const list = $('#rankList'), empty = $('#rankEmpty'), pager = $('#rankPager');
     if (reset) { rkPage = 0; list.innerHTML = ''; pager.hidden = true; empty.hidden = false; empty.textContent = '불러오는 중이에요'; }
+    else if (!list.children.length) { empty.hidden = false; empty.textContent = '불러오는 중이에요'; }
     let more = false;
     try {
       const c = await sb();
@@ -354,6 +355,7 @@
         const { data: ok, error: ve } = await c.rpc('can_view');
         if (ve) throw ve;
         $('#rankFilters').hidden = !ok;
+        if (ok) loadMine(c); else { mine = []; drawMine(); }
         if (!ok) {
           const wait = Object.values(A.ranks()).some(r => r && r.token && r.status === 'pending');
           const gone = Object.values(A.ranks()).find(r => r && (r.status === 'hidden' || r.status === 'removed'));
@@ -373,6 +375,7 @@
       more = data.length > PAGE;
       list.innerHTML = '';
       renderRows(data.slice(0, PAGE), rkPage * PAGE);
+      if (!reset) drawMine();
       empty.hidden = data.length > 0;
       if (!data.length) empty.textContent = rkCls ? `${rkCls} 랭킹에 아직 아무도 없어요` : '아직 올라온 캐릭터가 없어요. 계산기에서 "랭킹에 올리기"로 첫 번째가 되어 보세요';
     } catch (e) {
@@ -393,10 +396,11 @@
     return box;
   }
   function renderRows(rows, start) {
-    const mine = new Set(Object.values(A.ranks()).filter(r => r && r.status === 'approved').map(r => String(r.nickname).toLowerCase()));
+    const me = new Set(Object.values(A.ranks()).filter(r => r && r.status === 'approved').map(r => String(r.nickname).toLowerCase()));
+    const myIds = new Set(mine.map(m => m.id));
     const list = $('#rankList'), mark = textMark();
     rows.forEach((r, i) => {
-      const li = el('li', { class: mine.has(r.nickname.toLowerCase()) ? 'me' : '' });
+      const li = el('li', { class: myIds.has(r.id) || me.has(r.nickname.toLowerCase()) ? 'me' : '', 'data-id': r.id });
       li.append(
         el('button', { type: 'button', class: 'rk-row', 'aria-expanded': 'false', onclick: (e) => toggleDetail(li, r, e.currentTarget) },
           rankNo(start + i + 1),
@@ -463,40 +467,196 @@
     for (let i = 0; i < 24; i++) w.append(el('span', { text: t }));
     return w;
   }
-  // 눈에 안 보이는 워터마크: 보는 사람 닉네임·시각을 사진 곳곳(자리·기울기 무작위)에 픽셀로 박음
-  // 파랑만 조금 바꾸고 테두리를 뭉개서 눈으로는 안 보이고, 관리자 화면 '워터마크 찾기'의 '색 차이로 찾기'에 캡처 원본을 넣으면 글자가 드러남
-  async function bakeShot(url) {
+  // 눈에 안 보이는 워터마크(사진): 보는 사람마다 다른 무늬를 사진 전체에 깔아 둠.
+  // 무늬는 '보는 사람 닉네임 + 사진 경로'로 정해지는 ±1 격자(칸 크기 B)를 부드럽게 이은 것이고, 파랑만 아주 조금(어두운 곳 1.5칸, 밝은 곳 5칸) 바꿈.
+  // 휴대폰으로 다시 찍거나 줄이고 다시 저장해도 큰 무늬라서 남고, 관리자 화면에서 원본과 맞대어 보면 누구 무늬인지 가려낼 수 있음
+  const mulberry = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const fnv32 = (s) => { let h = 0x811c9dc5; for (const ch of String(s)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; };
+  const WM_B = (w) => Math.max(8, Math.round(w / 120));
+  function wmGrid(key, w, h) {
+    const B = WM_B(w), gw = Math.ceil(w / B) + 2, gh = Math.ceil(h / B) + 2, r = mulberry(fnv32('silwm|' + key)), v = new Int8Array(gw * gh);
+    for (let i = 0; i < v.length; i++) v[i] = r() < 0.5 ? -1 : 1;
+    return { B, gw, gh, v };
+  }
+  const wmAmp = (R, G, Bl) => 1 + 2.5 * ((R * 0.299 + G * 0.587 + Bl * 0.114) / 255);
+  function bakeCanvas(cv, key) {
+    const w = cv.width, h = cv.height, g = cv.getContext('2d', { willReadFrequently: true });
+    const img = g.getImageData(0, 0, w, h), d = img.data, { B, gw, v } = wmGrid(key, w, h);
+    for (let y = 0; y < h; y++) {
+      const fy = y / B, gy = Math.floor(fy), ty = fy - gy;
+      for (let x = 0; x < w; x++) {
+        const fx = x / B, gx = Math.floor(fx), tx = fx - gx, k = gy * gw + gx;
+        const p = (v[k] * (1 - tx) + v[k + 1] * tx) * (1 - ty) + (v[k + gw] * (1 - tx) + v[k + gw + 1] * tx) * ty;
+        const i = (y * w + x) * 4, a = wmAmp(d[i], d[i + 1], d[i + 2]);
+        d[i + 2] = Math.max(0, Math.min(255, Math.round(d[i + 2] + a * p)));
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return cv;
+  }
+  async function bakeShot(url, key) {
     try {
       const res = await fetch(url); if (!res.ok) return null;
       const bmp = await createImageBitmap(await res.blob());
-      const w = bmp.width, h = bmp.height;
-      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-      const g = cv.getContext('2d', { willReadFrequently: true });
-      g.drawImage(bmp, 0, 0);
-      const m = document.createElement('canvas'); m.width = w; m.height = h;
-      const mg = m.getContext('2d', { willReadFrequently: true });
-      const [l1, l2] = stampLines(), fs = Math.max(16, Math.round(w / 34));
-      mg.font = `700 ${fs}px sans-serif`; mg.fillStyle = '#fff'; mg.textAlign = 'center'; mg.textBaseline = 'middle';
-      try { mg.filter = `blur(${Math.max(0.6, fs / 40).toFixed(1)}px)`; } catch (e) { /* 안 되는 브라우저는 그냥 */ }
-      const tw = Math.max(mg.measureText(l1).width, mg.measureText(l2).width);
-      const cols = Math.max(2, Math.round(w / (tw * 1.25))), rows = Math.max(4, Math.round(h / (fs * 3.4)));
-      for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
-        const x = (q + 0.3 + Math.random() * 0.4) * w / cols, y = (r + 0.2 + Math.random() * 0.6) * h / rows;
-        mg.save(); mg.translate(x, y); mg.rotate((-30 + Math.random() * 20) * Math.PI / 180); mg.fillText(l1, 0, -fs * 0.58); mg.fillText(l2, 0, fs * 0.58); mg.restore();
-      }
-      const md = mg.getImageData(0, 0, w, h).data, img = g.getImageData(0, 0, w, h), d = img.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const a = md[i + 3]; if (!a) continue;
-        // 밝기를 조금(압축돼도 남게) + 파랑을 조금 더. 어두운 곳은 작은 변화도 눈에 띄어서 덜, 밝은 곳은 조금 더
-        const k = a / 255, lum = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
-        const L = 0, B = (2 + 3 * lum) * k; // 파랑만 2~5칸(밝기로는 1칸도 안 됨)
-        d[i] += d[i] >= L ? -L : L; d[i + 1] += d[i + 1] >= L ? -L : L; d[i + 2] += d[i + 2] >= B ? -B : B;
-      }
-      g.putImageData(img, 0, 0);
+      const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height;
+      cv.getContext('2d', { willReadFrequently: true }).drawImage(bmp, 0, 0);
+      bakeCanvas(cv, key);
       const out = await new Promise(r => cv.toBlob(r, 'image/png'));
       return out ? URL.createObjectURL(out) : null;
     } catch (e) { console.warn(e); return null; }
   }
+
+  // ---------- 퍼진 캡처에서 무늬 주인 찾기 ----------
+  // 1) 캡처 안에서 원본 사진이 어디에 얼마 크기로 들어 있는지 찾음(위상 상관, 크기를 바꿔 가며) → 2) 그 자리의 원본을 빼서 남은 파랑 차이만 모음
+  // 3) 후보(랭킹 캐릭터 닉네임 + 관리자)마다 무늬를 만들어 남은 차이와 얼마나 같은지 점수(z)로 비교. 진짜 본 사람은 z가 다른 사람보다 훨씬 큼
+  function fft1(re, im, n, inv) {
+    for (let i = 1, j = 0; i < n; i++) { let b = n >> 1; for (; j & b; b >>= 1) j ^= b; j ^= b; if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = (inv ? 2 : -2) * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+      for (let i = 0; i < n; i += len) {
+        let cr = 1, ci = 0;
+        for (let k = 0; k < len / 2; k++) {
+          const a = i + k, b = a + len / 2, xr = re[b] * cr - im[b] * ci, xi = re[b] * ci + im[b] * cr;
+          re[b] = re[a] - xr; im[b] = im[a] - xi; re[a] += xr; im[a] += xi;
+          const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+        }
+      }
+    }
+  }
+  function fft2(re, im, W, H, inv) {
+    const r = new Float64Array(Math.max(W, H)), i2 = new Float64Array(Math.max(W, H));
+    for (let y = 0; y < H; y++) { const o = y * W; fft1(re.subarray(o, o + W), im.subarray(o, o + W), W, inv); }
+    for (let x = 0; x < W; x++) {
+      for (let y = 0; y < H; y++) { r[y] = re[y * W + x]; i2[y] = im[y * W + x]; }
+      fft1(r, i2, H, inv);
+      for (let y = 0; y < H; y++) { re[y * W + x] = r[y]; im[y * W + x] = i2[y]; }
+    }
+  }
+  const pow2 = (n) => { let p = 1; while (p < n) p <<= 1; return p; };
+  // 캔버스를 w×h로 줄여 밝기 기울기 크기(테두리 강조)로
+  function gradOf(src, w, h) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d', { willReadFrequently: true }); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data, L = new Float32Array(w * h), G = new Float32Array(w * h);
+    for (let j = 0; j < w * h; j++) L[j] = d[j * 4] * 0.3 + d[j * 4 + 1] * 0.59 + d[j * 4 + 2] * 0.11;
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { const j = y * w + x; G[j] = Math.abs(L[j + 1] - L[j - 1]) + Math.abs(L[j + w] - L[j - w]); }
+    return G;
+  }
+  // 캡처(leak) 안에서 원본(orig)이 놓인 자리: { s(원본→캡처 배율), tx, ty, q(맞는 정도) }
+  async function locate(orig, leak, tick) {
+    const M0 = 256, f = M0 / Math.max(leak.width, leak.height);
+    const lw = Math.max(8, Math.round(leak.width * f)), lh = Math.max(8, Math.round(leak.height * f));
+    const GL = gradOf(leak, lw, lh);
+    let best = null;
+    const ws = []; for (let wpx = 0.12 * Math.max(lw, lh); wpx <= 1.7 * Math.max(lw, lh); wpx *= 1.035) ws.push(wpx);
+    for (let n = 0; n < ws.length; n++) {
+      const ow = Math.max(6, Math.round(ws[n] * orig.width / Math.max(orig.width, orig.height))), oh = Math.max(6, Math.round(ws[n] * orig.height / Math.max(orig.width, orig.height)));
+      const W = pow2(lw + ow), H = pow2(lh + oh);
+      if (W * H > (1 << 19)) continue;
+      const GO = gradOf(orig, ow, oh);
+      const ar = new Float64Array(W * H), ai = new Float64Array(W * H), br = new Float64Array(W * H), bi = new Float64Array(W * H);
+      for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) ar[y * W + x] = GL[y * lw + x];
+      for (let y = 0; y < oh; y++) for (let x = 0; x < ow; x++) br[y * W + x] = GO[y * ow + x];
+      fft2(ar, ai, W, H, false); fft2(br, bi, W, H, false);
+      for (let k = 0; k < W * H; k++) { const r = ar[k] * br[k] + ai[k] * bi[k], im = ai[k] * br[k] - ar[k] * bi[k], m = Math.hypot(r, im) + 1e-9; ar[k] = r / m; ai[k] = im / m; }
+      fft2(ar, ai, W, H, true);
+      let pk = -Infinity, px = 0, py = 0;
+      for (let k = 0; k < W * H; k++) if (ar[k] > pk) { pk = ar[k]; px = k % W; py = (k / W) | 0; }
+      pk /= W * H;
+      if (px > W / 2) px -= W; if (py > H / 2) py -= H;
+      if (!best || pk > best.pk) best = { pk, s: ow / orig.width / f, tx: px / f, ty: py / f };
+      if (tick && n % 6 === 0) { tick(n / ws.length); await new Promise(r => setTimeout(r, 0)); }
+    }
+    if (!best) return null;
+    // 크게 놓고 다듬기: 배율 ±3%, 자리 ±3칸(캡처 해상도 절반)
+    const k2 = Math.min(1, 900 / Math.max(leak.width, leak.height)), lw2 = Math.round(leak.width * k2), lh2 = Math.round(leak.height * k2);
+    const G2 = gradOf(leak, lw2, lh2);
+    const goOf = (s) => { const ow = Math.round(orig.width * s * k2), oh = Math.round(orig.height * s * k2); return ow < 8 || oh < 8 ? null : { ow, oh, G: gradOf(orig, ow, oh) }; };
+    const ncc = (go, tx, ty) => {
+      if (!go) return -1;
+      const { ow, oh, G: GO } = go, ox = Math.round(tx * k2), oy = Math.round(ty * k2);
+      let sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0, n = 0;
+      for (let y = 2; y < oh - 2; y += 2) { const yy = y + oy; if (yy < 1 || yy >= lh2 - 1) continue; for (let x = 2; x < ow - 2; x += 2) { const xx = x + ox; if (xx < 1 || xx >= lw2 - 1) continue; const a = GO[y * ow + x], b = G2[yy * lw2 + xx]; sa += a; sb += b; saa += a * a; sbb += b * b; sab += a * b; n++; } }
+      if (n < 200) return -1;
+      const cv = sab / n - sa / n * sb / n, va = saa / n - (sa / n) ** 2, vb = sbb / n - (sb / n) ** 2;
+      return cv / Math.sqrt(va * vb + 1e-9);
+    };
+    let cur = { s: best.s, tx: best.tx, ty: best.ty, q: ncc(goOf(best.s), best.tx, best.ty) };
+    for (const step of [0.012, 0.004]) {
+      for (let it = 0; it < 6; it++) {
+        let moved = false; const base = cur;
+        for (const ds of [-step, 0, step]) {
+          const s = base.s * (1 + ds), go = goOf(s);
+          for (const dy of [-2, -1, 0, 1, 2]) for (const dx of [-2, -1, 0, 1, 2]) {
+            if (!ds && !dx && !dy) continue;
+            const tx = base.tx + dx / k2, ty = base.ty + dy / k2, q = ncc(go, tx, ty);
+            if (q > cur.q + 1e-4) { cur = { s, tx, ty, q }; moved = true; }
+          }
+        }
+        if (!moved) break;
+        if (tick) { await new Promise(r => setTimeout(r, 0)); }
+      }
+    }
+    return cur;
+  }
+  // 자리를 찾은 뒤: 캡처 해상도에서 원본을 겹쳐 빼고, 남은 파랑 차이를 무늬 격자 칸마다 모음
+  function residualGrid(orig, leak, at) {
+    const W = leak.width, H = leak.height, s = at.s;
+    const ow = Math.round(orig.width * s), oh = Math.round(orig.height * s);
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d', { willReadFrequently: true }); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(orig, Math.round(at.tx), Math.round(at.ty), ow, oh);
+    const O = g.getImageData(0, 0, W, H).data, Ld = leak.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+    const x0 = Math.max(1, Math.round(at.tx)), y0 = Math.max(1, Math.round(at.ty)), x1 = Math.min(W - 1, Math.round(at.tx) + ow - 1), y1 = Math.min(H - 1, Math.round(at.ty) + oh - 1);
+    // 캡처의 색이 조금 다를 수 있어 파랑을 원본 파랑의 1차식으로 맞춤(테두리처럼 크게 바뀌는 곳은 빼고)
+    const lum = (A, i) => A[i] * 0.3 + A[i + 1] * 0.59 + A[i + 2] * 0.11;
+    const gradAt = (i) => Math.abs(lum(O, i + 4) - lum(O, i - 4)) + Math.abs(lum(O, i + W * 4) - lum(O, i - W * 4));
+    let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) { const i = (y * W + x) * 4; if (gradAt(i) > 12) continue; const a = O[i + 2], b = Ld[i + 2]; n++; sx += a; sy += b; sxx += a * a; sxy += a * b; }
+    if (n < 500) return null;
+    const al = (n * sxy - sx * sy) / Math.max(1e-6, n * sxx - sx * sx), be = (sy - al * sx) / n;
+    const { B, gw, gh } = wmGrid('', orig.width, orig.height);
+    const Rg = new Float64Array(gw * gh), Ng = new Float64Array(gw * gh);
+    const vw = x1 - x0, vh = y1 - y0, RM = new Float32Array(vw * vh);
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const i = (y * W + x) * 4, gr = gradAt(i);
+      const wt = 1 / (1 + (gr / 6) ** 2); if (wt < 0.05) continue;
+      let r = Ld[i + 2] - (al * O[i + 2] + be); if (r > 12) r = 12; else if (r < -12) r = -12;
+      RM[(y - y0) * vw + (x - x0)] = r * wt;
+      const ox = (x - at.tx) / s / B, oy = (y - at.ty) / s / B, gx = Math.floor(ox), gy = Math.floor(oy), tx = ox - gx, ty = oy - gy;
+      if (gx < 0 || gy < 0 || gx >= gw - 1 || gy >= gh - 1) continue;
+      const a = wmAmp(O[i], O[i + 1], O[i + 2]) * al;
+      const k = gy * gw + gx;
+      for (const [kk, hw] of [[k, (1 - tx) * (1 - ty)], [k + 1, tx * (1 - ty)], [k + gw, (1 - tx) * ty], [k + gw + 1, tx * ty]]) { Rg[kk] += wt * r * a * hw; Ng[kk] += wt * (a * hw) ** 2; }
+    }
+    // 남은 차이를 눈으로 보는 그림(살짝 뭉개서 크게 키움): 예전 방식(글자) 워터마크는 여기에 글자로 드러남
+    const view = document.createElement('canvas'); view.width = vw; view.height = vh;
+    const vg = view.getContext('2d'), vd = vg.createImageData(vw, vh), q = vd.data, rr = Math.max(1, Math.round(Math.max(vw, vh) / 500));
+    const S2 = new Float64Array((vw + 1) * (vh + 1));
+    for (let y = 0; y < vh; y++) { let row = 0; for (let x = 0; x < vw; x++) { row += RM[y * vw + x]; S2[(y + 1) * (vw + 1) + x + 1] = S2[y * (vw + 1) + x + 1] + row; } }
+    for (let y = 0; y < vh; y++) for (let x = 0; x < vw; x++) {
+      const ya = Math.max(0, y - rr), yb = Math.min(vh, y + rr + 1), xa = Math.max(0, x - rr), xb = Math.min(vw, x + rr + 1);
+      const m = (S2[yb * (vw + 1) + xb] - S2[ya * (vw + 1) + xb] - S2[yb * (vw + 1) + xa] + S2[ya * (vw + 1) + xa]) / ((yb - ya) * (xb - xa));
+      const k = (y * vw + x) * 4; q[k] = q[k + 1] = q[k + 2] = Math.max(0, Math.min(255, 128 + m * 40)); q[k + 3] = 255;
+    }
+    vg.putImageData(vd, 0, 0);
+    return { Rg, Ng, gw, gh, B, view };
+  }
+  // 후보마다 점수: 남은 차이와 그 사람 무늬의 상관(z). 무늬가 없는 사람은 0 근처
+  function scoreNames(res, origW, origH, path, names) {
+    const { Rg, Ng } = res, idx = [];
+    let sN = 0, sNN = 0, sRR = 0;
+    for (let k = 0; k < Ng.length; k++) if (Ng[k] > 0) { idx.push(k); sN += Ng[k]; sNN += Ng[k] * Ng[k]; sRR += Rg[k] * Rg[k] / Ng[k]; }
+    const neff = sN * sN / Math.max(1e-9, sNN);
+    const out = names.map(n => {
+      const v = wmGrid(n + '|' + path, origW, origH).v; let sv = 0;
+      for (const k of idx) sv += Rg[k] * v[k];
+      const rho = sv / Math.sqrt(Math.max(1e-9, sRR * sN));
+      return { name: n, z: rho * Math.sqrt(neff) };
+    });
+    return out.sort((a, b) => b.z - a.z);
+  }
+  window.SilWM = { bakeCanvas, locate, residualGrid, scoreNames, wmGrid };
   // 퍼진 캡처에서 워터마크 드러내기: 주변 평균과의 아주 작은 차이만 남겨 크게 키움(색 차이·밝기 차이 두 가지)
   function revealMark(src, mode) {
     const w = src.width, h = src.height, d = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
@@ -533,8 +693,59 @@
     og.putImageData(od, 0, 0);
     return out;
   }
-  function wmFinder(c) {
-    const view = el('div', { class: 'wm-out' });
+  function wmFinder(c, ps) {
+    ps = ps || [];
+    // 1) 퍼진 사진: 어느 캐릭터 사진인지 고르면, 원본과 맞대어 누구 무늬인지 찾음
+    const who = el('input', { type: 'search', class: 'adm-search', placeholder: '퍼진 사진 속 캐릭터 닉네임(랭킹 캐릭터)', list: 'wmChars', autocomplete: 'off' });
+    const dl = el('datalist', { id: 'wmChars' }); for (const p of ps) dl.append(el('option', { value: p.nickname }));
+    const out = el('div', { class: 'wm-out wm-result' });
+    const old = el('details', { class: 'wm-old' }, el('summary', { text: '예전 방식으로 보기(랭킹 목록 캡처, 예전 글자 무늬)' }));
+    let leakCv = null, busy = false;
+    const z1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
+    const run = async () => {
+      if (!leakCv || busy) return;
+      const nm = who.value.trim();
+      const p = ps.find(x => x.nickname === nm) || ps.find(x => x.nickname.toLowerCase() === nm.toLowerCase());
+      out.textContent = '';
+      if (!nm) { out.append(el('p', { class: 'rank-note', text: '위 칸에 사진 속 캐릭터 닉네임을 고르면, 그 캐릭터 원본 사진과 맞대어 누가 본 화면인지 찾아요.' })); return; }
+      if (!p) { out.append(el('p', { class: 'adm-flag', text: '랭킹 캐릭터 목록에서 골라 주세요.' })); return; }
+      busy = true;
+      const note = el('p', { class: 'rank-note', text: '원본 사진을 불러오는 중이에요' }); out.append(note);
+      try {
+        const { data: hs } = await c.from('cp_history').select('shot_path,pub_path,created_at').eq('player_id', p.id).order('created_at', { ascending: false }).limit(20);
+        const paths = [...new Set([p.shot_path, ...(hs || []).map(h => h.pub_path || h.shot_path)].filter(Boolean))].slice(0, 6);
+        let best = null, n = 0;
+        for (const path of paths) {
+          n++;
+          const u = await signed(c, path); if (!u) continue;
+          const o = await blobToCanvas(await (await fetch(u)).blob());
+          const at = await locate(o, leakCv, (f) => { note.textContent = `사진 ${n}/${paths.length}장째를 맞대는 중이에요 ${Math.round(f * 100)}%`; });
+          if (at && (!best || at.q > best.at.q)) best = { path, o, at };
+        }
+        if (!best || best.at.q < 0.3) { note.textContent = `퍼진 사진 안에서 ${p.nickname} 랭킹 사진을 못 찾았어요. 다른 캐릭터 사진이거나, 너무 작게 잘렸을 수 있어요.`; busy = false; return; }
+        note.textContent = '누구 무늬인지 비교하는 중이에요';
+        await new Promise(r => setTimeout(r, 0));
+        const res = residualGrid(best.o, leakCv, best.at);
+        if (!res) { note.textContent = '사진이 너무 작게 들어 있어서 비교할 수 없어요.'; busy = false; return; }
+        const { data: vl } = await c.from('view_log').select('viewer_nick,at').eq('kind', 'detail').eq('target', p.id).order('at', { ascending: false }).limit(1000);
+        const names = [...new Set(['관리자', ...ps.map(x => x.nickname), ...(vl || []).map(v => v.viewer_nick).filter(Boolean)])];
+        const sc = scoreNames(res, best.o.width, best.o.height, best.path, names);
+        const top = sc[0], second = sc[1] ? sc[1].z : 0, gap = top.z - second;
+        const sure = top.z >= 6 && gap >= 3, likely = !sure && top.z >= 4.5 && gap >= 2;
+        out.textContent = '';
+        out.append(el('p', { class: 'wm-verdict' + (sure ? ' sure' : likely ? ' likely' : '') },
+          sure ? `${top.name} 님이 본 화면이에요` : likely ? `${top.name} 님일 가능성이 높아요` : '누가 본 화면인지 가려내지 못했어요',
+          el('small', { text: sure || likely ? ` (점수 ${z1(top.z)}, 다음 후보 ${z1(second)})` : ' (예전 방식 무늬였거나 사진이 너무 많이 줄었을 수 있어요. 아래 남은 차이 그림에 글자가 보이면 그 글자가 본 사람이에요)' })));
+        const seen = (vl || []).filter(v => v.viewer_nick === top.name).slice(0, 5).map(v => new Date(v.at).toLocaleString('ko-KR'));
+        if ((sure || likely) && seen.length) out.append(el('p', { class: 'rank-note', text: `${top.name} 님이 ${p.nickname} 상세를 본 기록: ${seen.join(', ')}${(vl || []).filter(v => v.viewer_nick === top.name).length > 5 ? ' 외' : ''}` }));
+        out.append(el('ol', { class: 'wm-cands' }, ...sc.slice(0, 5).map(x => el('li', { text: `${x.name}  ${z1(x.z)}` }))));
+        out.append(el('p', { class: 'rank-note', text: `후보 ${names.length}명 중 점수가 높은 순서예요. 무늬가 없는 사람은 0 근처(대개 3 아래)이고, 본 사람은 6을 훌쩍 넘어요. 맞대기 정도 ${Math.round(best.at.q * 100)}%` }));
+        const fig = el('figure', { class: 'wm-res' }, res.view, el('figcaption', { text: '원본을 빼고 남은 차이(밝게 키움)' }));
+        out.append(fig);
+      } catch (e) { console.warn(e); out.textContent = '찾지 못했어요. ' + errMsg(e); }
+      busy = false;
+    };
+    who.addEventListener('change', run);
     // 복사해서 퍼진 글: 숨은 글자를 읽어 닉네임 지문과 맞는 랭킹 캐릭터를 찾음
     const txt = el('textarea', { class: 'wm-text', rows: '3', placeholder: '퍼진 글(랭킹을 복사해 붙인 글)을 여기에 붙여 넣으세요' });
     const txtOut = el('div', { class: 'wm-out' });
@@ -542,36 +753,35 @@
       const marks = readTextMarks(txt.value); txtOut.textContent = '';
       if (!txt.value.trim()) return;
       if (!marks.length) { txtOut.textContent = '숨은 글자를 못 찾았어요. 복사한 곳에서 지워졌을 수 있어요'; return; }
-      let names = ['관리자'];
-      try { const { data } = await c.from('players').select('nickname'); names = names.concat((data || []).map(x => x.nickname)); } catch (e) { /* 무시 */ }
+      const names = ['관리자'].concat(ps.map(x => x.nickname));
       for (const m of marks) {
-        const who = names.filter(n => fnv(n) === m.hash);
+        const hit = names.filter(n => fnv(n) === m.hash);
         const d = m.at, z = (n) => String(n).padStart(2, '0');
-        txtOut.append(el('p', { text: `${who.length ? who.join(' 또는 ') : '모르는 사람(지워진 캐릭터일 수 있어요)'}, ${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())} ${z(d.getHours())}시쯤 본 화면` }));
+        txtOut.append(el('p', { text: `${hit.length ? hit.join(' 또는 ') : '모르는 사람(지워진 캐릭터일 수 있어요)'}, ${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())} ${z(d.getHours())}시쯤 본 화면` }));
       }
     };
     const show = async (blob) => {
       if (!blob) return;
-      view.textContent = '찾는 중이에요';
       try {
-        const bmp = await createImageBitmap(blob);
-        const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
-        c.getContext('2d').drawImage(bmp, 0, 0);
-        view.textContent = '';
-        view.append(el('p', { text: '안 보이는 글자 찾기(랭킹 목록 캡처 원본)' }), revealMark(c, 'faint'), el('p', { text: '색 차이로 찾기(스크린샷 사진 캡처)' }), revealMark(c, 'chroma'), el('p', { text: '밝기 차이로 찾기(예전 캡처)' }), revealMark(c, 'lum'));
-      } catch (e) { view.textContent = '이미지를 열지 못했어요'; }
+        leakCv = await blobToCanvas(blob);
+        old.querySelectorAll(':scope > :not(summary)').forEach(n => n.remove());
+        old.append(el('p', { text: '안 보이는 글자 찾기(랭킹 목록 캡처 원본)' }), revealMark(leakCv, 'faint'), el('p', { text: '색 차이로 찾기' }), revealMark(leakCv, 'chroma'), el('p', { text: '밝기 차이로 찾기' }), revealMark(leakCv, 'lum'));
+        zone.querySelector('p').textContent = `넣은 사진: ${leakCv.width}×${leakCv.height}. 다른 사진으로 바꾸려면 다시 붙여 넣으세요.`;
+        run();
+      } catch (e) { out.textContent = '이미지를 열지 못했어요'; }
     };
     const fin = el('input', { type: 'file', accept: 'image/*', hidden: '' });
     fin.onchange = () => show(fin.files[0]);
     const zone = el('div', { class: 'wm-drop', tabindex: '0' },
-      el('p', { text: '퍼진 랭킹 캡처를 이 칸을 누른 뒤 Ctrl + V로 붙여 넣거나 끌어다 놓으세요. 드러난 글자가 그 화면을 본 사람 닉네임과 시각이에요.' }),
+      el('p', { text: '퍼진 캡처·사진을 이 칸을 누른 뒤 Ctrl + V로 붙여 넣거나 끌어다 놓으세요.' }),
       el('button', { type: 'button', class: 'btn', text: '이미지 열기', onclick: () => fin.click() }), fin);
     zone.addEventListener('paste', (e) => { const f = [...(e.clipboardData || {}).items || []].find(i => i.type.startsWith('image/')); if (f) { e.preventDefault(); e.stopPropagation(); show(f.getAsFile()); } });
     zone.addEventListener('dragover', (e) => e.preventDefault());
     zone.addEventListener('drop', (e) => { e.preventDefault(); show([...e.dataTransfer.files].find(f => f.type.startsWith('image/'))); });
     return el('div', { class: 'adm-sec' }, el('h3', { text: '워터마크 찾기' }),
-      el('p', { class: 'rank-note', text: '랭킹 화면·랭킹 사진에는 보는 사람 닉네임과 시각이 눈에 안 띄게 깔려 있고, 순위 글자에도 안 보이는 문자로 숨겨 둬요. 캡처나 복사한 글이 돌면 여기에 넣어서 누가 봤는지 확인하고, 아래 열람 기록과 맞춰 보세요. 많이 줄이거나 여러 번 다시 저장한 사진, 숨은 문자를 지우는 곳에 올린 글은 안 읽힐 수 있어요.' }),
-      zone, view, txt, txtOut);
+      el('p', { class: 'rank-note', text: '랭킹 사진에는 보는 사람마다 다른 무늬가 눈에 안 띄게 깔려 있어요. 퍼진 캡처나 휴대폰으로 찍은 사진을 넣고 사진 속 캐릭터를 고르면, 원본 사진과 맞대어 누가 본 화면인지 찾아요. 줄이거나 다시 저장한 사진도 대개 찾을 수 있어요(이 방식은 이번 업데이트 뒤에 본 화면부터 돼요).' }),
+      zone, el('div', { class: 'adm-find' }, who, dl), out, old,
+      el('h3', { text: '복사한 글에서 찾기' }), txt, txtOut);
   }
   // 랭킹 화면 전체에 눈에 안 띄는 워터마크(보는 사람·시각)를 덮어 둠: 화면 캡처에도 그대로 남음
   function markView() {
@@ -641,7 +851,7 @@
       await playerDetail(c, r);
       shareP.textContent = `초월:강렬 비율 ${shareText(r.inputs)}`;
       const u = r.shot_path ? await signed(c, r.shot_path) : null;
-      const bu = u ? await bakeShot(u) : null;
+      const bu = u ? await bakeShot(u, viewerName() + '|' + r.shot_path) : null;
       if (bu) { marked = true; img.src = bu; }
       else if (u) { img.src = u; shot.append(watermark()); }
       if (u) cap.textContent = '지금 랭킹 값을 낸 스크린샷이에요. 누르면 크게 보여요.';
@@ -656,20 +866,81 @@
       A.openShared({ n: r.cls, k: r.nickname, i: inputs });
     } catch (e) { toast('세팅을 불러오지 못했어요. ' + errMsg(e)); }
   }
-  // 전체 / 전직별(전직을 고르면 그 전직 안에서의 순위)
-  const clsSel = $('#rankCls');
-  for (const c of A.classes()) clsSel.append(el('option', { value: c, text: c }));
-  function setMode(mode, cls) {
+  // 전체 / 전직별(전직을 고르면 그 전직 안에서의 순위). 전직은 검색 칸에 적어서 고름
+  const CLASSES = A.classes();
+  const findBox = $('#rankFind'), clsQ = $('#rankClsQ'), clsOpts = $('#rankClsOpts');
+  const nsp = (t) => String(t || '').replace(/\s+/g, '').toLowerCase();
+  let optIdx = -1;
+  // 앞부분이 맞는 전직 먼저, 그다음 중간에 들어 있는 전직
+  function clsMatches(q) {
+    const k = nsp(q); if (!k) return CLASSES.slice();
+    const a = CLASSES.filter(c => nsp(c).startsWith(k)), b = CLASSES.filter(c => !nsp(c).startsWith(k) && nsp(c).includes(k));
+    return a.concat(b);
+  }
+  function drawOpts() {
+    const list = clsMatches(clsQ.value === rkCls ? '' : clsQ.value);
+    clsOpts.textContent = '';
+    if (!list.length) clsOpts.append(el('p', { class: 'rk-find-none', text: '맞는 전직이 없어요' }));
+    list.forEach((c, i) => {
+      const b = el('button', { type: 'button', role: 'option', id: 'rkopt' + i, class: 'rk-find-opt' + (i === optIdx ? ' on' : '') + (c === rkCls ? ' cur' : ''), 'aria-selected': String(i === optIdx), text: c, tabindex: '-1' });
+      b.onmousedown = (e) => e.preventDefault(); b.onclick = () => pickCls(c);
+      clsOpts.append(b);
+    });
+    clsOpts.hidden = false; clsQ.setAttribute('aria-expanded', 'true');
+    if (optIdx >= 0) { clsQ.setAttribute('aria-activedescendant', 'rkopt' + optIdx); const on = clsOpts.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' }); }
+    else clsQ.removeAttribute('aria-activedescendant');
+  }
+  function closeOpts() { clsOpts.hidden = true; clsQ.setAttribute('aria-expanded', 'false'); clsQ.removeAttribute('aria-activedescendant'); optIdx = -1; }
+  function pickCls(c) { closeOpts(); clsQ.value = c; clsQ.blur(); setMode('cls', c); }
+  clsQ.addEventListener('focus', () => { clsQ.select(); optIdx = -1; drawOpts(); });
+  clsQ.addEventListener('input', () => { optIdx = 0; drawOpts(); });
+  clsQ.addEventListener('blur', () => setTimeout(() => { closeOpts(); if (rkCls) clsQ.value = rkCls; }, 150));
+  clsQ.addEventListener('keydown', (e) => {
+    const n = clsOpts.querySelectorAll('.rk-find-opt').length;
+    if (e.key === 'ArrowDown') { e.preventDefault(); optIdx = Math.min(n - 1, optIdx + 1); drawOpts(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); optIdx = Math.max(0, optIdx - 1); drawOpts(); }
+    else if (e.key === 'Enter') { e.preventDefault(); const c = clsMatches(clsQ.value === rkCls ? '' : clsQ.value)[Math.max(0, optIdx)]; if (c) pickCls(c); }
+    else if (e.key === 'Escape') { closeOpts(); clsQ.blur(); }
+  });
+  function setMode(mode, cls, keepPage) {
     for (const t of $('#rankMode').querySelectorAll('.tab')) t.classList.toggle('on', t.dataset.v === mode);
-    clsSel.hidden = mode !== 'cls';
-    if (mode === 'cls') { clsSel.value = cls || A.cls() || clsSel.value || clsSel.options[0].value; rkCls = clsSel.value; }
+    findBox.hidden = mode !== 'cls';
+    if (mode === 'cls') { rkCls = cls || rkCls || A.cls() || CLASSES[0]; clsQ.value = rkCls; }
     else rkCls = '';
     $('#rankTitle').textContent = rkCls ? `${rkCls} 랭킹` : '실투력 랭킹';
-    loadRank(true);
+    return loadRank(!keepPage);
   }
   function showClass(cls) { setMode('cls', cls); window.scrollTo(0, 0); }
   $('#rankMode').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) setMode(b.dataset.v); });
-  clsSel.onchange = () => setMode('cls', clsSel.value);
+
+  // ---------- 내 순위(이 브라우저에 있는 승인된 캐릭터) ----------
+  let mine = [];
+  async function loadMine(c) {
+    try { const { data, error } = await c.rpc('my_ranks'); if (error) throw error; mine = data || []; } catch (e) { mine = []; }
+    drawMine();
+  }
+  function drawMine() {
+    const box = $('#rankMine'); box.textContent = '';
+    box.hidden = !mine.length; if (!mine.length) return;
+    box.append(el('span', { class: 'rk-mine-lab', text: '내 순위' }));
+    for (const m of mine) {
+      const here = rkCls && m.cls === rkCls, pos = rkCls ? (here ? m.in_cls : null) : m.overall;
+      const b = el('button', { type: 'button', class: 'rk-mine-item', title: '이 캐릭터가 있는 쪽으로 가기' },
+        el('b', { text: pos ? `${pos}위` : `${m.cls}` }),
+        el('span', { class: 'nm', text: m.nickname }),
+        el('small', { text: rkCls ? (here ? `전체 ${m.overall}위` : `${m.cls} ${m.in_cls}위 · 전체 ${m.overall}위`) : `${m.cls} ${m.in_cls}위` }));
+      b.onclick = () => jumpTo(m);
+      box.append(b);
+    }
+  }
+  async function jumpTo(m) {
+    if (rkCls && m.cls !== rkCls) { rkCls = m.cls; }
+    const pos = rkCls ? m.in_cls : m.overall;
+    rkPage = Math.max(0, Math.floor((pos - 1) / PAGE));
+    await setMode(rkCls ? 'cls' : 'all', rkCls, true);
+    const li = $(`#rankList li[data-id="${m.id}"]`);
+    if (li) { li.scrollIntoView({ block: 'center', behavior: 'smooth' }); li.classList.add('flash'); setTimeout(() => li.classList.remove('flash'), 1800); }
+  }
   const goPage = (d) => { if (rkBusy) return; rkPage = Math.max(0, rkPage + d); loadRank(false).then(() => $('#rankList').scrollIntoView({ block: 'nearest', behavior: 'smooth' })); };
   $('#btnRankPrev').onclick = () => goPage(-1);
   $('#btnRankNext').onclick = () => goPage(1);
@@ -754,6 +1025,47 @@
     return true;
   }
 
+  // 스크린샷 넣는 칸(누르기·붙여넣기·끌어 놓기). 다른 사람 이름을 가린 사본도 같이 만듦
+  function shotPicker() {
+    const st = { img: null, pub: null };
+    const file = el('input', { type: 'file', accept: 'image/*', hidden: '' });
+    const box = el('div', { class: 'apply-shot', tabindex: '0', role: 'button' }, el('span', { text: '여기를 눌러 사진을 고르거나 Ctrl + V로 붙여 넣으세요' }));
+    st.set = async (src, note) => {
+      try {
+        const cv = src instanceof HTMLCanvasElement ? src : await blobToCanvas(src);
+        st.img = await toJpeg(cv);
+        const pc = privacyBlur(cv); st.pub = pc ? await toJpeg(pc) : null;
+        box.innerHTML = ''; box.classList.add('has');
+        box.append(el('img', { src: URL.createObjectURL(st.img), alt: '올릴 스크린샷' }), el('span', { text: note || '다른 사진으로 바꾸려면 다시 누르세요' }));
+      } catch (e) { toast('사진을 읽지 못했어요'); }
+    };
+    box.onclick = () => file.click();
+    box.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } };
+    box.addEventListener('dragover', (e) => e.preventDefault());
+    box.addEventListener('drop', (e) => { e.preventDefault(); const f = [...e.dataTransfer.files].find(x => x.type.startsWith('image/')); if (f) st.set(f); });
+    file.onchange = () => { if (file.files[0]) st.set(file.files[0]); };
+    const onPaste = (e) => {
+      const it = [...(e.clipboardData ? e.clipboardData.items : [])].find(i => i.type.startsWith('image/'));
+      if (!it) return;
+      e.preventDefault(); e.stopImmediatePropagation(); st.set(it.getAsFile());
+    };
+    window.addEventListener('paste', onPaste, true);
+    st.off = () => window.removeEventListener('paste', onPaste, true);
+    st.box = box; st.file = file;
+    return st;
+  }
+  // 예시 사진: 이렇게 찍으면 돼요(누르면 크게)
+  function exampleFig() {
+    return el('figure', { class: 'apply-ex' },
+      el('img', { src: 'apply_ex.jpg', alt: '스크린샷 예시: 채팅 입력칸의 인증 코드, 캐릭터 창, 상세 스탯 창, 공격력 범위 창', loading: 'lazy', onclick: () => window.open('apply_ex.jpg', '_blank', 'noopener') }),
+      el('figcaption', {}, el('b', { text: '이렇게 찍어 주세요' }),
+        el('ol', {},
+          el('li', { text: '채팅 입력칸에 위 인증 코드(예시의 TEST-1234 자리)' }),
+          el('li', { text: '캐릭터 창: 닉네임과 전투력이 보이게' }),
+          el('li', { text: '상세 스탯 창' }),
+          el('li', { text: '상세 스탯 창의 공격력에 마우스를 올려 뜬 범위 창' }))));
+  }
+
   // ---------- 랭킹 신청 ----------
   function openApply() {
     const miss = A.missing();
@@ -763,29 +1075,9 @@
     if (!(cp > 0)) { toast('실투력이 계산되지 않았어요'); return; }
     const old = $('#applyDlg'); if (old) old.remove();
     const code = genCode();
-    let img = null, pub = null;
+    const pick = shotPicker();
     const nick = el('input', { type: 'text', class: 'nick', maxlength: '20', placeholder: '게임 닉네임', value: A.nick() || (A.rank() || {}).nickname || '' });
-    const file = el('input', { type: 'file', accept: 'image/*', hidden: '' });
-    const shotBox = el('div', { class: 'apply-shot', tabindex: '0', role: 'button' }, el('span', { text: '여기를 눌러 사진을 고르거나 Ctrl + V로 붙여 넣으세요' }));
-    const setImg = async (blob) => {
-      try {
-        const cv = await blobToCanvas(blob);
-        img = await toJpeg(cv);
-        const pc = privacyBlur(cv); pub = pc ? await toJpeg(pc) : null;
-        shotBox.innerHTML = ''; shotBox.classList.add('has');
-        shotBox.append(el('img', { src: URL.createObjectURL(img), alt: '올릴 스크린샷' }), el('span', { text: '다른 사진으로 바꾸려면 다시 누르세요' }));
-      } catch (e) { toast('사진을 읽지 못했어요'); }
-    };
-    shotBox.onclick = () => file.click();
-    shotBox.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } };
-    file.onchange = () => { if (file.files[0]) setImg(file.files[0]); };
-    const onPaste = (e) => {
-      const it = [...(e.clipboardData ? e.clipboardData.items : [])].find(i => i.type.startsWith('image/'));
-      if (!it) return;
-      e.preventDefault(); e.stopImmediatePropagation(); setImg(it.getAsFile());
-    };
-    window.addEventListener('paste', onPaste, true);
-    const close = () => { window.removeEventListener('paste', onPaste, true); wrap.remove(); };
+    const close = () => { pick.off(); wrap.remove(); };
     const send = el('button', { type: 'button', class: 'btn primary', text: '신청하기' });
     const card = el('div', { class: 'dialog-card apply-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'apTitle' },
       el('h3', { id: 'apTitle', text: '랭킹에 올리기' }),
@@ -793,17 +1085,9 @@
       el('label', { class: 'ex-row' }, el('span', {}, '닉네임', el('small', { text: '게임 닉네임 그대로' })), nick),
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
       el('p', { text: '게임 채팅창에 이 코드를 입력한 다음, 채팅이 보이게 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요. PC방 혜택과 지애 버프는 끄고 찍어 주세요.' }),
-      // 예시 사진: 이렇게 찍으면 돼요(누르면 크게)
-      el('figure', { class: 'apply-ex' },
-        el('img', { src: 'apply_ex.jpg', alt: '스크린샷 예시: 채팅 입력칸의 인증 코드, 캐릭터 창, 상세 스탯 창, 공격력 범위 창', loading: 'lazy', onclick: () => window.open('apply_ex.jpg', '_blank', 'noopener') }),
-        el('figcaption', {}, el('b', { text: '이렇게 찍어 주세요' }),
-          el('ol', {},
-            el('li', { text: '채팅 입력칸에 위 인증 코드(예시의 TEST-1234 자리)' }),
-            el('li', { text: '캐릭터 창: 닉네임과 전투력이 보이게' }),
-            el('li', { text: '상세 스탯 창' }),
-            el('li', { text: '상세 스탯 창의 공격력에 마우스를 올려 뜬 범위 창' })))),
+      exampleFig(),
       el('p', { class: 'apply-privacy', text: '신청하면 닉네임, 계산기 세팅, 스크린샷이 랭킹용으로 저장돼요. 랭킹을 볼 때는 본 기록(본 캐릭터, 시각, 기기 구분용 임의 번호)이 180일 동안 남아요. IP 주소는 모으지 않아요.' }),
-      shotBox, file,
+      pick.box, pick.file,
       el('div', { class: 'dlg-actions' }, el('button', { type: 'button', class: 'btn', text: '취소', onclick: close }), send));
     const wrap = el('div', { class: 'dialog', id: 'applyDlg' }, card);
     document.body.append(wrap);
@@ -811,6 +1095,7 @@
     send.onclick = async () => {
       const n = nick.value.trim();
       if (!n) { toast('닉네임을 적어 주세요'); nick.focus(); return; }
+      const img = pick.img, pub = pick.pub;
       if (!img) { toast('인증 코드가 보이는 스크린샷을 넣어 주세요'); return; }
       if (buffBlocked()) return;
       send.disabled = true; send.textContent = '보내는 중';
@@ -840,37 +1125,60 @@
   }
 
   // ---------- 승인된 사람: 스크린샷으로 갱신 ----------
+  // 갱신할 때마다 새 인증 코드를 채팅에 적고 찍은 스크린샷을 보내고, 관리자가 확인한 뒤에 반영됨.
+  // 코드는 보내기 전까지(최대 6시간) 같은 것을 보여 줌: 창을 닫고 게임에서 찍어 와도 같은 코드
+  const updKey = (r) => 'silcalc.updcode.' + String(r.token || '').slice(0, 10);
+  function updCode(r) {
+    try { const o = JSON.parse(localStorage.getItem(updKey(r)) || 'null'); if (o && o.c && Date.now() - o.t < 6 * 36e5) return o.c; } catch (e) { /* 무시 */ }
+    const c = genCode();
+    try { localStorage.setItem(updKey(r), JSON.stringify({ c, t: Date.now() })); } catch (e) { /* 무시 */ }
+    return c;
+  }
   async function doUpdate() {
     const r = A.rank(); if (!r) return;
     const miss = A.missing();
     if (miss.length) { toast(`${miss.join('·')}부터 채워 주세요`); return; }
     if (buffBlocked()) return;
-    const shot = A.shot();
-    if (!shot) {
-      await A.dialog({ title: '스크린샷이 필요해요', text: '랭킹은 스크린샷으로만 갱신할 수 있어요. 지금 세팅으로 스크린샷을 넣고 적용한 다음 다시 눌러 주세요.', ok: '확인' });
-      return;
-    }
-    const cp = A.rankCp(), edited = A.edited();
-    const big = r.cp && cp > r.cp;
-    const ok = await A.dialog({ title: '랭킹 갱신', text: `${r.nickname} 실투력을 ${fmtInt(cp)}(으)로 바꿔요. PC방 혜택과 지애 버프가 꺼진 상태로 찍은 스크린샷일 때만 갱신할 수 있어요.` + ((edited || big) ? ` ${edited ? '스크린샷을 적용한 뒤 손으로 고친 값이 있어서' : '실투력이 올라서'} 관리자가 확인한 뒤에 랭킹에 반영돼요.` : ''), ok: '버프 없이 찍었어요, 갱신' });
-    if (!ok) return;
-    try {
-      const c = await sb();
-      const id = uuid(), path = `update/${id}.jpg`;
-      const up = await c.storage.from('shots').upload(path, await toJpeg(shot), { contentType: 'image/jpeg', upsert: false });
-      if (up.error) throw up.error;
-      let pubPath = null;
-      try { const pc = privacyBlur(shot); if (pc) pubPath = `update/${id}_p.jpg`; if (pubPath) { const u2 = await c.storage.from('shots').upload(pubPath, await toJpeg(pc), { contentType: 'image/jpeg', upsert: false }); if (u2.error) throw u2.error; } } catch (e) { console.warn(e); pubPath = null; }
-      const { data: res, error } = await c.rpc('update_cp_v2', { p_token: r.token, p_cls: A.cls(), p_cp: cp, p_inputs: A.rankInputs(), p_shot: path, p_edited: edited, p_pub: pubPath });
-      if (error) throw error;
-      if (res === 'held') {
-        Object.assign(r, { upd: 'held', updCp: cp, updMemo: '' }); A.setRank(r); renderLine();
-        toast('관리자가 확인하면 랭킹에 반영돼요');
-      } else {
-        Object.assign(r, { cp, cls: A.cls(), upd: 'live', updCp: cp, updMemo: '' }); await positions(c, r); A.setRank(r); renderLine();
-        toast(`랭킹을 갱신했어요${r.pos ? ` (${r.pos}위)` : ''}`);
+    const cp = A.rankCp();
+    if (!(cp > 0)) { toast('실투력이 계산되지 않았어요'); return; }
+    const old = $('#applyDlg'); if (old) old.remove();
+    const code = updCode(r), pick = shotPicker(), shot = A.shot();
+    if (shot) pick.set(shot, '계산기에 읽힌 스크린샷이에요. 채팅에 위 코드가 안 보이면 코드를 적고 다시 찍어 넣어 주세요');
+    const close = () => { pick.off(); wrap.remove(); };
+    const send = el('button', { type: 'button', class: 'btn primary', text: '보내기' });
+    const card = el('div', { class: 'dialog-card apply-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'upTitle' },
+      el('h3', { id: 'upTitle', text: '랭킹 갱신' }),
+      el('p', { class: 'apply-sum' }, `${r.nickname} 실투력을 `, el('b', { text: fmtInt(cp) }), '(으)로 바꿔 달라고 보내요. 관리자가 스크린샷을 확인하면 랭킹에 반영돼요.'),
+      el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
+      el('p', { text: '게임 채팅 입력칸에 이 코드를 적은 다음, 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요. 갱신할 때마다 코드가 새로 나와요. PC방 혜택과 지애 버프는 끄고 찍어 주세요.' }),
+      el('p', { class: 'apply-privacy', text: '지금 계산기에 있는 값이 그대로 올라가요. 스크린샷의 스탯과 다르면 반영되지 않아요.' }),
+      exampleFig(),
+      pick.box, pick.file,
+      el('div', { class: 'dlg-actions' }, el('button', { type: 'button', class: 'btn', text: '취소', onclick: close }), send));
+    const wrap = el('div', { class: 'dialog', id: 'applyDlg' }, card);
+    document.body.append(wrap);
+    send.onclick = async () => {
+      if (!pick.img) { toast('인증 코드가 보이는 스크린샷을 넣어 주세요'); return; }
+      if (buffBlocked()) return;
+      send.disabled = true; send.textContent = '보내는 중';
+      try {
+        const c = await sb();
+        const id = uuid(), path = `update/${id}.jpg`;
+        const up = await c.storage.from('shots').upload(path, pick.img, { contentType: 'image/jpeg', upsert: false });
+        if (up.error) throw up.error;
+        let pubPath = null;
+        if (pick.pub) { pubPath = `update/${id}_p.jpg`; const u2 = await c.storage.from('shots').upload(pubPath, pick.pub, { contentType: 'image/jpeg', upsert: false }); if (u2.error) pubPath = null; }
+        const { error } = await c.rpc('update_cp_v3', { p_token: r.token, p_cls: A.cls(), p_cp: cp, p_inputs: A.rankInputs(), p_shot: path, p_edited: A.edited(), p_pub: pubPath, p_code: code });
+        if (error) throw error;
+        try { localStorage.removeItem(updKey(r)); } catch (e) { /* 무시 */ }
+        Object.assign(r, { upd: 'held', updCp: cp, updMemo: '' }); A.setRank(r);
+        close(); renderLine();
+        toast('보냈어요. 관리자가 확인하면 랭킹에 반영돼요');
+      } catch (e) {
+        toast('갱신하지 못했어요. ' + errMsg(e));
+        send.disabled = false; send.textContent = '보내기';
       }
-    } catch (e) { toast('갱신하지 못했어요. ' + errMsg(e)); }
+    };
   }
 
   // ---------- 다른 기기에서 받은 갱신 코드로 연결 ----------
@@ -941,7 +1249,7 @@
   async function adminPanel(c, body) {
     body.innerHTML = '';
     // 한 화면에 다 늘어놓으면 너무 길어서 탭으로 나눔(마지막에 본 탭 기억). 탭 줄은 내려도 위에 붙어 있음
-    const TABS = [['apps', '신청'], ['upd', '갱신'], ['chars', '캐릭터'], ['logs', '열람 기록'], ['wm', '워터마크 찾기']];
+    const TABS = [['apps', '신청'], ['upd', '갱신'], ['chars', '캐릭터'], ['logs', '열람 기록'], ['wm', '워터마크 찾기'], ['admins', '관리자']];
     const bar = el('div', { class: 'seg adm-tabs', role: 'tablist', 'aria-label': '관리 메뉴' });
     const panes = {}, tabBtn = {}, cntEl = {};
     for (const [k, t] of TABS) {
@@ -1015,12 +1323,12 @@
 
     // ---------- 갱신 ----------
     const held = el('div', { class: 'adm-sec' }, el('h3', { text: '확인 기다리는 갱신' }),
-      el('p', { class: 'rank-note', text: '실투력이 오른 갱신이나 손으로 고친 값이 있는 갱신이에요. 사진을 보고 반영해야 랭킹에 올라가요.' }));
+      el('p', { class: 'rank-note', text: '갱신은 모두 여기서 확인한 뒤에 랭킹에 올라가요. 채팅의 인증 코드·닉네임과 스탯이 맞는지 보고 반영하세요.' }));
     const live = el('div', { class: 'adm-sec' }, el('h3', { text: '바로 반영된 갱신' }),
-      el('p', { class: 'rank-note', text: '실투력이 그대로거나 내려간 갱신이라 바로 반영됐어요. 사진을 보고 확인하거나, 이상하면 되돌려요.' }));
+      el('p', { class: 'rank-note', text: '예전 방식(인증 코드 없이 바로 반영)으로 들어온 갱신이에요. 사진을 보고 확인하거나, 이상하면 되돌려요.' }));
     panes.upd.append(held, live);
     const { data: hs, error: e2 } = await c.from('cp_history')
-      .select('id,cp,prev_cp,cls,inputs,prev_inputs,edited,status,created_at,shot_path,pub_path,player_id,players(nickname,hidden)')
+      .select('id,cp,prev_cp,cls,inputs,prev_inputs,edited,status,created_at,shot_path,pub_path,verify_code,player_id,players(nickname,hidden)')
       .in('status', ['held', 'live']).order('created_at', { ascending: false }).limit(60);
     if (e2) throw e2;
     const hsHeld = hs.filter(h => h.status === 'held'), hsLive = hs.filter(h => h.status === 'live');
@@ -1047,6 +1355,8 @@
         el('span', { class: 'nm', text: p.nickname || '?' }),
         el('span', { text: `${h.cls || ''}, ${h.prev_cp ? fmtInt(h.prev_cp) + ' → ' : ''}${fmtInt(h.cp)}${h.prev_cp ? ` (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%)` : ''}` }),
         el('span', { text: `초월:강렬 비율 ${shareText(h.inputs)}` }),
+        h.verify_code ? el('span', { class: 'code' }, '인증 코드 ', el('b', { text: h.verify_code })) : null,
+        h.verify_code ? el('small', { class: 'adm-flag', text: '채팅의 인증 코드와 닉네임을 확인하세요' }) : (h.status === 'held' ? el('small', { class: 'adm-flag', text: '인증 코드 없이 들어온 갱신이에요(예전 화면)' }) : null),
         h.edited ? el('span', { class: 'adm-flag', text: '스크린샷 적용 뒤 손으로 고친 값 있음' }) : null,
         inputsView(h.inputs, h.prev_inputs),
         el('small', { text: ago(h.created_at) }), acts));
@@ -1179,10 +1489,33 @@
       const del = el('button', { type: 'button', class: 'btn danger', text: '삭제' });
       const seeLog = el('button', { type: 'button', class: 'btn', text: '열람 기록' });
       seeLog.onclick = () => { logQ.value = p.nickname; show('logs'); loadLogs(); };
+      // 랭킹에 보이는 사진의 가린 곳을 다시 정함(원본은 갱신 기록에 남아 있음)
+      const fixShot = el('button', { type: 'button', class: 'btn', text: '사진 가릴 곳 고치기' });
+      fixShot.hidden = !p.shot_path;
+      fixShot.onclick = async () => {
+        fixShot.disabled = true;
+        try {
+          const { data: hs } = await c.from('cp_history').select('shot_path,pub_path').eq('player_id', p.id).order('created_at', { ascending: false }).limit(30);
+          const h = (hs || []).find(x => x.pub_path === p.shot_path || x.shot_path === p.shot_path);
+          const origPath = h ? h.shot_path : p.shot_path;
+          const u = await signed(c, origPath); if (!u) throw new Error('원본 사진을 열지 못했어요');
+          const cv = await blobToCanvas(await (await fetch(u)).blob());
+          const rects = await editKeep(cv, privacyRects(cv) || []);
+          if (rects) {
+            const path = `${/^update\//.test(origPath) ? 'update' : 'apply'}/${uuid()}_p.jpg`;
+            const up = await c.storage.from('shots').upload(path, await toJpeg(blurKeep(cv, rects)), { contentType: 'image/jpeg', upsert: false });
+            if (up.error) throw up.error;
+            const { error: e } = await c.rpc('admin_set_player_pub', { p_id: p.id, p_path: path });
+            if (e) throw e;
+            p.shot_path = path; toast(`${p.nickname} 랭킹 사진을 바꿨어요`);
+          }
+        } catch (e) { console.warn(e); toast('바꾸지 못했어요. ' + errMsg(e)); }
+        fixShot.disabled = false;
+      };
       const item = el('div', { class: 'adm-item adm-plain' }, el('div', { class: 'adm-info' }, nm,
         el('span', { text: `${p.cls}, 실투력 ${fmtInt(p.cp)}` }),
         el('small', { text: `${ago(p.updated_at)} 갱신` }),
-        el('div', { class: 'adm-acts' }, hide, seeLog, del)));
+        el('div', { class: 'adm-acts' }, hide, seeLog, fixShot, del)));
       hide.onclick = async () => {
         const nv = !p.hidden;
         const why = await setHidden(c, p.id, nv); if (why === null) return;
@@ -1225,7 +1558,51 @@
     drawChars();
 
     // ---------- 워터마크 찾기 ----------
-    panes.wm.append(wmFinder(c));
+    panes.wm.append(wmFinder(c, ps));
+
+    // ---------- 관리자 ----------
+    // 처음 관리자(주인)가 메일을 넣어 두면, 그 메일로 이 화면에서 로그인한 사람이 관리자가 됨. 주인만 넣고 뺄 수 있음
+    const adm = el('div', { class: 'adm-sec' },
+      el('p', { class: 'rank-note', text: '여기에 메일을 넣어 두면 그 사람이 이 화면(주소 끝 ?admin)에서 그 메일로 로그인 링크를 받아 관리자가 돼요. 관리자는 신청·갱신 승인, 숨기기·삭제, 열람 기록을 모두 할 수 있어요. 넣고 빼는 건 처음 관리자만 할 수 있어요.' }));
+    const admList = el('div', { class: 'adm-admins' });
+    const admMail = el('input', { type: 'email', class: 'adm-search', placeholder: '관리자로 넣을 메일 주소', autocomplete: 'off' });
+    const admAdd = el('button', { type: 'button', class: 'btn primary', text: '관리자로 넣기' });
+    const admForm = el('div', { class: 'adm-find' }, admMail, admAdd);
+    adm.append(admList, admForm);
+    panes.admins.append(adm);
+    const drawAdmins = async () => {
+      const { data, error: ea } = await c.rpc('admin_list');
+      admList.textContent = '';
+      if (ea) { admList.append(el('p', { class: 'adm-flag', text: '관리자 목록을 불러오지 못했어요. ' + errMsg(ea) })); admForm.hidden = true; return; }
+      const meOwner = (data || []).some(a => a.is_me && a.is_owner);
+      admForm.hidden = !meOwner;
+      for (const a of data || []) {
+        const row = el('div', { class: 'adm-item adm-plain' }, el('div', { class: 'adm-info' },
+          el('span', { class: 'nm', text: a.email || '(메일 없음)' }),
+          el('small', { text: [a.is_owner ? '처음 관리자' : '', a.is_me ? '나' : '', a.joined ? '로그인함' : '아직 로그인 안 함'].filter(Boolean).join(', ') })));
+        if (meOwner && !a.is_owner) {
+          const rm = el('button', { type: 'button', class: 'btn danger', text: '빼기' });
+          rm.onclick = async () => {
+            if (!await A.dialog({ title: '관리자에서 빼기', text: `${a.email} 을(를) 관리자에서 빼요. 바로 관리자 화면을 못 쓰게 돼요.`, ok: '빼기', danger: true })) return;
+            const { error: er } = await c.rpc('admin_remove', { p_email: a.email });
+            if (er) { toast(errMsg(er)); return; }
+            toast('관리자에서 뺐어요'); drawAdmins();
+          };
+          row.querySelector('.adm-info').append(el('div', { class: 'adm-acts' }, rm));
+        }
+        admList.append(row);
+      }
+    };
+    admAdd.onclick = async () => {
+      const m = admMail.value.trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m)) { toast('메일 주소를 확인해 주세요'); admMail.focus(); return; }
+      admAdd.disabled = true;
+      const { error: er } = await c.rpc('admin_invite', { p_email: m });
+      admAdd.disabled = false;
+      if (er) { toast(errMsg(er)); return; }
+      admMail.value = ''; toast('관리자로 넣었어요. 그 메일로 로그인하면 관리자가 돼요'); drawAdmins();
+    };
+    drawAdmins();
 
     // 처음 열 탭: 마지막에 보던 탭, 없으면 할 일이 있는 탭
     let first = null; try { first = sessionStorage.getItem('silAdmTab'); } catch (e) { /* 무시 */ }

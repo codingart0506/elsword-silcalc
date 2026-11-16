@@ -90,6 +90,7 @@
   const g = (a) => { const v = wb.get(SH, a); return E.isErr(v) ? v.code : v; };
   const LABEL_FALLBACK = { B11: '공격력', B12: '공격력 극대화 범위 내 최댓값', B13: '무기 공격력 (스탯창 X)' };
   const label = (a) => { const v = g(a); if (v == null || v === '' || String(v).startsWith('#')) return LABEL_FALLBACK[a] || ''; return String(v).trim(); };
+  const labelOf = label;
   const defaultOf = (a) => { const d = M.sheets[SH][a]; return d && 'v' in d ? d.v : null; };
   function optionsOf(a) {
     const d = DV[a]; if (!d || d.type !== 'list') return null;
@@ -168,6 +169,8 @@
   // 에테르 세이지는 방어구 세트 기본값이 순환, 녹힐 직업은 복원
   const SAGE = '에테르 세이지', SET_CYCLE = '엑사&네블론 - 순환', SET_HEAL = '엑사&네블론 - 복원';
   const AZOTH = '로드 아조트';
+  // 첫 번째 버프 스킬을 기본으로 켜 두는 직업: 로드 아조트(미스틱 플라스크), 임모탈(팬텀 소드)
+  const SKILL1_ON = new Set([AZOTH, '임모탈']);
   const setDefault = (cls) => HEALERS.has(cls) ? SET_HEAL : cls === SAGE ? SET_CYCLE : BLANK.J30;
   if (!store.mig.sage2) {
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === SAGE && v.J30 === BLANK.J30) v.J30 = SET_CYCLE;
@@ -188,6 +191,10 @@
   if (!store.mig.azoth1) {
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === AZOTH && v.L11 !== '사용') v.L11 = '사용';
     store.mig.azoth1 = 1;
+  }
+  if (!store.mig.immortal1) {
+    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === '임모탈' && v.L11 !== '사용') v.L11 = '사용';
+    store.mig.immortal1 = 1;
   }
   if (!store.mig.heal3) {
     for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && HEALERS.has(v.C6) && v.J30 === BLANK.J30) { v.J30 = SET_HEAL; if (Number(v.H11) === 0.1) v.H11 = 0; }
@@ -376,10 +383,10 @@
     // 방어구 세트: 지금 값이 이전 직업의 기본값일 때만 새 직업 기본값으로
     const wantSet = setDefault(now);
     if (inputs.J30 !== wantSet && (inputs.J30 === setDefault(prev) || inputs.J30 == null)) { const old = inputs.J30; inputs.J30 = wantSet; wb.setInput(SH, 'J30', wantSet); syncPartyCrit(old); ch = true; }
-    // 로드 아조트는 미스틱 플라스크(첫 번째 버프 스킬)를 기본으로 사용, 다른 직업으로 바꾸면 다시 미사용
+    // 로드 아조트(미스틱 플라스크)·임모탈(팬텀 소드)은 첫 번째 버프 스킬을 기본으로 사용, 다른 직업으로 바꾸면 다시 미사용
     const put = (c, v) => { if (inputs[c] !== v) { inputs[c] = v; wb.setInput(SH, c, v); ch = true; } };
-    if (now === AZOTH) put('L11', '사용');
-    else if (prev === AZOTH && inputs.L11 === '사용') put('L11', '미사용');
+    if (SKILL1_ON.has(now)) put('L11', '사용');
+    else if (SKILL1_ON.has(prev) && inputs.L11 === '사용') put('L11', '미사용');
     return ch;
   }
   // 강배·역강배 바지: 강배(체력 50% 초과인 적 공격시 데미지 증가)와 역강배(체력 50% 이하인 적 공격시 데미지 증가)를 높은 쪽으로 같게
@@ -698,9 +705,11 @@
     }
     if (gear) showGearRows(gear);
     else lastGear = null;
-    const gearN = body.querySelectorAll('tr.gear-row:not(.none):not(.cls-row)').length;
+    const gearN = body.querySelectorAll('tr.gear-row:not(.none):not(.cls-row):not(.arm-row)').length;
+    const armN = body.querySelectorAll('tr.arm-row:not(.none)').length;
     if (gear && gear.cls && gear.cls.match) $('#ocrCount').textContent += ', 전직';
     if (gearN) $('#ocrCount').textContent += `, 악세서리 ${gearN}개`;
+    if (armN) $('#ocrCount').textContent += `, 방어구 ${armN}개`;
     $('#ocrResult').hidden = false;
   }
 
@@ -894,6 +903,24 @@
         el('td', { class: 'dim', text: String(cur ?? '') }),
         el('td', { class: 'gear-pick' }, thumb, sel)));
     }
+    // 방어구 종류: 장비창 상의·하의·장갑·신발 아이콘(엑사스케일·네블론·테네브로스). 강화 수치는 아이콘에 안 나와서 그대로
+    if (gear.armor) {
+      body.append(el('tr', { class: 'gear-head' }, el('td', { colspan: '4' }, '방어구 종류 (장비창 아이콘)')));
+      for (const [part, k] of [['상의', 'J26'], ['하의', 'J27'], ['장갑', 'J28'], ['신발', 'J29']]) {
+        const a = gear.armor[part], cur = g(k), ok = !!(a && a.ok);
+        const sel = el('select', { 'data-cell': k, 'aria-label': part + ' 방어구' });
+        for (const o of optionsOf(k) || []) sel.append(el('option', { value: String(o), text: String(o) }));
+        sel.value = ok ? a.set : String(cur ?? '');
+        const same = String(cur) === sel.value;
+        const cb = el('input', { type: 'checkbox', checked: ok && !same ? 'checked' : null, 'aria-label': '적용' });
+        sel.addEventListener('change', () => { cb.checked = String(g(k)) !== sel.value; });
+        body.append(el('tr', { class: 'gear-row arm-row' + (same ? ' same' : '') + (ok ? '' : ' none') },
+          el('td', {}, cb),
+          el('td', {}, part, ok ? null : el('small', { class: 'mutetag', text: ' 못 알아봄 · 직접 선택' })),
+          el('td', { class: 'dim', text: String(cur ?? '') }),
+          el('td', { class: 'gear-pick' }, sel)));
+      }
+    }
   }
   let ocrSnap = null, ocrShot = null; // 마지막으로 스크린샷을 적용한 세팅과 그 사진(랭킹 갱신용)
   function applyOcr() {
@@ -995,8 +1022,18 @@
     const v = simWb.get(SH, 'C36'); return typeof v === 'number' ? v : NaN;
   }
   // 관리자 화면용: 올린 계산기 값을 탭 순서대로 이름·보기 좋은 값으로(한 줄에 두 칸인 항목은 한 줄로 묶음)
+  // 올린 세팅의 전직 기준으로 칸 이름을 읽음(마법 직업은 '마법 공격력', 버프 스킬 이름도 그 직업 것)
+  let labWb = null;
+  function labelsFor(inp) {
+    if (!labWb) labWb = new E.Workbook(M);
+    labWb.inputs = {};
+    for (const [a, v] of Object.entries(inp)) if (a !== 'C27' && !a.startsWith('_')) labWb.inputs[SH + '!' + a] = v;
+    labWb.invalidate();
+    return (a) => { let v; try { v = labWb.get(SH, a); } catch (e) { v = null; } if (v == null || v === '' || E.isErr(v) || String(v).startsWith('#')) return LABEL_FALLBACK[a] || ''; return String(v).trim(); };
+  }
   function describeInputs(inp) {
     inp = inp || {};
+    const label = inp.C6 ? labelsFor(inp) : (a) => labelOf(a);
     const out = [], has = (c) => inp[c] !== undefined && inp[c] !== null && inp[c] !== '';
     const fmtV = (c, v) => typeof v === 'boolean' ? (v ? '켬' : '끔') : (typeof v === 'number' ? (PCT.has(c) ? `${+(v * 100).toFixed(2)}%` : fmtInt(v)) : String(v));
     if (has('C6')) out.push({ tab: '전직', c: 'C6', name: '전직', txt: String(inp.C6) });
