@@ -416,39 +416,58 @@
     }
     if (!r.best) return;
     const g = r.gain * 100, fmt = (n) => Math.round(n).toLocaleString('ko-KR');
-    if (r.cpNow > 0 && r.best.cp > 0) {
-      const up = r.best.cp - r.cpNow;
-      box.append(el('p', { class: 'av-gain' }, up >= 1
-        ? el('span', null, '추천대로 바꾸면 실투력 ', el('b', { text: fmt(r.cpNow) }), ' → ', el('b', { class: 'up', text: fmt(r.best.cp) }), el('span', { class: 'av-gain-sub', text: ` (+${(up / r.cpNow * 100).toFixed(2)}%)` }))
-        : el('span', { text: '지금 세팅이 이미 실투력이 가장 높아요' })));
-    } else {
-      box.append(el('p', { class: 'av-gain' }, g > 0.0005 ? el('span', null, '추천대로 바꾸면 실뎀 ', el('b', { class: 'up', text: '+' + g.toFixed(2) + '%' })) : el('span', { text: '지금 세팅이 이미 가장 좋아요' })));
-    }
-    const tb = el('tbody');
     const rec = Object.assign({ '아바타5셋': r.best.fiveSetDisplay, '한벌': r.best.suit != null ? r.best.suit : (p.worn['한벌'] || '') }, r.best.partToDisplay);
+    const showBottom = r.best.bottom != null && !!(p.bottom || r.best.bottom), buffs = Object.entries(r.best.buffs || {});
+    const changed = PARTS.some(part => (p.worn[part] || '') !== (rec[part] || '')) || (showBottom && (p.bottom || '') !== r.best.bottom) || buffs.some(([c, v]) => String(APP.val(c) ?? '') !== String(v));
+    // 지금 세팅이 목표 쿨감을 못 채우면, 추천(목표를 채우는 조합 중 최고)이 지금보다 낮을 수 있음 → 그렇다고 알려 줌
+    const curCool = Number(curStats()['쿨감']) || 0, T = Number(r.coolTarget) || 0;
+    const coolMiss = T > 0 && (st.o.coolAtLeast === false ? Math.abs(curCool - T) > 0.005 : curCool < T - 0.005);
+    const byCp = r.cpNow > 0 && r.best.cp > 0, up = byCp ? r.best.cp - r.cpNow : 0;
+    const better = byCp ? up >= 1 : g > 0.0005;
+    // 지금 세팅도 조건을 채우는데 더 높은 조합이 없으면 지금 그대로가 추천(더 낮은 조합을 바꾸라고 보여 주지 않음)
+    const keepNow = !better && changed && !coolMiss;
+    let head;
+    if (better) head = byCp
+      ? el('span', null, '추천대로 바꾸면 실투력 ', el('b', { text: fmt(r.cpNow) }), ' → ', el('b', { class: 'up', text: fmt(r.best.cp) }), el('span', { class: 'av-gain-sub', text: ` (+${(up / r.cpNow * 100).toFixed(2)}%)` }))
+      : el('span', null, '추천대로 바꾸면 실뎀 ', el('b', { class: 'up', text: '+' + g.toFixed(2) + '%' }));
+    else if (!changed || keepNow) head = el('span', { text: byCp ? '지금 세팅이 이미 실투력이 가장 높아요' : '지금 세팅이 이미 가장 좋아요' });
+    else {
+      const lead = `목표 쿨감 ${T}%를 맞추는 조합 중에서는 이 세팅이 가장 높아요. 지금 세팅(쿨감 ${Math.round(curCool * 100) / 100}%)과 비교하면 `;
+      head = byCp
+        ? (up <= -1 ? el('span', null, lead + '실투력 ', el('b', { text: fmt(r.cpNow) }), ' → ', el('b', { class: 'down', text: fmt(r.best.cp) }), el('span', { class: 'av-gain-sub down', text: ` (−${(-up / r.cpNow * 100).toFixed(2)}%)` })) : el('span', { text: lead + '실투력은 같아요' }))
+        : el('span', { text: lead + (g < -0.0005 ? `실뎀 ${g.toFixed(2)}%` : '실뎀은 같아요') });
+    }
+    box.append(el('p', { class: 'av-gain' }, head));
+    const tb = el('tbody');
     for (const part of PARTS) {
-      const now = p.worn[part] || '', want = rec[part] || '';
+      const now = p.worn[part] || '', want = keepNow ? now : (rec[part] || '');
       const same = now === want;
       tb.append(el('tr', { class: same ? '' : 'chg' }, el('th', { scope: 'row', text: PART_LABEL[part] || part }), el('td', { text: short(now) || '-' }), el('td', { class: same ? 'same' : 'to', text: same ? '그대로' : short(want) })));
     }
     const extraRow = (label, now, want) => { const same = now === want; tb.append(el('tr', { class: same ? '' : 'chg' }, el('th', { scope: 'row', text: label }), el('td', { text: now || '-' }), el('td', { class: same ? 'same' : 'to', text: same ? '그대로' : (want || '-') }))); };
-    if (r.best.bottom != null && (p.bottom || r.best.bottom)) extraRow('하의 악세', p.bottom || '', r.best.bottom);
-    for (const [c, v] of Object.entries(r.best.buffs || {})) extraRow(buffLabel(c), String(APP.val(c) ?? ''), v);
+    if (showBottom) extraRow('하의 악세', p.bottom || '', keepNow ? (p.bottom || '') : r.best.bottom);
+    for (const [c, v] of buffs) { const now = String(APP.val(c) ?? ''); extraRow(buffLabel(c), now, keepNow ? now : v); }
     box.append(el('table', { class: 'av-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '부위' })), el('th', { scope: 'col', text: '지금' }), el('th', { scope: 'col', text: '추천' }))), tb));
-    box.append(el('p', { class: 'av-hint', text: `3세트: ${r.best.setLabels.join(' · ')} | ${r.mode}${r.best.coolReal != null ? ` | 쿨감 ${r.best.coolReal}%` : ''} | 시트(룰루) 점수로는 실뎀 ${g >= 0 ? '+' : ''}${g.toFixed(2)}%` }));
+    if (keepNow) { box.append(el('p', { class: 'av-hint', text: '조건에 맞는 다른 조합은 모두 지금 세팅보다 낮았어요' })); return; }
+    box.append(el('p', { class: 'av-hint', text: `3세트: ${r.best.setLabels.join(' · ')} | ${r.mode}${r.best.coolReal != null ? ` | 쿨감 ${r.best.coolReal}%` : ''}${changed ? ` | 시트(룰루) 점수로는 실뎀 ${g >= 0 ? '+' : ''}${g.toFixed(2)}%` : ''}` }));
     if (r.cands && r.cands.length > 1 && r.best.cp > 0) box.append(el('p', { class: 'av-hint', text: `계산기 실투력 기준으로 모든 조합을 비교해서 고른 결과예요. 마지막에 후보 ${r.cands.length}개를 계산기로 정확히 다시 쟀어요` }));
   }
   // 아바타 점수 상위 조합을 계산기 본체(시트와 같은 실투력 계산)에 넣어 실투력으로 다시 줄 세움
   const STAT_CELL = { '적응력': ['C14'], '초적응력': ['C15'], '강배': ['C24'], '역강배': ['C25'], '100이하': ['C26'], '추피': ['C22'], '양극화': ['C20'], '모스댐': ['C33'], '초댐증': ['C30'], '크댐증': ['C18'], '보댐증': ['C21'], '쿨감': ['C31', 'C32'], '강렬댐증': ['C29'] };
-  // 후보 세팅의 스탯(탐색과 같은 셈법)과 지금 낀 것의 차이만큼 계산기 칸을 바꾼 값
+  // 후보 세팅과 지금 낀 것의 차이만큼 계산기 칸을 바꾼 값.
+  // 후보도 지금 낀 것과 같은 셈법(실제로 켜지는 세트 효과 전부)으로 셈 — 탐색 점수는 고른 3세트 효과만 치지만,
+  // 실투력은 남는 부위가 우연히 켜는 2세트 효과까지 쳐야 맞음(지금과 똑같은 조합이면 차이가 정확히 0)
   function overridesFor(r, worn, cand) {
-    const w = R.sumsToAddArr(R.wornContribution(r.db, worn || {}).sums), a = cand.addArr, inp = APP.inputs(), o = {}, cs = curStats();
+    const cw = R.wornContribution(r.db, Object.assign({ '아바타5셋': cand.fiveSetDisplay }, cand.partToDisplay)).sums;
+    const w = R.sumsToAddArr(R.wornContribution(r.db, worn || {}).sums), a = R.sumsToAddArr(cw), inp = APP.inputs(), o = {}, cs = curStats();
+    const cap = APP.coolCap ? APP.coolCap() : 35;
+    const coolReal = r.bare && isFinite(r.bare.baseCooldownBare) ? Math.max(Number(cand.coolReal) || 0, Math.min(r.bare.baseCooldownBare + (cw['쿨감'] || 0), cap)) : cand.coolReal;
     AIDX.forEach((k, i) => {
       const d = (a[i] || 0) - (w[i] || 0); if (!d) return;
       if (k === '물마퍼') { const m = (100 + cs['물마퍼'] + d) / (100 + cs['물마퍼']); o.C11 = Math.round(num('C11') * m); o.C12 = Math.round(num('C12') * m); return; }
       for (const c of STAT_CELL[k]) o[c] = Math.round(((Number(inp[c]) || 0) + d / 100) * 1e6) / 1e6;
     });
-    const dc = Math.min(cand.coolReal, APP.coolCap ? APP.coolCap() : 35) - cs['쿨감'];
+    const dc = Math.min(coolReal, cap) - cs['쿨감'];
     if (dc) for (const c of STAT_CELL['쿨감']) o[c] = Math.round(((Number(inp[c]) || 0) + dc / 100) * 1e6) / 1e6;
     return o;
   }

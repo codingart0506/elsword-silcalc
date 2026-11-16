@@ -569,10 +569,13 @@
     hero.classList.remove('empty');
     const cp = cpOf(wb);
     const noRange = !(Number(g('C12')) > 0); // 극대화 범위가 없으면 계산값이 의미 없음(음수 등)
-    setText('#rCP', noRange ? '—' : typeof cp === 'number' ? fmtInt(cp) : String(cp));
     const missing = ['C12', 'C13'].filter(a => !(Number(g(a)) > 0));
-    $('#rCPk').classList.toggle('warn', missing.length > 0);
-    setText('#rCPk', missing.length ? `${missing.map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력').join('·')}을 넣어야 정확해요` : korUnit(cp));
+    // 시트가 계산을 막는 입력(#N/A): 숫자 대신 이유를 보여 줌. 시트도 공격력 최댓값이 공격력보다 커야 계산함
+    const bad = !noRange && typeof cp !== 'number';
+    const why = !bad ? '' : Number(g('C12')) <= Number(g('C11')) ? '극대화 범위 최댓값이 공격력보다 커야 계산돼요' : '계산할 수 없는 값이 있어요. 넣은 값을 확인해 주세요';
+    setText('#rCP', noRange || bad ? '—' : fmtInt(cp));
+    $('#rCPk').classList.toggle('warn', missing.length > 0 || bad);
+    setText('#rCPk', missing.length ? `${missing.map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력').join('·')}을 넣어야 정확해요` : bad ? why : korUnit(cp));
     const nk = shared ? (shared.nk || '') : nickOf(store.current);
     setText('#rClass', nk ? `${nk} (${label('C6')})` : label('C6'));
     const fi = $('#fieldInfo'); if (fi) fi.textContent = `${label('K8')} ${fmtPct(g('L8'), 0)}, ${label('K9')} ${fmtPct(g('L9'), 0)} 적용 중`;
@@ -940,6 +943,9 @@
         if (eq.checked) inputs._eq = true; else delete inputs._eq;
         if (syncEq() && ocrSnap && ocrSnap._key === store.current && String(ocrSnap.C24) === String(b24) && String(ocrSnap.C25) === String(b25)) { ocrSnap.C24 = inputs.C24; ocrSnap.C25 = inputs.C25; }
       }
+      // 사진으로 기준 세팅을 처음 잡은 직후라면, 방금 넣은 값까지 기준에 넣음(안 그러면 기준에 무기 공격력이 없어 비교가 안 됨)
+      if (autoBaseKey && autoBaseKey === store.current && !shared) { store.bases[store.current] = Object.assign({}, inputs); applyBase(); }
+      autoBaseKey = null;
       refresh(); scheduleAutosave(); wrap.remove();
     };
     const card = el('div', { class: 'dialog-card extra-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'exTitle' },
@@ -1047,6 +1053,7 @@
     }
   }
   let ocrSnap = null, ocrShot = null; // 마지막으로 스크린샷을 적용한 세팅과 그 사진(랭킹 갱신용)
+  let autoBaseKey = null; // 이번 사진으로 기준 세팅을 처음 잡은 캐릭터(이어서 창에서 넣는 무기 공격력 등도 기준에 넣으려고)
   function applyOcr() {
     let n = 0; const prevCls = inputs.C6;
     document.querySelectorAll('#ocrBody tr').forEach(tr => {
@@ -1064,6 +1071,7 @@
     applyInputs(); syncEngraveType(); syncClassDefault(prevCls); syncEq();
     let autoBase = false;
     if (!shared && isEmptySetting(store.bases[store.current] || {}) && !isEmptySetting(inputs)) { store.bases[store.current] = Object.assign({}, inputs); applyBase(); autoBase = true; }
+    autoBaseKey = autoBase ? store.current : null;
     applyInputs(); refresh(); scheduleAutosave(); renderProfiles();
     ocrSnap = Object.assign({}, inputs); ocrShot = shot; ocrSnap._key = store.current;
     // 적용이 끝나면 인식 결과 목록만 접고, 사진은 ×로 지울 때까지 남겨 둠

@@ -919,7 +919,6 @@
       el('div', { class: 'rk-side' },
         cap,
         el('p', { class: 'rk-cap', text: `실투력 ${fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신${textMark()}` }),
-        oldCalc(r) ? el('p', { class: 'rk-cap rk-old-note', text: '실투력 계산이 바뀌기 전에 올린 기록이에요. 지금 계산 방식으로 다시 잰 값이고, 다시 갱신하면 이 표시가 없어져요' }) : null,
         shareP,
         el('div', { class: 'rk-btns' },
           el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => openPlayer(r) }),
@@ -933,7 +932,7 @@
       const bu = u ? await bakeShot(u, viewerName() + '|' + r.shot_path) : null;
       if (bu) { marked = true; img.src = bu; }
       else if (u) { img.src = u; shot.append(watermark()); }
-      if (u) cap.textContent = '지금 랭킹 값을 낸 스크린샷이에요. 누르면 크게 보여요.';
+      if (u) cap.remove(); // 사진이 뜨면 안내 문구는 없앰
       else { shot.hidden = true; cap.textContent = '사진이 아직 없어요.'; }
     } catch (e) { cap.textContent = '사진을 불러오지 못했어요.'; }
   }
