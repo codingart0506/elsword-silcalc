@@ -1171,7 +1171,7 @@
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
       el('p', { text: '게임 채팅창에 이 코드를 입력한 다음, 채팅이 보이게 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요. PC방 혜택과 지애 버프는 끄고 찍어 주세요.' }),
       exampleFig(),
-      el('p', { class: 'apply-privacy', text: '신청하면 닉네임, 계산기 세팅, 스크린샷이 랭킹용으로 저장돼요. 랭킹을 볼 때는 본 기록(본 캐릭터, 시각, 기기 구분용 임의 번호)이 180일 동안 남아요. IP 주소는 모으지 않아요.' }),
+      el('p', { class: 'apply-privacy' }, '신청하면 닉네임, 계산기 세팅, 스크린샷이 랭킹용으로 저장돼요. 랭킹을 볼 때는 본 기록(본 캐릭터, 시각, 기기 구분용 임의 번호)이 180일 동안 남아요. 자세한 내용은 ', el('a', { href: 'privacy.html', target: '_blank', rel: 'noopener', text: '개인정보 처리방침' }), '에 있어요.'),
       pick.box, pick.file,
       el('div', { class: 'dlg-actions' }, el('button', { type: 'button', class: 'btn', text: '취소', onclick: close }), send));
     const wrap = el('div', { class: 'dialog', id: 'applyDlg' }, card);
