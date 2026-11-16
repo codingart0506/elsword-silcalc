@@ -497,11 +497,11 @@
   function criteriaFn(crit) {
     if (typeof crit === 'number' || typeof crit === 'boolean') return (v) => matchKey(crit, v) || (typeof crit === 'number' && typeof v === 'string' && toNum(v) === crit);
     const s = toStr(crit);
-    const m = /^(<=|>=|<>|<|>|=)?(.*)$/.exec(s);
+    const m = /^(<=|>=|<>|<|>|=)?([\s\S]*)$/.exec(s); // 값에 줄바꿈이 있어도(예: '오케스트라 홀 \n(=둠 아포리아)')
     const op = m[1] || '=', rhsS = m[2];
     const rhsN = rhsS !== '' && !isNaN(Number(rhsS)) ? Number(rhsS) : null;
     const rhsB = /^(TRUE|FALSE)$/i.test(rhsS) ? rhsS.toUpperCase() === 'TRUE' : null;
-    const wild = /[*?]/.test(rhsS) ? new RegExp('^' + rhsS.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/~\*/g, '\u0001').replace(/~\?/g, '\u0002').replace(/\*/g, '.*').replace(/\?/g, '.').replace(/\u0001/g, '\\*').replace(/\u0002/g, '\\?') + '$', 'i') : null;
+    const wild = /[*?]/.test(rhsS) ? new RegExp('^' + rhsS.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/~\*/g, '\u0001').replace(/~\?/g, '\u0002').replace(/\*/g, '[\\s\\S]*').replace(/\?/g, '[\\s\\S]').replace(/\u0001/g, '\\*').replace(/\u0002/g, '\\?') + '$', 'i') : null;
     return (v) => {
       if (op === '=' || op === '<>') {
         let eq;

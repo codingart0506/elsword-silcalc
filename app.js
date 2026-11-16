@@ -84,7 +84,9 @@
   // 검증 목록(드롭다운): 고급사용자모드 칸은 'A_' 붙여서
   const DV = {};
   for (const d of M.validations) for (const a of d.cells) DV[(d.sheet === ADV ? 'A_' : '') + a] = d;
-  const toSheet = (a, v) => PCT.has(a) && typeof v === 'number' ? Math.round(v * 100 * 1e9) / 1e9 : v;
+  // 크리·극대화는 스탯창에서 100%가 끝이라(넘으면 시트가 계산을 못 함) 100%로 자름. 아바타·소켓 추천에서 더한 값이 넘을 때도
+  const CAP100 = new Set(['C17', 'C19']);
+  const toSheet = (a, v) => PCT.has(a) && typeof v === 'number' ? Math.round((CAP100.has(a) ? Math.min(Math.max(v, 0), 1) : v) * 100 * 1e9) / 1e9 : v;
   const fromSheet = (a, v) => PCT.has(a) && typeof v === 'number' ? Math.round(v / 100 * 1e12) / 1e12 : v;
   // 피시방·에너지드링크·지애 → 시트의 '피시방 버프 미연결' 칸
   function extraCells(inp, put) {
