@@ -719,49 +719,12 @@
     return out.sort((a, b) => b.z - a.z);
   }
   window.SilWM = { bakeCanvas, locate, residualGrid, scoreNames, wmGrid };
-  // 퍼진 캡처에서 워터마크 드러내기: 주변 평균과의 아주 작은 차이만 남겨 크게 키움(색 차이·밝기 차이 두 가지)
-  function revealMark(src, mode) {
-    const w = src.width, h = src.height, d = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
-    const v = new Float32Array(w * h);
-    for (let i = 0, j = 0; j < v.length; i += 4, j++) v[j] = mode === 'faint' ? d[i + 2] : mode === 'lum' ? (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) : d[i + 2] - (d[i] + d[i + 1]) / 2;
-    const W = w + 1, S = new Float64Array(W * (h + 1));
-    for (let y = 0; y < h; y++) { let row = 0; for (let x = 0; x < w; x++) { row += v[y * w + x]; S[(y + 1) * W + x + 1] = S[y * W + x + 1] + row; } }
-    const M = Math.max(w, h), faint = mode === 'faint';
-    const R = faint ? Math.max(6, Math.round(M / 50)) : Math.max(4, Math.round(M / 120)), gain = faint ? 60 : mode === 'lum' ? 14 : 10;
-    const out = document.createElement('canvas'); out.width = w; out.height = h;
-    const og = out.getContext('2d'), od = og.createImageData(w, h), o = od.data;
-    const res = new Float32Array(w * h);
-    for (let y = 0; y < h; y++) {
-      const y0 = Math.max(0, y - R), y1 = Math.min(h, y + R + 1);
-      for (let x = 0; x < w; x++) {
-        const x0 = Math.max(0, x - R), x1 = Math.min(w, x + R + 1);
-        const mean = (S[y1 * W + x1] - S[y0 * W + x1] - S[y1 * W + x0] + S[y0 * W + x0]) / ((y1 - y0) * (x1 - x0));
-        const r = mean - v[y * w + x];
-        res[y * w + x] = faint ? Math.max(-2.5, Math.min(2.5, r)) : r;
-      }
-    }
-    let fin = res;
-    if (faint) {
-      // 압축 잡음(작은 점)은 살짝 뭉갬. 글자·테두리처럼 크게 튀는 곳은 위에서 잘라 냄
-      const r2 = Math.max(1, Math.round(M / 700)), T = new Float64Array(W * (h + 1));
-      for (let y = 0; y < h; y++) { let row = 0; for (let x = 0; x < w; x++) { row += res[y * w + x]; T[(y + 1) * W + x + 1] = T[y * W + x + 1] + row; } }
-      fin = new Float32Array(w * h);
-      for (let y = 0; y < h; y++) {
-        const y0 = Math.max(0, y - r2), y1 = Math.min(h, y + r2 + 1);
-        for (let x = 0; x < w; x++) { const x0 = Math.max(0, x - r2), x1 = Math.min(w, x + r2 + 1); fin[y * w + x] = (T[y1 * W + x1] - T[y0 * W + x1] - T[y1 * W + x0] + T[y0 * W + x0]) / ((y1 - y0) * (x1 - x0)); }
-      }
-    }
-    for (let j = 0; j < w * h; j++) { const q = 128 + fin[j] * gain, p = j * 4; o[p] = o[p + 1] = o[p + 2] = q; o[p + 3] = 255; }
-    og.putImageData(od, 0, 0);
-    return out;
-  }
   function wmFinder(c, ps) {
     ps = ps || [];
     // 1) 퍼진 사진: 어느 캐릭터 사진인지 고르면, 원본과 맞대어 누구 무늬인지 찾음
-    const who = el('input', { type: 'search', class: 'adm-search', placeholder: '사진 속 캐릭터 닉네임(비워 두면 자동으로 찾아요)', list: 'wmChars', autocomplete: 'off' });
+    const who = el('input', { type: 'search', class: 'adm-search', placeholder: '사진 속 캐릭터 (비워 두면 자동)', list: 'wmChars', autocomplete: 'off' });
     const dl = el('datalist', { id: 'wmChars' }); for (const p of ps) dl.append(el('option', { value: p.nickname }));
     const out = el('div', { class: 'wm-out wm-result' });
-    const old = el('details', { class: 'wm-old' }, el('summary', { text: '예전 방식으로 보기(랭킹 목록 캡처, 예전 글자 무늬)' }));
     let leakCv = null, busy = false;
     const z1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
     const run = async () => {
@@ -769,7 +732,7 @@
       const nm = who.value.trim();
       const p = ps.find(x => x.nickname === nm) || ps.find(x => x.nickname.toLowerCase() === nm.toLowerCase());
       out.textContent = '';
-      if (nm && !p) { out.append(el('p', { class: 'adm-flag', text: '랭킹 캐릭터 목록에서 골라 주세요. 모르면 비워 두면 자동으로 찾아요.' })); return; }
+      if (nm && !p) { out.append(el('p', { class: 'adm-flag', text: '랭킹에 없는 캐릭터예요' })); return; }
       busy = true;
       const note = el('p', { class: 'rank-note', text: '원본 사진을 불러오는 중이에요' }); out.append(note);
       try {
@@ -803,11 +766,11 @@
           if (at && (!best || at.q > best.at.q)) best = { path, o, at };
         }
         const p2 = pp;
-        if (!best || best.at.q < 0.3) { note.textContent = `퍼진 사진 안에서 ${p2.nickname} 랭킹 사진을 못 찾았어요. 다른 캐릭터 사진이거나, 너무 작게 잘렸을 수 있어요.`; busy = false; return; }
+        if (!best || best.at.q < 0.3) { note.textContent = `사진에서 ${p2.nickname} 랭킹 사진을 못 찾았어요`; busy = false; return; }
         note.textContent = '누구 무늬인지 비교하는 중이에요';
         await new Promise(r => setTimeout(r, 0));
         const res = residualGrid(best.o, leakCv, best.at);
-        if (!res) { note.textContent = '사진이 너무 작게 들어 있어서 비교할 수 없어요.'; busy = false; return; }
+        if (!res) { note.textContent = '사진이 너무 작아서 비교할 수 없어요'; busy = false; return; }
         const { data: vl } = await c.from('view_log').select('viewer_nick,at').eq('kind', 'detail').eq('target', p2.id).order('at', { ascending: false }).limit(1000);
         const names = [...new Set(['관리자', ...ps.map(x => x.nickname), ...(vl || []).map(v => v.viewer_nick).filter(Boolean)])];
         const sc = scoreNames(res, best.o.width, best.o.height, best.path, names);
@@ -815,14 +778,11 @@
         const sure = top.z >= 6 && gap >= 3, likely = !sure && top.z >= 4.5 && gap >= 2;
         out.textContent = '';
         out.append(el('p', { class: 'wm-verdict' + (sure ? ' sure' : likely ? ' likely' : '') },
-          sure ? `${top.name} 님이 본 화면이에요` : likely ? `${top.name} 님일 가능성이 높아요` : '누가 본 화면인지 가려내지 못했어요',
-          el('small', { text: sure || likely ? ` (점수 ${z1(top.z)}, 다음 후보 ${z1(second)})` : ' (예전 방식 무늬였거나 사진이 너무 많이 줄었을 수 있어요. 아래 남은 차이 그림에 글자가 보이면 그 글자가 본 사람이에요)' })));
+          sure ? `${top.name} 님이 본 화면이에요` : likely ? `${top.name} 님일 가능성이 높아요` : '누가 본 화면인지 못 찾았어요',
+          sure || likely ? el('small', { text: ` (점수 ${z1(top.z)}, 다음 ${z1(second)})` }) : null));
         const seen = (vl || []).filter(v => v.viewer_nick === top.name).slice(0, 5).map(v => new Date(v.at).toLocaleString('ko-KR'));
-        if ((sure || likely) && seen.length) out.append(el('p', { class: 'rank-note', text: `${top.name} 님이 ${p2.nickname} 상세를 본 기록: ${seen.join(', ')}${(vl || []).filter(v => v.viewer_nick === top.name).length > 5 ? ' 외' : ''}` }));
+        out.append(el('p', { class: 'rank-note', text: `사진 속 캐릭터: ${p2.nickname}` + ((sure || likely) && seen.length ? ` · ${top.name} 님이 본 시각: ${seen.join(', ')}${(vl || []).filter(v => v.viewer_nick === top.name).length > 5 ? ' 외' : ''}` : '') }));
         out.append(el('ol', { class: 'wm-cands' }, ...sc.slice(0, 5).map(x => el('li', { text: `${x.name}  ${z1(x.z)}` }))));
-        out.append(el('p', { class: 'rank-note', text: `사진 속 캐릭터: ${p2.nickname}. 후보 ${names.length}명 중 점수가 높은 순서예요. 무늬가 없는 사람은 0 근처(대개 3 아래)이고, 본 사람은 6을 훌쩍 넘어요. 맞대기 정도 ${Math.round(best.at.q * 100)}%` }));
-        const fig = el('figure', { class: 'wm-res' }, res.view, el('figcaption', { text: '원본을 빼고 남은 차이(밝게 키움)' }));
-        out.append(fig);
       } catch (e) { console.warn(e); out.textContent = '찾지 못했어요. ' + errMsg(e); }
       busy = false;
     };
@@ -845,23 +805,20 @@
       if (!blob) return;
       try {
         leakCv = await blobToCanvas(blob);
-        old.querySelectorAll(':scope > :not(summary)').forEach(n => n.remove());
-        old.append(el('p', { text: '안 보이는 글자 찾기(랭킹 목록 캡처 원본)' }), revealMark(leakCv, 'faint'), el('p', { text: '색 차이로 찾기' }), revealMark(leakCv, 'chroma'), el('p', { text: '밝기 차이로 찾기' }), revealMark(leakCv, 'lum'));
-        zone.querySelector('p').textContent = `넣은 사진: ${leakCv.width}×${leakCv.height}. 다른 사진으로 바꾸려면 다시 붙여 넣으세요.`;
+        zone.querySelector('p').textContent = `넣은 사진 ${leakCv.width}×${leakCv.height}`;
         run();
       } catch (e) { out.textContent = '이미지를 열지 못했어요'; }
     };
     const fin = el('input', { type: 'file', accept: 'image/*', hidden: '' });
     fin.onchange = () => show(fin.files[0]);
     const zone = el('div', { class: 'wm-drop', tabindex: '0' },
-      el('p', { text: '퍼진 캡처·사진을 이 칸을 누른 뒤 Ctrl + V로 붙여 넣거나 끌어다 놓으세요.' }),
+      el('p', { text: '캡처·사진을 붙여 넣거나(Ctrl + V) 끌어다 놓으세요' }),
       el('button', { type: 'button', class: 'btn', text: '이미지 열기', onclick: () => fin.click() }), fin);
     zone.addEventListener('paste', (e) => { const f = [...(e.clipboardData || {}).items || []].find(i => i.type.startsWith('image/')); if (f) { e.preventDefault(); e.stopPropagation(); show(f.getAsFile()); } });
     zone.addEventListener('dragover', (e) => e.preventDefault());
     zone.addEventListener('drop', (e) => { e.preventDefault(); show([...e.dataTransfer.files].find(f => f.type.startsWith('image/'))); });
     return el('div', { class: 'adm-sec' }, el('h3', { text: '워터마크 찾기' }),
-      el('p', { class: 'rank-note', text: '랭킹 사진에는 보는 사람마다 다른 무늬가 눈에 안 띄게 깔려 있어요. 퍼진 캡처나 휴대폰으로 찍은 사진을 넣으면, 사진 속 랭킹 캐릭터의 원본 사진과 맞대어 누가 본 화면인지 찾아요. 아래 칸은 퍼뜨린 사람이 아니라 사진에 찍힌 캐릭터예요(알면 빨라지고, 비워 두면 자동으로 찾아요). 줄이거나 다시 저장한 사진도 대개 찾을 수 있어요. 11월 17일 업데이트 전 화면(예전 글자 무늬)은 아래 남은 차이 그림에 글자로 보일 수 있어요.' }),
-      zone, el('div', { class: 'adm-find' }, who, dl), out, old,
+      zone, el('div', { class: 'adm-find' }, who, dl), out,
       el('h3', { text: '복사한 글에서 찾기' }), txt, txtOut);
   }
   // 랭킹 화면 전체에 눈에 안 띄는 워터마크(보는 사람·시각)를 덮어 둠: 화면 캡처에도 그대로 남음
