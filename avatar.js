@@ -18,7 +18,8 @@
     '동방미식 덤플링 서번트 의상': { atk: 25, max: 3, adapt: 3 },
     '모험가 성장 부스팅 투명 아바타': { atk: 30, crit: 5, max: 5, spd: 5, mos: 4, limited: true },
   };
-  const SUIT_CELL = { crit: 'C17', max: 'C19', spd: 'C35', mos: 'C33', pol: 'C20', adapt: 'C14', dot: 'C22' };
+  // 동작속도(spd)는 실투력 시트에 칸이 없어서 안 씀
+  const SUIT_CELL = { crit: 'C17', max: 'C19', mos: 'C33', pol: 'C20', adapt: 'C14', dot: 'C22' };
   const db = R.prepareDb(A.items);
   const optionsOf = (part) => part === '아바타5셋' ? db.fiveSetList.map(s => db.fiveSetDisplay.get(s)) : part === '한벌' ? Object.keys(SUITS) : [...(db.partCandidates.get(part) || [])];
   const short = (d) => { const t = String(d || ''); const m = t.match(/^(.+?) : (.+)$/); return m ? m[2] + ' · ' + m[1] : t; };
@@ -44,10 +45,10 @@
   const IMPRINT_OF = { 0.04: '4% (찬란석 하옵)', 0.05: '5% (찬란석 상옵)', 0.055: '5.5% (강수, 11강)', 0.06: '6% (강수, 12강)', 0.065: '6.5% (강수, 13강)' };
   function calcOpts() {
     const inp = APP.inputs();
-    let env = num('L34'); if (env > 0 && env <= 1.5) env *= 100; if (!(env > 0)) env = 95;
+    let env = num('L8'); if (env > 0 && env <= 1.5) env *= 100; if (!(env > 0)) env = 95;
     let imprint = '없음';
     for (const [k, v] of [['D20', 'H20'], ['D21', 'H21'], ['D22', 'H22']]) if (String(inp[k] || '').startsWith('크리티컬 데미지')) imprint = IMPRINT_OF[Math.round(Number(inp[v]) * 1000) / 1000] || imprint;
-    const atma = inp.J32 === '초목의 아트마' ? ({ '일반': '일반', '레어': '레어', '엘리트': '엘리트', '유니크': '유니크' }[inp.L32] || '없음') : '없음';
+    const atma = inp.G34 === '초목' ? ({ '일반': '일반', '레어': '레어', '엘리트': '엘리트', '유니크': '유니크' }[inp.H34] || '없음') : '없음';
     const town = String(inp.J17 || '');
     const rally = /강화/.test(town) && /엘 ?하우스/.test(town) ? '강화 엘 하우스 버프' : /엘 ?하우스/.test(town) ? '엘 하우스 버프' : /수색대원/.test(town) ? '수색대원의 결의' : /공존/.test(town) ? '공존의 축제 버프' : '없음';
     return { env: Math.round(env * 100) / 100, party: Number(inp.H11) > 0, maestro: inp.G27 === '마에스트로 헤일로', atma, imprint, rally };

@@ -39,6 +39,7 @@ kbd { font-family: inherit; font-size: 13px; font-weight: 600; padding: 1px 7px;
   .head h1 { font-size: 26px; }
   .main .card { padding: 28px 32px; }
   .main .rows { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; }
+  .main .grp.wide .rows { grid-template-columns: 1fr; }
   .main .grp .rows .srow { border-bottom: 1px solid var(--line); }
   .main .grp { padding-top: 20px; }
   .seg { max-width: 520px; }
@@ -61,6 +62,8 @@ kbd { font-family: inherit; font-size: 13px; font-weight: 600; padding: 1px 7px;
 /* 머리 */
 .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 4px 8px; flex-wrap: wrap; }
 .head h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -0.03em; }
+.sheet-ver { margin: 2px 0 0; font-size: 12px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.sheet-ver:empty { display: none; }
 .who { display: flex; align-items: center; gap: 4px; }
 
 /* 카드 */

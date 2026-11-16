@@ -2,21 +2,11 @@
 (function () {
   'use strict';
   const E = window.SilEngine, O = window.SilOCR, M = window.SIL_MODEL;
-  const SH = '<Main>';
-  // 원본 시트의 'Items Simulator'(상세스펙 시뮬레이터)에만 있던 피시방 버프·지애 버프를 메인 입력처럼 쓰게 함
-  // 피시방 버프·에너지드링크·지애 버프는 켜고 끄는 체크칸: <Main>!ZB1(피방벞), ZB3(에너지드링크), ZB2(지애벞)
-  // <교체 정보>의 '메인기준' 체크칸(HE14~HE17, HM14·HM21)이 이 값을 보게 연결. 랜미벞(HM15~HM20)은 안 씀
+  // 실질전투력 시트 ver.3: 입력은 <Main>과 고급사용자모드, 실투력은 '현재·교체 후 계산'!C498
+  const SH = '<Main>', ADV = '고급사용자모드', CALC = '현재·교체 후 계산';
+  const CP_AT = M.meta && M.meta.cp ? M.meta.cp : [CALC, 'C498'];
+  // 시트에 없는 버프(피시방·에너지드링크·지애)는 켜고 끄는 체크칸. 시트의 '피시방 버프 미연결' 칸(최종뎀·크리·극대)에 넣어 계산
   const EXTRA_BUFF = { ZB1: '피시방 버프', ZB3: '에너지드링크', ZB2: '지애 버프' };
-  if (!M.sheets[SH].ZB1) {
-    const S = M.sheets['<교체 정보>'], Z = (c) => `'<Main>'!$ZB$${c.slice(2)}`;
-    for (const c of Object.keys(EXTRA_BUFF)) M.sheets[SH][c] = { v: false };
-    S.HE14 = { f: `AND(${Z('ZB1')}=TRUE,${Z('ZB3')}<>TRUE)` };
-    S.HE15 = { f: `AND(${Z('ZB1')}<>TRUE,${Z('ZB3')}=TRUE)` };
-    S.HE16 = { f: `AND(${Z('ZB1')}=TRUE,${Z('ZB3')}=TRUE)` };
-    S.HE17 = { f: `AND(${Z('ZB1')}<>TRUE,${Z('ZB3')}<>TRUE)` };
-    S.HM14 = { f: `${Z('ZB2')}=TRUE` };
-    S.HM21 = { f: `${Z('ZB2')}<>TRUE` };
-  }
   const wb = new E.Workbook(M);
   const $ = (s, r) => (r || document).querySelector(s);
   const el = (tag, attrs, ...kids) => {
@@ -30,23 +20,28 @@
   };
 
   // ---------- 입력 항목 구성 (시트 <Main> 배치 그대로) ----------
-  const PCT = new Set('C14 C15 C17 C18 C19 C20 C21 C22 C24 C25 C26 C27 C29 C30 C31 C32 C33 C34 C35 H11 H12 H13 H17 H18 H20 H21 H22 H31 H32 H33'.split(' '));
+  // 계산기 안에서는 퍼센트 값을 소수(86.4% → 0.864)로 들고 있고, 시트에 넣을 때 ×100 (ver.3 시트는 86.4로 받음)
+  const PCT = new Set('C14 C15 C17 C18 C19 C20 C21 C22 C24 C25 C26 C27 C29 C30 C31 C32 C33 C34 H11 H12 H13 H17 H18 H20 H21 H22'.split(' '));
+  // 고급사용자모드 칸은 'A_B4'처럼 씀
+  const sheetOf = (a) => a.startsWith('A_') ? [ADV, a.slice(2)] : [SH, a];
   const HELP = {
     C12: '능력치 창의 물리/마법 공격력에 마우스를 올리면 나오는 극대화 범위 "12345 ~ 67890" 중 오른쪽 최댓값. 무기 공격력이 아님.',
     C13: '상세 능력치 창이 아니라 무기 자체의 물리/마법 공격력 (극대화 범위 X).',
-    C27: '테네브로스 장비의 세 번째 그림자 옵션 효과.',
     C34: '순환 엑사 세트효과 8%를 더하지 말고 능력치 창 그대로 입력.',
     H11: '1. 테네브로스 상의 두 번째 그림자 옵션 / 2. 홍예항마 4세트 10% / 3. 엑사스케일 연산·순환 세트효과 10%',
     H12: '1. 테네브로스 장갑 두 번째 그림자 옵션 / 2. 홍예항마 2세트 10% / 3. 엑사스케일 복원 세트효과 (유강강초 회로 × 0.8%)',
     H13: '1. 테네브로스 상의 두 번째 그림자 옵션 / 2. 엑사스케일 복원 세트효과 10%',
     H15: '캐시샵 20000 캐시 업그레이드 이용권',
+    L11: '직업마다 고를 수 있는 스킬 효과예요. 직업 고유 패시브·버프는 따로 고르지 않아도 직업에 맞게 자동으로 들어가요.',
     ZB1: '최종 데미지 5%. 켜면 랭킹에 올릴 수 없어요.',
     ZB3: '피시방 에너지드링크(가동 중일 때): 크리·극대 5%, 최종 데미지 5%. 켜면 랭킹에 올릴 수 없어요.',
     ZB2: '최종 데미지 5%. 켜면 랭킹에 올릴 수 없어요.',
     J22: '이벤트 기간에만 받는 버프예요. 미적용이 아니면 랭킹에 올릴 수 없어요.',
     J21: '적용1-녹테네: 팟모스뎀·팟크뎀 10% / 적용2-녹엑사: 팟모스뎀·팟물마 10% / 적용3-적청엑사: 팟크뎀 10%. 녹힐 직업(디우스 아에르, 일천, 오버마인드, 데메르시오, 블루헨, 라디언트 소울, 닉스 피에타, 애버리스)은 직업을 고르면 적용3-적청엑사로 바뀌어요.',
-    J26: '미착용이면 종류는 아무거나, 강화 수치를 0으로.',
-    M46: '대충 감으로 넣는 비율 (시트: 강초뎀 적용 이전)\n가이드에서 본 비율이나 대충 감으로 넣을 때. 잘 모르면 이걸 고르세요.\n\n딜 미터로 잰 비율 (시트: 강초뎀 적용 이후)\n딜 미터로 실제 딜을 재서 넣을 때. 잰 딜에는 내 강렬·초월 스킬 데미지가 이미 들어 있어서 계산기가 그만큼 빼고 계산해요.\n\n어느 쪽이든 강렬·초월 스킬 데미지 수치를 바꾸면 실투력에 반영돼요.',
+    J27: '미착용이면 종류는 아무거나, 강화 수치를 0으로.',
+    A_B5: '대충 감으로 넣는 비율 (시트: 강초뎀 적용 이전)\n가이드에서 본 비율이나 대충 감으로 넣을 때. 잘 모르면 이걸 고르세요.\n\n딜 미터로 잰 비율 (시트: 강초뎀 적용 이후)\n딜 미터로 실제 딜을 재서 넣을 때. 잰 딜에는 내 강렬·초월 스킬 데미지가 이미 들어 있어서 계산기가 그만큼 빼고 계산해요.\n\n어느 쪽이든 강렬·초월 스킬 데미지 수치를 바꾸면 실투력에 반영돼요.',
+    A_E4: '추가 지속 피해(추피)는 맞힌 뒤 0.6초·1.6초·2.6초에 세 번 나눠 들어가요. 싸움이 짧으면 마지막 틱이 덜 들어가서, 평균 딜타임을 넣으면 그만큼 추피 효과를 줄여서 계산해요. 끄면 추피가 다 들어간다고 봐요.',
+    A_H4: '쿨타임 감소·쿨초기화로 스킬을 더 자주 쓰는 효과 중 얼마를 실투력에 넣을지예요. 끄면 기본값으로 계산해요.',
   };
   // 상세 스탯 탭은 게임의 상세 스탯 창과 같은 순서·이름
   const TABS = [
@@ -59,7 +54,6 @@
       { bar: '스킬', red: true, fields: [{ c: 'C29', t: '강렬한 스킬 데미지 증가' }, { c: 'C30', t: '초월한 스킬 데미지 증가' },
         { c: 'C31', t: '강렬한 스킬 재사용 시간 감소' }, { c: 'C32', t: '초월한 스킬 재사용 시간 감소' },
         { c: 'C33', t: '모든 스킬 데미지 증가' }, { c: 'C34', t: '스킬 사용시 재사용 시간 초기화 확률' }] },
-      { bar: '보조', fields: [{ c: 'C35', t: '동작속도' }] },
       { bar: '창에 없는 값', note: '상세 스탯 창에 안 나와서 직접 입력해요', single: true, fields: [{ c: 'C12', lab: 'B12' }, { c: 'C13', lab: 'B13' }] },
     ] },
     { id: 'buff', name: '버프·아이템', groups: [
@@ -69,147 +63,169 @@
       { bar: '금빛 각인석', fields: [[{ c: 'D20' }, { c: 'H20' }], [{ c: 'D21' }, { c: 'H21' }], [{ c: 'D22' }, { c: 'H22' }]] },
       { bar: '칭호', fields: [{ c: 'G24', lab: 'D24' }, { c: 'G25', lab: 'D25' }] },
       { bar: '일반 악세서리', note: '버프형 아이템', fields: [{ c: 'G27', t: '얼굴 상단' }, { c: 'G28', t: '얼굴 하단' }, { c: 'G29', t: '반지' }, { c: 'G30', t: '귀걸이' }] },
-      { bar: '카트리지', fields: [{ c: 'H31', lab: 'D31' }, { c: 'H32', lab: 'D32' }, { c: 'H33', lab: 'D33' }] },
-      { bar: '아티팩트', fields: [[{ c: 'D35' }, { c: 'G35' }]] },
+      { bar: '아티팩트', fields: [{ c: 'G32', t: '아티팩트' }] },
     ] },
     { id: 'gear', name: '스킬·장비', groups: [
-      { bar: '캐릭터 버프 스킬', fields: [{ c: 'L11', lab: 'I11' }, { c: 'L12', lab: 'I12' }, { c: 'L13', lab: 'I13' }, { c: 'L14', lab: 'I14' }] },
+      { bar: '캐릭터 버프 스킬', note: '직업 고유 패시브·버프는 직업에 맞게 자동으로 들어가요', fields: [{ c: 'L11', lab: 'I11' }, { c: 'L15', lab: 'I15' }] },
       { bar: '도핑', fields: [{ c: 'J17', lab: 'I17' }, { c: 'J18', lab: 'I18' }, { c: 'J19', lab: 'I19' }, { c: 'J20', lab: 'I20' }, { c: 'J21', lab: 'I21' }, { c: 'J22', lab: 'I22' }, { c: 'J23', lab: 'I23' },
         { c: 'ZB1', t: '피시방 버프' }, { c: 'ZB3', t: '에너지드링크' }, { c: 'ZB2', t: '지애 버프' }] },
-      { bar: '장비 종류와 강화', fields: [[{ c: 'J26', lab: 'I26' }, { c: 'L26' }], [{ c: 'J27', lab: 'I27' }, { c: 'L27' }], [{ c: 'J28', lab: 'I28' }, { c: 'L28' }], [{ c: 'J29', lab: 'I29' }, { c: 'L29' }],
-        [{ c: 'J31', lab: 'I31' }, { c: 'L31' }], [{ c: 'J32', lab: 'I32' }, { c: 'L32' }], { c: 'J30', t: '방어구 세트 효과' }] },
-      { bar: '전투력 출력 기준 필드', fields: [{ c: 'I34', t: '필드' }], extra: 'field' },
-      { bar: '강렬:초월 스킬 비율', note: '강렬 스킬과 초월 스킬을 얼마나 쓰는지예요.\n모르면 꺼 두세요. 직업에 맞는 기본 비율로 자동 계산해요.\n켜면 아래 비율로 계산해요. 비율만 맞으면 되고, 합이 100이 아니어도 돼요.',
-        fields: [{ c: 'L42', t: '직접 넣기' }, { c: 'M46', t: '입력 기준' }, { c: 'I46', t: '강렬 스킬' }, { c: 'K46', t: '초월 스킬' }] },
+      { bar: '장비 종류와 강화', fields: [[{ c: 'J26', lab: 'I26' }, { c: 'L26' }], [{ c: 'J27', lab: 'I27' }, { c: 'L27' }], [{ c: 'J28', lab: 'I28' }, { c: 'L28' }], [{ c: 'J29', lab: 'I29' }, { c: 'L29' }], [{ c: 'J30', lab: 'I30' }, { c: 'L30' }],
+        { c: 'G33', t: '세트 효과' }, [{ c: 'G34', t: '아트마' }, { c: 'H34' }]] },
+      { bar: '카트리지', note: '종류와 단계', wide: true, fields: [[{ c: 'J31', lab: 'I31' }, { c: 'L31' }], [{ c: 'J32', lab: 'I32' }, { c: 'L32' }], [{ c: 'J33', lab: 'I33' }, { c: 'L33' }], [{ c: 'J34', lab: 'I34' }, { c: 'L34' }]] },
+      { bar: '전투력 출력 기준 필드', fields: [{ c: 'I8', t: '필드' }], extra: 'field' },
+      { bar: '강렬:초월 스킬 비율', note: '강렬 스킬과 초월 스킬을 얼마나 쓰는지예요.\n모르면 꺼 두세요. 직업에 맞는 기본 비율로 자동 계산해요.\n켜면 아래 비율로 계산해요. 비율만 맞으면 되고, 합이 100이 아니어도 돼요.', noteCell: 'A_A9',
+        fields: [{ c: 'A_B4', t: '직접 넣기' }, { c: 'A_B5', t: '입력 기준' }, { c: 'A_B6', t: '강렬 스킬' }, { c: 'A_B7', t: '초월 스킬' }] },
+      { bar: '추피 보정', note: '싸움이 짧아 추가 지속 피해가 다 안 들어갈 때', fields: [{ c: 'A_E4', t: '켜기' }, { c: 'A_E5', t: '평균 딜타임 (초)' }] },
+      { bar: '가동률 DPS 전환', note: '스킬을 더 자주 쓰는 효과를 실투력에 넣는 비율', noteCell: 'A_G7', fields: [{ c: 'A_H4', t: '직접 넣기' }, { c: 'A_H5', t: '전환 계수' }] },
     ] },
   ];
 
-  // 검증 목록
+  // 검증 목록(드롭다운): 고급사용자모드 칸은 'A_' 붙여서
   const DV = {};
-  for (const d of M.validations) for (const a of d.cells) DV[a] = d;
-  const g = (a) => { const v = wb.get(SH, a); return E.isErr(v) ? v.code : v; };
+  for (const d of M.validations) for (const a of d.cells) DV[(d.sheet === ADV ? 'A_' : '') + a] = d;
+  const toSheet = (a, v) => PCT.has(a) && typeof v === 'number' ? Math.round(v * 100 * 1e9) / 1e9 : v;
+  const fromSheet = (a, v) => PCT.has(a) && typeof v === 'number' ? Math.round(v / 100 * 1e12) / 1e12 : v;
+  // 피시방·에너지드링크·지애 → 시트의 '피시방 버프 미연결' 칸
+  function extraCells(inp, put) {
+    const pc = inp.ZB1 === true, en = inp.ZB3 === true, ja = inp.ZB2 === true;
+    put(CALC, 'C614', pc ? 1.05 : 1); put(CALC, 'C615', en ? 0.05 : 0); put(CALC, 'C616', en ? 0.05 : 0); put(CALC, 'C617', en ? 1.05 : 1); put(CALC, 'C621', ja ? 1.05 : 1);
+  }
+  // 계산기 입력 → 시트 칸 { '<Main>!C17': 86.4, ... }
+  function sheetInputs(inp) {
+    const o = {};
+    for (const [a, v] of Object.entries(inp || {})) {
+      if (a.startsWith('_') || a === 'C27' || !/^(A_)?[A-Z]{1,2}\d+$/.test(a)) continue; // 피시방 등 체크칸(ZB1~3)도 <Main> 빈 칸에 적어 둠(계산은 extraCells)
+      const [sh, c] = sheetOf(a); o[sh + '!' + c] = toSheet(a, v);
+    }
+    extraCells(inp || {}, (sh, c, v) => { o[sh + '!' + c] = v; });
+    return o;
+  }
+  const gx = (w, a) => { const [sh, c] = sheetOf(a); const v = w.get(sh, c); return E.isErr(v) ? v.code : fromSheet(a, v); };
+  const g = (a) => gx(wb, a);
+  const cpOf = (w) => { const v = w.get(CP_AT[0], CP_AT[1]); return v; };
+  const atkType = (w) => { const v = (w || wb).get(CALC, 'C193'); return v === '물리' || v === '마법' ? v : null; };
   const LABEL_FALLBACK = { B11: '공격력', B12: '공격력 극대화 범위 내 최댓값', B13: '무기 공격력 (스탯창 X)' };
   const label = (a) => { const v = g(a); if (v == null || v === '' || String(v).startsWith('#')) return LABEL_FALLBACK[a] || ''; return String(v).trim(); };
   const labelOf = label;
-  const defaultOf = (a) => { const d = M.sheets[SH][a]; return d && 'v' in d ? d.v : null; };
-  function optionsOf(a) {
+  const defaultOf = (a) => { if (a in EXTRA_BUFF) return false; const [sh, c] = sheetOf(a); const d = (M.sheets[sh] || {})[c]; return d && 'v' in d ? fromSheet(a, d.v) : null; };
+  function optionsOf(a, w) {
     const d = DV[a]; if (!d || d.type !== 'list') return null;
     if (d.options) return d.options;
-    const r = wb.makeRange(d.source[0], d.source[1]); const m = wb.rangeValue(r);
-    const vals = (m instanceof E.Matrix ? m.flat() : [m]).filter(v => v !== null && v !== '' && !E.isErr(v));
+    const ww = w || wb, r = ww.makeRange(d.source[0], d.source[1]); const m = ww.rangeValue(r);
+    const vals = (m instanceof E.Matrix ? m.flat() : [m]).filter(v => v !== null && v !== '' && !E.isErr(v)).map(v => fromSheet(a, v));
     return [...new Set(vals)];
   }
   const kindOf = (a, f) => f && f.k ? f.k : DV[a] && DV[a].type === 'list' ? 'select' : PCT.has(a) ? 'pct' : typeof defaultOf(a) === 'boolean' ? 'check' : 'num';
 
   const CAN_LINK = !!window.SIL_CDN; // 링크 공유는 직접 호스팅판에서만 (Claude 링크는 주소 뒤 값을 못 넘김)
   // ---------- 처음 상태: 시트 예시 값 대신 빈 세팅 ----------
-  const STAT_CELLS = 'C11 C12 C13 C14 C15 C17 C18 C19 C20 C21 C22 C24 C25 C26 C27 C29 C30 C31 C32 C33 C34 C35'.split(' ');
-  const BLANK = Object.assign({ C6: '' }, Object.fromEntries(STAT_CELLS.map(a => [a, null])), {
+  const STAT_CELLS = 'C11 C12 C13 C14 C15 C17 C18 C19 C20 C21 C22 C24 C25 C26 C27 C29 C30 C31 C32 C33 C34'.split(' ');
+  const NONE = '해당사항 없음';
+  const BLANK = Object.assign({ _v: 3, C6: '' }, Object.fromEntries(STAT_CELLS.map(a => [a, null])), {
     H11: 0.1, H12: 0, H13: 0, ZB1: false, ZB2: false, ZB3: false, H15: '사용', H16: '이상', F17: '격려 재사용 시간 감소', F18: '격려 재사용 시간 감소', H17: 0.15, H18: 0.15,
-    D20: '물리 공격력 증가 (%)', D21: '크리티컬 데미지 증가 (%)', D22: '스킬 데미지 증가 (%)', H20: 0.05, H21: 0.05, H22: 0.05,
-    G24: 'Dogma', G25: '압도', G27: '해당사항 없음', G28: '해당사항 없음', G29: '해당사항 없음', G30: '해당사항 없음',
-    H31: 0, H32: 0, H33: 0, D35: '황색', G35: '5세트',
-    L11: '미사용', L12: '미사용', L13: '미사용', L14: '미사용', L15: '미사용',
-    J17: '엘 하우스(강화)', J18: '천상의 디저트파티', J19: '사용', J20: '투지의 물약', J21: '적용2-녹엑사 (팟모스뎀, 팟물마 10%)', J22: '미적용', J23: '아리엘의 스페셜 기프트 마크',
-    J26: '네블론', J27: '네블론', J28: '네블론', J29: '네블론', L26: 11, L27: 11, L28: 11, L29: 11, J30: '엑사&네블론 - 연산', J31: '사룡무', L31: 12, J32: '유수의 아트마', L32: '유니크',
+    D20: '물리 공격력 (%)', D21: '크리티컬 데미지', D22: '스킬 데미지', H20: 0.05, H21: 0.05, H22: 0.05,
+    G24: 'Dogma', G25: '압도', G27: NONE, G28: NONE, G29: NONE, G30: NONE, G32: '황색',
+    L11: '', L15: '미사용',
+    J17: '엘 하우스(강화)', J18: '천상의 디저트파티', J19: '사용', J20: '투지의 물약', J21: '적용2-녹엑사 (팟모스뎀, 팟물마 10)', J22: '미적용', J23: '아리엘의 스페셜 기프트 마크',
+    J26: '사룡무', L26: 12, J27: '네블론', J28: '네블론', J29: '네블론', J30: '네블론', L27: 11, L28: 11, L29: 11, L30: 11,
+    J31: NONE, J32: NONE, J33: NONE, J34: NONE, L31: NONE, L32: NONE, L33: NONE, L34: NONE,
+    G33: '엑사&네블론 - 연산', G34: '유수', H34: '유니크', I8: '네블론 레이드 : 글리터 보스',
+    A_B4: false, A_B5: '강초뎀 적용 이전', A_B6: 35, A_B7: 65, A_E4: false, A_E5: 30, A_H4: false, A_H5: 0.24,
   });
   const blank = () => Object.assign({}, BLANK);
   const isEmptySetting = (inp) => !inp.C6 || !(Number(inp.C11) > 0);
 
+  // ---------- 예전(ver.2 시트) 세팅 → ver.3 ----------
+  // 칸 위치: 무기 J31→J26, 방어구 J26~J29→J27~J30, 세트 J30→G33, 아트마 J32·L32→G34·H34, 필드 I34→I8, 아티팩트 D35→G32,
+  // 강렬:초월 L42·M46·I46·K46→고급사용자모드 B4·B5·B6·B7. 보기 글자에서 '%'·'의 아트마'·'증가 (%)'가 빠짐
+  const ENGRAVE_V3 = { '물리 공격력 증가 (%)': '물리 공격력 (%)', '마법 공격력 증가 (%)': '마법 공격력 (%)', '스킬 데미지 증가 (%)': '스킬 데미지', '크리티컬 데미지 증가 (%)': '크리티컬 데미지', '보스에게 입히는 피해 증가 (%)': '보스 피해' };
+  function migrateV2(v) {
+    if (!v || typeof v !== 'object' || v._v === 3) return v;
+    const o = { _v: 3 };
+    const copy = 'C6 C11 C12 C13 C14 C15 C17 C18 C19 C20 C21 C22 C24 C25 C26 C27 C29 C30 C31 C32 C33 C34 H11 H12 H13 H15 H16 F17 F18 H17 H18 H20 H21 H22 G24 G25 G27 G28 G29 G30 J17 J18 J19 J20 J22 J23 ZB1 ZB2 ZB3 _eq'.split(' ');
+    for (const c of copy) if (c in v) o[c] = v[c];
+    for (const c of ['H20', 'H21', 'H22']) if (typeof o[c] === 'string' && /강화수치/.test(o[c])) o[c] = '[0.5*강화수치]';
+    for (const c of ['D20', 'D21', 'D22']) if (c in v) o[c] = ENGRAVE_V3[v[c]] || v[c];
+    if ('J21' in v) o.J21 = String(v.J21).replace(/%\)/, ')');
+    const mv = (from, to) => { if (from in v) o[to] = v[from]; };
+    mv('J31', 'J26'); mv('L31', 'L26');
+    mv('J26', 'J27'); mv('L26', 'L27'); mv('J27', 'J28'); mv('L27', 'L28'); mv('J28', 'J29'); mv('L28', 'L29'); mv('J29', 'J30'); mv('L29', 'L30');
+    mv('J30', 'G33'); mv('L32', 'H34'); mv('D35', 'G32');
+    if ('J32' in v) o.G34 = String(v.J32).replace(/의\s*아트마$/, '');
+    if ('I34' in v) o.I8 = String(v.I34).replace(/%/g, '');
+    mv('L42', 'A_B4'); mv('M46', 'A_B5'); mv('I46', 'A_B6'); mv('K46', 'A_B7');
+    // 직업 선택 스킬(룬 마스터 크리티컬 소드, 페이탈 팬텀 샤프슈터 신드롬): 예전엔 (노첸)·(체인지) 두 줄
+    if (v.L12 === '사용') o.L11 = '체인지'; else if (v.L11 === '사용') o.L11 = '일반';
+    if (v.L15) o.L15 = v.L15;
+    for (const c of ['J31', 'J32', 'J33', 'J34', 'L31', 'L32', 'L33', 'L34']) o[c] = NONE;
+    return o;
+  }
+
   // ---------- 상태 / 저장 ----------
   const LS = 'silcalc.v1';
   let store = { current: '내 캐릭터', profiles: { '내 캐릭터': blank() } };
-  try { const s = JSON.parse(localStorage.getItem(LS)); if (s && s.profiles) store = s; } catch (e) { /* 저장소 없음 */ }
+  let fresh = true;
+  try { const s = JSON.parse(localStorage.getItem(LS)); if (s && s.profiles) { store = s; fresh = false; } } catch (e) { /* 저장소 없음 */ }
+  if (!store.bases) store.bases = {};
+  if (!store.mig) store.mig = {};
+  // 처음 쓰는 사람은 예전 버전 고침이 필요 없음
+  if (fresh) Object.assign(store.mig, { setFx: 1, healFx: 1, sageFx: 1, preset1: 1, sage2: 1, pcrit10: 1, azoth1: 1, immortal1: 1, heal3: 1, eqFix: 1 });
   // 예전 버전에서 손대지 않은 캐릭터(시트 예시 값)는 빈 세팅으로
   for (const [k, v] of Object.entries(store.profiles)) if (!v || !Object.keys(v).length) { store.profiles[k] = blank(); if (store.bases) delete store.bases[k]; }
-  // 예전 기본값(각인 없음)이던 캐릭터는 기본 각인으로
-  for (const v of Object.values(store.profiles)) if (v && v.D20 === '해당사항 없음' && v.D21 === '해당사항 없음' && v.D22 === '해당사항 없음' && v.H20 === '해당사항 없음') Object.assign(v, { D20: BLANK.D20, D21: BLANK.D21, D22: BLANK.D22, H20: 0.05, H21: 0.05, H22: 0.05 });
-  // 칭호 기본값(상시 Dogma, 스위칭 압도): 아직 아무것도 안 넣은 캐릭터만 새 기본값으로
-  for (const v of Object.values(store.profiles)) if (v && isEmptySetting(v)) { if (v.G24 === '미착용') v.G24 = BLANK.G24; if (v.G25 === '미착용') v.G25 = BLANK.G25; }
-  if (!store.bases) store.bases = {};
-  // 방어구 세트 효과 기본값을 '연산'으로 바꾼 뒤: 예전 기본값(해당사항 없음)이던 캐릭터도 한 번만 맞춰 줌
-  if (!store.mig) store.mig = {};
-  if (!store.mig.setFx) {
-    for (const v of Object.values(store.profiles)) if (v && v.J30 === '해당사항 없음') v.J30 = BLANK.J30;
-    for (const v of Object.values(store.bases)) if (v && v.J30 === '해당사항 없음') v.J30 = BLANK.J30;
-    store.mig.setFx = 1;
-  }
-  // 녹힐 장비 버프 기본값을 '적용2(녹엑사)'로 바꾼 뒤: 예전 기본값(미적용)이던 캐릭터도 한 번만 맞춰 줌
-  if (!store.mig.healFx) {
-    for (const v of Object.values(store.profiles)) if (v && v.J21 === '미적용') v.J21 = BLANK.J21;
-    for (const v of Object.values(store.bases)) if (v && v.J21 === '미적용') v.J21 = BLANK.J21;
-    store.mig.healFx = 1;
-  }
-  // 녹힐 직업은 녹힐 장비 버프가 적용3(적청엑사), 나머지(딜러)는 적용2(녹엑사)
+  // ---- ver.2 시절 세팅 고침(그때 칸 이름 기준). ver.3로 옮기기 전에 한 번씩만 ----
+  const OLD_BLANK = { J30: '엑사&네블론 - 연산', J21: '적용2-녹엑사 (팟모스뎀, 팟물마 10%)', D20: '물리 공격력 증가 (%)', D21: '크리티컬 데미지 증가 (%)', D22: '스킬 데미지 증가 (%)', G24: 'Dogma', G25: '압도',
+    J17: '엘 하우스(강화)', J18: '천상의 디저트파티', J19: '사용', J20: '투지의 물약', J23: '아리엘의 스페셜 기프트 마크', H15: '사용', H16: '이상', F17: '격려 재사용 시간 감소', F18: '격려 재사용 시간 감소', H17: 0.15, H18: 0.15,
+    D35: '황색', G35: '5세트', J26: '네블론', J27: '네블론', J28: '네블론', J29: '네블론', L26: 11, L27: 11, L28: 11, L29: 11, J31: '사룡무', L31: 12, J32: '유수의 아트마', L32: '유니크' };
+  const OLD_HEAL = '적용3-적청엑사 (팟크뎀 10%)';
+  const old2 = () => [...Object.values(store.profiles), ...Object.values(store.bases)].filter(v => v && v._v !== 3);
   const HEALERS = new Set(['디우스 아에르', '일천', '오버마인드', '데메르시오', '블루헨', '라디언트 소울', '닉스 피에타', '애버리스']);
-  const HEAL_J21 = '적용3-적청엑사 (팟크뎀 10%)';
+  for (const v of old2()) if (v.D20 === '해당사항 없음' && v.D21 === '해당사항 없음' && v.D22 === '해당사항 없음' && v.H20 === '해당사항 없음') Object.assign(v, { D20: OLD_BLANK.D20, D21: OLD_BLANK.D21, D22: OLD_BLANK.D22, H20: 0.05, H21: 0.05, H22: 0.05 });
+  for (const v of old2()) if (!v.C6 || !(Number(v.C11) > 0)) { if (v.G24 === '미착용') v.G24 = OLD_BLANK.G24; if (v.G25 === '미착용') v.G25 = OLD_BLANK.G25; }
+  if (!store.mig.setFx) { for (const v of old2()) if (v.J30 === '해당사항 없음') v.J30 = OLD_BLANK.J30; store.mig.setFx = 1; }
+  if (!store.mig.healFx) { for (const v of old2()) if (v.J21 === '미적용') v.J21 = OLD_BLANK.J21; store.mig.healFx = 1; }
   if (!store.mig.sageFx) {
-    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) {
-      if (!v || v.C6 !== '에테르 세이지') continue;
-      if (v.J21 === '적용3-적청엑사 (팟크뎀 10%)') v.J21 = BLANK.J21;
-      if (v.J30 === BLANK.J30) v.J30 = '엑사&네블론 - 순환';
-    }
+    for (const v of old2()) { if (v.C6 !== '에테르 세이지') continue; if (v.J21 === OLD_HEAL) v.J21 = OLD_BLANK.J21; if (v.J30 === OLD_BLANK.J30) v.J30 = '엑사&네블론 - 순환'; }
     store.mig.sageFx = 1;
   }
-  // 기본값을 엔드 세팅(도핑·펫·원석·아티팩트·장비·아트마)으로 바꾼 뒤: 예전 기본값 그대로인 칸만 한 번 맞춰 줌
   if (!store.mig.preset1) {
     const OLD = { J17: '미사용', J18: '미사용', J19: '미사용', J20: '미사용', J23: '해당사항 없음', H15: '미사용' };
-    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) {
-      if (!v) continue;
-      for (const [c, o] of Object.entries(OLD)) if (v[c] === o || v[c] == null) v[c] = BLANK[c];
-      if (v.H16 == null) v.H16 = BLANK.H16;
-      for (const [f, h] of [['F17', 'H17'], ['F18', 'H18']]) if ((v[f] == null || v[f] === '해당사항 없음') && !(Number(v[h]) > 0)) { v[f] = BLANK[f]; v[h] = BLANK[h]; }
-      if (v.D35 == null) { v.D35 = BLANK.D35; if (v.G35 == null || v.G35 === '1세트 또는 미착용') v.G35 = BLANK.G35; }
-      for (const [t, l] of [['J26', 'L26'], ['J27', 'L27'], ['J28', 'L28'], ['J29', 'L29'], ['J31', 'L31']]) if (v[t] == null) { v[t] = BLANK[t]; if (!(Number(v[l]) > 0)) v[l] = BLANK[l]; }
-      if ((v.J32 == null || v.J32 === '미적용') && (v.L32 == null || v.L32 === '미착용')) { v.J32 = BLANK.J32; v.L32 = BLANK.L32; }
-      if (HEALERS.has(v.C6) && v.J21 === BLANK.J21) v.J21 = HEAL_J21;
+    for (const v of old2()) {
+      for (const [c, o] of Object.entries(OLD)) if (v[c] === o || v[c] == null) v[c] = OLD_BLANK[c];
+      if (v.H16 == null) v.H16 = OLD_BLANK.H16;
+      for (const [f, h] of [['F17', 'H17'], ['F18', 'H18']]) if ((v[f] == null || v[f] === '해당사항 없음') && !(Number(v[h]) > 0)) { v[f] = OLD_BLANK[f]; v[h] = OLD_BLANK[h]; }
+      if (v.D35 == null) v.D35 = OLD_BLANK.D35;
+      for (const [t, l] of [['J26', 'L26'], ['J27', 'L27'], ['J28', 'L28'], ['J29', 'L29'], ['J31', 'L31']]) if (v[t] == null) { v[t] = OLD_BLANK[t]; if (!(Number(v[l]) > 0)) v[l] = OLD_BLANK[l]; }
+      if ((v.J32 == null || v.J32 === '미적용') && (v.L32 == null || v.L32 === '미착용')) { v.J32 = OLD_BLANK.J32; v.L32 = OLD_BLANK.L32; }
+      if (HEALERS.has(v.C6) && v.J21 === OLD_BLANK.J21) v.J21 = OLD_HEAL;
     }
     store.mig.preset1 = 1;
   }
-  // 에테르 세이지는 방어구 세트 기본값이 순환, 녹힐 직업은 복원
-  const SAGE = '에테르 세이지', SET_CYCLE = '엑사&네블론 - 순환', SET_HEAL = '엑사&네블론 - 복원';
-  const AZOTH = '로드 아조트';
-  // 첫 번째 버프 스킬을 기본으로 켜 두는 직업: 로드 아조트(미스틱 플라스크), 임모탈(팬텀 소드)
-  const SKILL1_ON = new Set([AZOTH, '임모탈']);
-  const setDefault = (cls) => HEALERS.has(cls) ? SET_HEAL : cls === SAGE ? SET_CYCLE : BLANK.J30;
-  if (!store.mig.sage2) {
-    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === SAGE && v.J30 === BLANK.J30) v.J30 = SET_CYCLE;
-    store.mig.sage2 = 1;
-  }
-  // 파티원 크뎀증: 엑사 연산·순환 세트를 입으면 10%가 기본(복원 등은 0)
-  const partyCrit = (set) => /연산|순환/.test(String(set || '')) ? 0.1 : 0;
-  if (!store.mig.pcrit10) {
-    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && !(Number(v.H11) > 0) && partyCrit(v.J30 ?? BLANK.J30) > 0) v.H11 = 0.1;
-    store.mig.pcrit10 = 1;
-  }
-  // 예전 선택 상자 값(글자) → 체크칸(true/false): '피방 + 에너지드링크'는 두 칸 다, '지애 + 랜미'는 지애만
-  for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) {
-    if (!v) continue;
+  if (!store.mig.sage2) { for (const v of old2()) if (v.C6 === '에테르 세이지' && v.J30 === OLD_BLANK.J30) v.J30 = '엑사&네블론 - 순환'; store.mig.sage2 = 1; }
+  if (!store.mig.pcrit10) { for (const v of old2()) if (!(Number(v.H11) > 0) && /연산|순환/.test(String(v.J30 ?? OLD_BLANK.J30))) v.H11 = 0.1; store.mig.pcrit10 = 1; }
+  for (const v of old2()) {
     if (typeof v.ZB1 === 'string') { const t = v.ZB1; v.ZB1 = /피방/.test(t); v.ZB3 = /에너지/.test(t); }
     if (typeof v.ZB2 === 'string') v.ZB2 = /지애/.test(v.ZB2);
   }
-  if (!store.mig.azoth1) {
-    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === AZOTH && v.L11 !== '사용') v.L11 = '사용';
-    store.mig.azoth1 = 1;
-  }
-  if (!store.mig.immortal1) {
-    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && v.C6 === '임모탈' && v.L11 !== '사용') v.L11 = '사용';
-    store.mig.immortal1 = 1;
-  }
-  if (!store.mig.heal3) {
-    for (const src of [store.profiles, store.bases]) for (const v of Object.values(src)) if (v && HEALERS.has(v.C6) && v.J30 === BLANK.J30) { v.J30 = SET_HEAL; if (Number(v.H11) === 0.1) v.H11 = 0; }
-    store.mig.heal3 = 1;
-  }
-  // 강역강 체크가 잠깐 강렬·초월 스킬 데미지를 같게 만들던 버전의 흔적: 기준 세팅에 원래 값이 있으면 되돌리고, 강배·역강배를 같게
+  if (!store.mig.heal3) { for (const v of old2()) if (HEALERS.has(v.C6) && v.J30 === OLD_BLANK.J30) { v.J30 = '엑사&네블론 - 복원'; if (Number(v.H11) === 0.1) v.H11 = 0; } store.mig.heal3 = 1; }
   if (!store.mig.eqFix) {
     for (const [k, v] of Object.entries(store.profiles)) {
-      if (!v || !v._eq) continue;
+      if (!v || v._v === 3 || !v._eq) continue;
       const b = store.bases[k];
       if (v.C29 != null && v.C29 === v.C30 && b && b.C29 != null && b.C30 != null && b.C29 !== b.C30 && Math.max(b.C29, b.C30) === v.C29) { v.C29 = b.C29; v.C30 = b.C30; }
       const m = Math.max(Number(v.C24) || 0, Number(v.C25) || 0); if (m > 0) v.C24 = v.C25 = m;
     }
     store.mig.eqFix = 1;
   }
+  store.mig.azoth1 = store.mig.immortal1 = 1; // 로드 아조트·임모탈 버프는 ver.3에서 직업 패시브로 자동
+  // ver.3로 옮김
+  for (const src of [store.profiles, store.bases]) for (const k of Object.keys(src)) if (src[k] && src[k]._v !== 3) src[k] = migrateV2(src[k]);
+  store.mig.v3 = 1;
+  // 에테르 세이지는 방어구 세트 기본값이 순환, 녹힐 직업은 복원
+  const SAGE = '에테르 세이지', SET_CYCLE = '엑사&네블론 - 순환', SET_HEAL = '엑사&네블론 - 복원';
+  const HEAL_J21 = '적용3-적청엑사 (팟크뎀 10)';
+  const setDefault = (cls) => HEALERS.has(cls) ? SET_HEAL : cls === SAGE ? SET_CYCLE : BLANK.G33;
+  // 파티원 크뎀증: 엑사 연산·순환 세트를 입으면 10%가 기본(복원 등은 0)
+  const partyCrit = (set) => /연산|순환/.test(String(set || '')) ? 0.1 : 0;
   if (!store.names) store.names = {}; // 캐릭터별 닉네임(선택)
   const nickOf = (key) => (store.names[key] || '').trim();
   let inputs = Object.assign({}, store.profiles[store.current] || {});
@@ -219,12 +235,14 @@
   let shared = null; // { n: 이름, i: 입력값 }
   function applyBase() {
     const src = shared ? (store.profiles[store.current] || {}) : (store.bases[store.current] || {});
-    baseWb.inputs = {}; for (const [a, v] of Object.entries(src)) baseWb.inputs[SH + '!' + a] = v; baseWb.invalidate();
+    baseWb.assign(sheetInputs(src));
   }
   applyBase();
   function persist() { try { localStorage.setItem(LS, JSON.stringify(store)); } catch (e) { /* 무시 */ } }
-  // 테네브로스 3옵(C27)은 입력란을 없앴으니 예전에 넣은 값이 있어도 계산에 안 씀(시트 기본값 0)
-  function applyInputs() { wb.inputs = {}; for (const [a, v] of Object.entries(inputs)) if (a !== 'C27') wb.inputs[SH + '!' + a] = v; wb.invalidate(); }
+  // 테네브로스 3옵(C27)은 입력란을 없앴으니 예전에 넣은 값이 있어도 계산에 안 씀(시트 기본값 0). 바뀐 칸에 걸린 계산만 다시 함
+  function applyInputs() { wb.assign(sheetInputs(inputs)); }
+  // 한 칸 바꾸기(계산기 입력 이름 기준)
+  function setIn(a, v) { inputs[a] = v; const [sh, c] = sheetOf(a); wb.setInput(sh, c, toSheet(a, v)); if (a in EXTRA_BUFF) extraCells(inputs, (s2, c2, x) => wb.setInput(s2, c2, x)); }
 
   // ---------- 숫자 표시 ----------
   const fmtInt = (n) => typeof n === 'number' ? Math.round(n).toLocaleString('ko-KR') : String(n ?? '-');
@@ -299,9 +317,10 @@
       tabs.append(btn);
       const pane = el('div', { class: 'pane' + (tab.pairs ? ' pairs' : ' blocks'), role: 'tabpanel', id: 'pane-' + tab.id, 'aria-labelledby': 'tab-' + tab.id });
       for (const gr of tab.groups) {
-        const g = el('div', { class: 'grp' + (gr.single ? ' single' : '') });
+        const g = el('div', { class: 'grp' + (gr.single ? ' single' : '') + (gr.wide ? ' wide' : '') });
         if (gr.bar || gr.sub) g.append(el('p', { class: 'gtitle', text: gr.bar || gr.sub }));
         if (gr.note) g.append(el('p', { class: 'gnote', text: gr.note }));
+        if (gr.noteCell) g.append(el('p', { class: 'gnote sub', 'data-notecell': gr.noteCell }));
         const list = el('div', { class: 'rows' });
         for (const f of gr.fields) list.append(fieldRow(f));
         g.append(list);
@@ -320,16 +339,18 @@
       $('#pane-' + t.id).hidden = !on;
     }
   }
-  // 보기 글자를 짧게(값은 시트 그대로): 금빛 각인석 '물리 공격력 증가 (%)' → '물리 공격력 증가'
+  // 보기 글자를 짧게(값은 시트 그대로): 금빛 각인석 '물리 공격력 (%)' → '물리 공격력'
   function optText(a, o) {
     const s = String(o);
-    if (/^D2[0-2]$/.test(a)) return s.replace(/\s*\(%\)$/, '').replace('보스에게 입히는 피해 증가', '보스 피해 증가');
+    if (/^D2[0-2]$/.test(a)) return s.replace(/\s*\(%\)$/, '');
     if (a === 'J21') return s.replace(/\s*\(.*\)$/, '');          // 효과는 ? 도움말에
     // 강렬:초월 비율 기준: 시트 용어(강초뎀 적용 이전/이후) 대신 무엇을 넣는지로
-    if (a === 'M46') return /이후/.test(s) ? '딜 미터로 잰 비율 (강초뎀 적용 이후)' : /이전/.test(s) ? '대충 감으로 넣는 비율 (강초뎀 적용 이전)' : s;
-    if (a === 'J32') return s.replace(/의\s*아트마$/, '');          // '유수의 아트마' → '유수'
-    if (a === 'J30') return s.replace(/^엑사&네블론\s*-\s*/, '');    // '엑사&네블론 - 연산' → '연산'
-    if (a === 'G35' && s === '1세트 또는 미착용') return '1세트·미착용';
+    if (a === 'A_B5') return /이후/.test(s) ? '딜 미터로 잰 비율 (강초뎀 적용 이후)' : /이전/.test(s) ? '대충 감으로 넣는 비율 (강초뎀 적용 이전)' : s;
+    if (a === 'G33') return s.replace(/^엑사&네블론\s*-\s*/, '');    // '엑사&네블론 - 연산' → '연산'
+    if (/^L3[1-4]$/.test(a)) return typeof o === 'number' ? o + '단계' : s === NONE ? '-' : s;
+    if (/^L(2[6-9]|30)$/.test(a) && typeof o === 'number') return '+' + o;
+    if (a === 'I8') return s.replace(/\s*\n\s*/g, ' ');
+    if (/^H2[0-2]$/.test(a) && /강화수치/.test(s)) return '0.5% × 강화 수치';
     return s;
   }
   function fillSelect(node, a) {
@@ -356,23 +377,60 @@
     if (c.kind === 'select') fillSelect(c.node, a);
     else if (c.kind === 'check') c.node.checked = v === true;
     else if (document.activeElement !== c.node) { const empty = v === null || (a in inputs && inputs[a] === null); c.node.value = empty ? '' : c.kind === 'pct' ? pctIn(v) : (typeof v === 'number' ? String(v) : ''); c.node.placeholder = c.kind === 'pct' ? '0.00' : '0'; c.node.classList.remove('bad'); }
-    if (c.row) { const b = baseWb.get(SH, a); c.row.classList.toggle('changed', String(v) !== String(E.isErr(b) ? b.code : b)); }
+    if (c.row) { const b = gx(baseWb, a); c.row.classList.toggle('changed', String(v) !== String(b)); }
   }
   function syncLabels() {
     document.querySelectorAll('[data-labcell]').forEach(n => { const t = label(n.getAttribute('data-labcell')); if (n.textContent !== t) n.textContent = t; });
-    for (const [a, c] of Object.entries(controls)) {
-      if (c.row && /^L1[1-4]$/.test(a)) { const t = label('I' + a.slice(1)); c.row.classList.toggle('muted', !t || t === '관련스킬 없음'); }
-    }
+    // 고를 스킬이 없는 직업은 그 줄을 숨김
+    if (controls.L11 && controls.L11.row) controls.L11.row.hidden = !label('I11');
+    // 기본 강렬:초월 비율 안내(직업·스탯마다 다름)
+    document.querySelectorAll('[data-notecell]').forEach(n => { const t = label(n.getAttribute('data-notecell')); if (n.textContent !== t) n.textContent = t; });
   }
 
   // ---------- 값 변경 / 재계산 ----------
   let raf = 0;
-  const ATK = ['물리 공격력 증가 (%)', '마법 공격력 증가 (%)'];
+  const ATK = ['물리 공격력 (%)', '마법 공격력 (%)'];
   function syncEngraveType() {
-    const t = g('AC67'); if (t !== '물리' && t !== '마법') return false;
+    const t = atkType(); if (!t) return false;
     const want = t === '마법' ? ATK[1] : ATK[0]; let ch = false;
-    for (const a of ['D20', 'D21', 'D22']) if (ATK.includes(inputs[a]) && inputs[a] !== want) { inputs[a] = want; wb.setInput(SH, a, want); ch = true; }
+    for (const a of ['D20', 'D21', 'D22']) if (ATK.includes(inputs[a]) && inputs[a] !== want) { setIn(a, want); ch = true; }
     return ch;
+  }
+  // 직업마다 고르는 스킬(룬 마스터 크리티컬 소드 등): 지금 값이 그 직업 보기에 없으면 '체인지'(없으면 첫 보기)로, 고를 게 없는 직업은 비움
+  // 직업 선택 스킬의 올바른 값(그 직업에 맞게)
+  function skillFor(inp, w) {
+    const lab = gx(w, 'I11');
+    const opts = lab && !String(lab).startsWith('#') ? (optionsOf('L11', w) || []) : [];
+    const cur = inp.L11 ?? '';
+    return !opts.length ? '' : opts.includes(cur) ? cur : opts.includes('체인지') ? '체인지' : opts[0];
+  }
+  function syncClassSkill() {
+    const want = skillFor(inputs, wb);
+    if (want !== (inputs.L11 ?? '')) { setIn('L11', want); return true; }
+    return false;
+  }
+  // 보기에 없는 값(예전 버전 글자 등)을 바로잡은 값들: { 칸: 새 값 }
+  function badOptions(inp, w) {
+    const fix = {};
+    for (const a of Object.keys(DV)) {
+      if (a === 'C6' || a === 'L11' || !(a in inp) || inp[a] === null || inp[a] === '' || !(a in BLANK)) continue;
+      const opts = optionsOf(a, w); if (!opts || !opts.length) continue;
+      if (opts.some(o => String(o) === String(inp[a]))) continue;
+      fix[a] = opts.some(o => String(o) === String(BLANK[a])) ? BLANK[a] : opts[0];
+    }
+    return fix;
+  }
+  // 랭킹 등 저장된 세팅의 실투력(지금 시트 기준). 예전 버전 세팅은 옮긴 뒤, 직업 스킬·보기를 바로잡아 계산
+  let cpWb = null;
+  function cpOfInputs(raw) {
+    const inp = migrateV2(Object.assign({}, raw || {}));
+    if (!cpWb) cpWb = new E.Workbook(M);
+    cpWb.assign(sheetInputs(inp));
+    Object.assign(inp, badOptions(inp, cpWb));
+    inp.L11 = skillFor(inp, cpWb);
+    cpWb.assign(sheetInputs(inp));
+    if (!(Number(inp.C11) > 0) || !(Number(inp.C12) > 0)) return NaN;
+    const v = cpOf(cpWb); return typeof v === 'number' && isFinite(v) ? Math.round(v) : NaN;
   }
   // 직업이 바뀔 때 직업별 기본값으로 (다른 값을 직접 골라 둔 경우는 그대로)
   //  - 녹힐 직업: 녹힐 장비 버프 적용3, 딜러: 적용2
@@ -380,15 +438,12 @@
   function syncClassDefault(prev) {
     const now = inputs.C6; if (now === prev) return false;
     let ch = false;
-    const swap = (c, on, val, base) => { const want = on ? val : base, other = on ? base : val; if (inputs[c] === other) { inputs[c] = want; wb.setInput(SH, c, want); ch = true; } };
+    const swap = (c, on, val, base) => { const want = on ? val : base, other = on ? base : val; if (inputs[c] === other) { setIn(c, want); ch = true; } };
     if (HEALERS.has(now) !== HEALERS.has(prev) || !prev) swap('J21', HEALERS.has(now), HEAL_J21, BLANK.J21);
     // 방어구 세트: 지금 값이 이전 직업의 기본값일 때만 새 직업 기본값으로
     const wantSet = setDefault(now);
-    if (inputs.J30 !== wantSet && (inputs.J30 === setDefault(prev) || inputs.J30 == null)) { const old = inputs.J30; inputs.J30 = wantSet; wb.setInput(SH, 'J30', wantSet); syncPartyCrit(old); ch = true; }
-    // 로드 아조트(미스틱 플라스크)·임모탈(팬텀 소드)은 첫 번째 버프 스킬을 기본으로 사용, 다른 직업으로 바꾸면 다시 미사용
-    const put = (c, v) => { if (inputs[c] !== v) { inputs[c] = v; wb.setInput(SH, c, v); ch = true; } };
-    if (SKILL1_ON.has(now)) put('L11', '사용');
-    else if (SKILL1_ON.has(prev) && inputs.L11 === '사용') put('L11', '미사용');
+    if (inputs.G33 !== wantSet && (inputs.G33 === setDefault(prev) || inputs.G33 == null)) { const old = inputs.G33; setIn('G33', wantSet); syncPartyCrit(old); ch = true; }
+    if (syncClassSkill()) ch = true;
     return ch;
   }
   // 강배·역강배 바지: 강배(체력 50% 초과인 적 공격시 데미지 증가)와 역강배(체력 50% 이하인 적 공격시 데미지 증가)를 높은 쪽으로 같게
@@ -396,21 +451,28 @@
     if (!inputs._eq) return false;
     const a = Number(inputs.C24) || 0, b = Number(inputs.C25) || 0, m = Math.max(a, b);
     if (!(m > 0) || (a === m && b === m)) return false;
-    inputs.C24 = inputs.C25 = m; wb.setInput(SH, 'C24', m); wb.setInput(SH, 'C25', m); return true;
+    setIn('C24', m); setIn('C25', m); return true;
   }
   // 세트를 바꾸면 파티원 크뎀증도 그 세트 기본값으로(이전 세트 기본값 그대로일 때만)
   function syncPartyCrit(oldSet) {
-    const want = partyCrit(inputs.J30), was = partyCrit(oldSet);
+    const want = partyCrit(inputs.G33), was = partyCrit(oldSet);
     if (want === was) return;
     const cur = inputs.H11 == null ? 0 : Number(inputs.H11);
-    if (cur === was) { inputs.H11 = want; wb.setInput(SH, 'H11', want); }
+    if (cur === was) setIn('H11', want);
+  }
+  // 보기에 없는 값(예전 버전 글자 등)은 기본값으로
+  function fixOptions() {
+    let ch = false;
+    for (const [a, v] of Object.entries(badOptions(inputs, wb))) { setIn(a, v); ch = true; }
+    if (syncClassSkill()) ch = true;
+    return ch;
   }
   function setVal(a, v) {
     const prev = inputs[a];
-    inputs[a] = v; wb.setInput(SH, a, v);
-    if (a === 'J30') syncPartyCrit(prev);
+    setIn(a, v);
+    if (a === 'G33') syncPartyCrit(prev);
     if (a === 'C6') { syncEngraveType(); syncClassDefault(prev); setTimeout(renderProfiles, 0); }
-    if (inputs._eq && (a === 'C24' || a === 'C25')) { const o = a === 'C24' ? 'C25' : 'C24'; inputs[o] = v; wb.setInput(SH, o, v); }
+    if (inputs._eq && (a === 'C24' || a === 'C25')) setIn(a === 'C24' ? 'C25' : 'C24', v);
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; refresh(); });
     scheduleAutosave();
   }
@@ -461,7 +523,7 @@
       return;
     }
     hero.classList.remove('empty');
-    const cp = g('C36');
+    const cp = cpOf(wb);
     const noRange = !(Number(g('C12')) > 0); // 극대화 범위가 없으면 계산값이 의미 없음(음수 등)
     setText('#rCP', noRange ? '—' : typeof cp === 'number' ? fmtInt(cp) : String(cp));
     const missing = ['C12', 'C13'].filter(a => !(Number(g(a)) > 0));
@@ -469,9 +531,9 @@
     setText('#rCPk', missing.length ? `${missing.map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력').join('·')}을 넣어야 정확해요` : korUnit(cp));
     const nk = shared ? (shared.nk || '') : nickOf(store.current);
     setText('#rClass', nk ? `${nk} (${label('C6')})` : label('C6'));
-    const fi = $('#fieldInfo'); if (fi) fi.textContent = `${label('K34')} ${fmtPct(g('L34'), 0)}, ${label('K35')} ${fmtPct(g('L35'), 0)} 적용 중`;
+    const fi = $('#fieldInfo'); if (fi) fi.textContent = `${label('K8')} ${fmtPct(g('L8'), 0)}, ${label('K9')} ${fmtPct(g('L9'), 0)} 적용 중`;
     // 기준 대비
-    const base = baseWb.get(SH, 'C36');
+    const base = cpOf(baseWb);
     const dt = $('#deltaText');
     let same = true;
     if (!noRange && typeof cp === 'number' && typeof base === 'number') {
@@ -506,7 +568,7 @@
     store.current = name; inputs = Object.assign({}, store.profiles[name] || {});
     syncNick();
     if (!store.bases[name]) store.bases[name] = Object.assign({}, inputs);
-    persist(); applyInputs(); applyBase(); renderProfiles(); refresh();
+    persist(); applyInputs(); if (fixOptions()) scheduleAutosave(); applyBase(); renderProfiles(); refresh();
   }
   function dialog({ title, text, input, area, code, ok = '확인', danger }) {
     return new Promise((resolve) => {
@@ -656,7 +718,7 @@
   const LABEL_OF = {}; for (const t of TABS) for (const gr of t.groups) for (const f of gr.fields.flat()) if (f.t && f.c) LABEL_OF[f.c] = f.t;
   function showOcrResult(res, gear) {
     const body = $('#ocrBody'); body.innerHTML = '';
-    const found = res.found; const cells = O.FIELDS.map(f => f.cell).filter(c => found[c]);
+    const found = res.found; const cells = O.FIELDS.map(f => f.cell).filter(c => found[c] && c !== 'C35'); // 동작속도는 ver.3 시트에 없음
     $('#ocrCount').textContent = cells.length ? `${cells.length}개 항목을 읽었어요` : '항목을 못 찾았어요. 상세 스탯 창 부분만 드래그로 골라서 다시 읽어 보세요.';
     // 사진이 작거나 읽은 항목이 적으면 찍는 조건 안내
     const small = shot && (shot.width < 1600 || shot.height < 900);
@@ -719,7 +781,7 @@
   // weapon: 무기 공격력을 물을지(사진에 안 나와서 읽기를 누를 때마다 물음), range: 극대화 범위 최댓값을 못 읽었을 때
   const numIn = (c, ph) => { const v = g(c); return el('input', { type: 'text', inputmode: 'numeric', class: 'num', 'data-cell': c, placeholder: ph, value: Number(v) > 0 ? String(v) : '' }); };
   function rangeRow() {
-    const atk = label('AC67') === '마법' ? '마법' : '물리';
+    const atk = atkType() === '마법' ? '마법' : '물리';
     const inp = numIn('C12', '예: 205000');
     return [el('label', { class: 'ex-row' }, el('span', {}, `${atk} 공격력 극대화 범위 최댓값`, el('small', { text: `이번 사진에서 못 찾았어요. 다음엔 ${atk} 공격력에 마우스를 올린 채로 찍으면 자동으로 들어가요` })), inp), inp];
   }
@@ -727,13 +789,12 @@
   function atmaRow() {
     const sel = (c) => {
       const s = el('select', { 'data-cell': c });
-      // 종류는 '유수의 아트마' → '유수'처럼 짧게(값은 시트 그대로)
-      for (const o of optionsOf(c) || []) s.append(el('option', { value: String(o), text: String(o).replace(/의\s*아트마$/, '') }));
+      for (const o of optionsOf(c) || []) s.append(el('option', { value: String(o), text: optText(c, o) }));
       s.value = String(inputs[c] ?? defaultOf(c) ?? '');
       return s;
     };
     return el('div', { class: 'ex-row atma-row' }, el('span', {}, '아트마 액세서리'),
-      el('div', { class: 'atma-sel' }, sel('J32'), sel('L32')));
+      el('div', { class: 'atma-sel' }, sel('G34'), sel('H34')));
   }
   // 스위칭 칭호(버프로 켜는 칭호)는 사진에 안 나와서 무기 공격력과 같이 물어봄
   function titleRow() {
@@ -752,13 +813,13 @@
     return el('div', { class: 'ex-row atma-row' }, el('span', {}, '방어구 세트 효과'),
       // 보기는 짧게(연산·순환·복원), 값은 시트 그대로
       // 보통 연산·순환·복원 중 하나라 그 셋만(다른 값이 들어 있으면 그 값도 남김)
-      el('div', { class: 'atma-sel set-sel' }, pickSel('J30', (optionsOf('J30') || []).filter(o => /^엑사&네블론/.test(o) || o === inputs.J30).map(o => ({ v: o, t: String(o).replace(/^엑사&네블론\s*-\s*/, '') })), inputs.J30 ?? setDefault(inputs.C6))));
+      el('div', { class: 'atma-sel set-sel' }, pickSel('G33', (optionsOf('G33') || []).filter(o => /^엑사&네블론/.test(o) || o === inputs.G33).map(o => ({ v: o, t: String(o).replace(/^엑사&네블론\s*-\s*/, '') })), inputs.G33 ?? setDefault(inputs.C6))));
   }
   // 초월:강렬 비율(직접 입력으로 계산). 직접 넣은 적이 없으면 기본 초월 100 : 강렬 0
   function shareRow() {
-    const custom = inputs.L42 === true;
+    const custom = inputs.A_B4 === true;
     const num = (c, d) => el('input', { type: 'text', inputmode: 'numeric', class: 'num share', 'data-cell': c, value: String(custom ? (g(c) ?? d) : d) });
-    const bravery = num('K46', 100), strength = num('I46', 0);
+    const bravery = num('A_B7', 100), strength = num('A_B6', 0);
     const box = el('div', { class: 'share-in' }, el('span', { text: '초월' }), bravery, el('span', { text: ':' }), strength, el('span', { text: '강렬' }));
     return el('div', { class: 'ex-row atma-row share-row' }, el('span', {}, '초월:강렬 비율'), box);
   }
@@ -774,9 +835,15 @@
       el('label', { class: 'ex-row ex-rev' }, el('span', {}, '역강배 수치', el('small', { text: '강배·역강배 수치가 다를 때 역강배 수치를 입력해요' })),
         el('span', { class: 'pct-box' }, rev, el('span', { text: '%' }))));
   }
-  function overflowRow() {
-    return el('label', { class: 'ex-row' }, el('span', {}, '오버플로우'),
-      el('span', { class: 'pct-box' }, exPctIn('H31'), el('span', { text: '%' })));
+  // 상의 카트리지(오버플로우 등): 종류와 단계
+  function cartRow() {
+    const sel = (c) => {
+      const s = el('select', { 'data-cell': c });
+      for (const o of optionsOf(c) || []) s.append(el('option', { value: String(o), text: optText(c, o) }));
+      s.value = String(inputs[c] ?? defaultOf(c) ?? '');
+      return s;
+    };
+    return el('div', { class: 'ex-row atma-row' }, el('span', {}, '카트리지(상의)'), el('div', { class: 'atma-sel' }, sel('J31'), sel('L31')));
   }
   function askExtras({ weapon = true, range = false, during = false } = {}) {
     const open = $('#extraDlg');
@@ -793,14 +860,14 @@
     const iC13 = weapon ? numIn('C13', '예: 60000') : null;
     const r12 = range ? rangeRow() : null;
     const save = () => {
-      // 비율은 0도 올바른 값(초월 100 : 강렬 0). 단 둘 다 0이면 무시. 넣으면 그 비율로 계산(L42 켬)
-      const shareIn = [...wrap.querySelectorAll('input[data-cell=I46], input[data-cell=K46]')];
+      // 비율은 0도 올바른 값(초월 100 : 강렬 0). 단 둘 다 0이면 무시. 넣으면 그 비율로 계산(직접 넣기 켬)
+      const shareIn = [...wrap.querySelectorAll('input[data-cell=A_B6], input[data-cell=A_B7]')];
       const shareOk = shareIn.length === 2 && shareIn.every(i => { const t = i.value.replace(/[,\s]/g, ''); return t !== '' && Number(t) >= 0; }) && shareIn.some(i => Number(i.value.replace(/[,\s]/g, '')) > 0);
-      if (shareOk && inputs.L42 !== true) setVal('L42', true);
+      if (shareOk && inputs.A_B4 !== true) setVal('A_B4', true);
       for (const inp of wrap.querySelectorAll('input[data-cell]')) {
         const c = inp.getAttribute('data-cell'), t = inp.value.replace(/[,\s]/g, ''), n = Number(t);
         if (!t || !Number.isFinite(n)) continue;
-        if (c === 'I46' || c === 'K46') { if (shareOk && n >= 0 && n !== Number(g(c))) setVal(c, n); continue; }
+        if (c === 'A_B6' || c === 'A_B7') { if (shareOk && n >= 0 && n !== Number(g(c))) setVal(c, n); continue; }
         if (n > 0) setVal(c, n);
       }
       for (const sl of wrap.querySelectorAll('select[data-cell][data-touched]')) {
@@ -825,7 +892,7 @@
       el('h3', { id: 'exTitle', text: iC13 ? '남은 수치를 직접 기입해 주세요' : '극대화 범위 최댓값을 기입해 주세요' }),
       el('p', { id: 'exNote', text: iC13 ? `사진에 안 나오는 값이에요.${during ? ' 그동안 사진을 읽고 있어요.' : ''}` : '이번 사진에서 못 찾은 값이에요.' }),
       iC13 ? el('label', { class: 'ex-row' }, el('span', {}, '무기 공격력', el('small', { text: '무기에 마우스를 올리면 나오는 무기 자체 수치' })), iC13) : null,
-      iC13 ? overflowRow() : null,
+      iC13 ? cartRow() : null,
       iC13 ? titleRow() : null,
       r12 ? r12[0] : null,
       iC13 ? setRow() : null,
@@ -908,7 +975,7 @@
     // 방어구 종류: 장비창 상의·하의·장갑·신발 아이콘(엑사스케일·네블론·테네브로스). 강화 수치는 아이콘에 안 나와서 그대로
     if (gear.armor) {
       body.append(el('tr', { class: 'gear-head' }, el('td', { colspan: '4' }, '방어구 종류 (장비창 아이콘)')));
-      for (const [part, k] of [['상의', 'J26'], ['하의', 'J27'], ['장갑', 'J28'], ['신발', 'J29']]) {
+      for (const [part, k] of [['상의', 'J27'], ['하의', 'J28'], ['장갑', 'J29'], ['신발', 'J30']]) {
         const a = gear.armor[part], cur = g(k), ok = !!(a && a.ok);
         const sel = el('select', { 'data-cell': k, 'aria-label': part + ' 방어구' });
         for (const o of optionsOf(k) || []) sel.append(el('option', { value: String(o), text: String(o) }));
@@ -974,8 +1041,9 @@
   }
   function toast(t) { const n = $('#toast'); n.textContent = t; n.hidden = false; clearTimeout(n._t); n._t = setTimeout(() => { n.hidden = true; }, 2200); }
   function enterShared(o) {
-    shared = { n: String(o.n || '공유된 세팅').slice(0, 30), nk: String(o.k || '').slice(0, 20), i: o.i };
+    shared = { n: String(o.n || '공유된 세팅').slice(0, 30), nk: String(o.k || '').slice(0, 20), i: migrateV2(o.i || {}) };
     inputs = Object.assign({}, shared.i);
+    applyInputs(); syncClassSkill();
     $('#sharedBar').hidden = false;
     $('#sharedText').textContent = shared.nk ? `${shared.nk} 님의 ${shared.n} 세팅을 보고 있어요` : `${shared.n} 세팅을 보고 있어요`;
     syncNick();
@@ -1013,31 +1081,27 @@
   }
 
   // ---------- 랭킹 화면(rank.js)과 연결 ----------
-  const SKIP_EDIT = new Set(['ZB1', 'ZB2', 'ZB3', 'C12', 'C13', 'J32', 'L32', 'L42', 'I46', 'K46', 'M46', '_key', '_eq']); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
+  const SKIP_EDIT = new Set(['ZB1', 'ZB2', 'ZB3', 'C12', 'C13', 'G34', 'H34', 'J31', 'L31', 'A_B4', 'A_B5', 'A_B6', 'A_B7', 'A_E4', 'A_E5', 'A_H4', 'A_H5', '_key', '_eq', '_v']); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
   // 지금 세팅에서 몇 칸만 바꿨을 때의 실투력(화면·저장값은 그대로). 아바타 추천을 실투력으로 다시 줄 세울 때 씀
   let simWb = null;
   function cpWith(over) {
     if (!simWb) simWb = new E.Workbook(M);
-    simWb.inputs = {};
-    for (const [a, v] of Object.entries(Object.assign({}, inputs, over || {}))) if (a !== 'C27') simWb.inputs[SH + '!' + a] = v;
-    simWb.invalidate();
-    const v = simWb.get(SH, 'C36'); return typeof v === 'number' ? v : NaN;
+    simWb.assign(sheetInputs(Object.assign({}, inputs, over || {})));
+    const v = cpOf(simWb); return typeof v === 'number' ? v : NaN;
   }
   // 관리자 화면용: 올린 계산기 값을 탭 순서대로 이름·보기 좋은 값으로(한 줄에 두 칸인 항목은 한 줄로 묶음)
   // 올린 세팅의 전직 기준으로 칸 이름을 읽음(마법 직업은 '마법 공격력', 버프 스킬 이름도 그 직업 것)
   let labWb = null;
   function labelsFor(inp) {
     if (!labWb) labWb = new E.Workbook(M);
-    labWb.inputs = {};
-    for (const [a, v] of Object.entries(inp)) if (a !== 'C27' && !a.startsWith('_')) labWb.inputs[SH + '!' + a] = v;
-    labWb.invalidate();
-    return (a) => { let v; try { v = labWb.get(SH, a); } catch (e) { v = null; } if (v == null || v === '' || E.isErr(v) || String(v).startsWith('#')) return LABEL_FALLBACK[a] || ''; return String(v).trim(); };
+    labWb.assign(sheetInputs(inp));
+    return (a) => { let v; try { v = gx(labWb, a); } catch (e) { v = null; } if (v == null || v === '' || String(v).startsWith('#')) return LABEL_FALLBACK[a] || ''; return String(v).trim(); };
   }
   function describeInputs(inp) {
-    inp = inp || {};
+    inp = migrateV2(inp || {});
     const label = inp.C6 ? labelsFor(inp) : (a) => labelOf(a);
     const out = [], has = (c) => inp[c] !== undefined && inp[c] !== null && inp[c] !== '';
-    const fmtV = (c, v) => typeof v === 'boolean' ? (v ? '켬' : '끔') : (typeof v === 'number' ? (PCT.has(c) ? `${+(v * 100).toFixed(2)}%` : fmtInt(v)) : String(v));
+    const fmtV = (c, v) => typeof v === 'boolean' ? (v ? '켬' : '끔') : (typeof v === 'number' ? (PCT.has(c) ? `${+(v * 100).toFixed(2)}%` : optText(c, v) !== String(v) ? optText(c, v) : fmtInt(v)) : optText(c, v));
     if (has('C6')) out.push({ tab: '전직', c: 'C6', name: '전직', txt: String(inp.C6) });
     for (const t of TABS) for (const gr of t.groups) gr.fields.forEach((item, i) => {
       const row = (Array.isArray(item) ? item : [item]).filter(f => f && f.c);
@@ -1054,12 +1118,15 @@
   window.SilApp = {
     inputs: () => Object.assign({}, inputs),
     describeInputs,
-    cp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
+    cp: () => { const v = cpOf(wb); return typeof v === 'number' ? Math.round(v) : NaN; },
     cpWith,
     // 랭킹도 계산기에 넣은 그대로(강렬:초월 점유율을 직접 넣었으면 그 비율로) 반영
     rankInputs: () => Object.assign({}, inputs),
-    rankCp: () => { const v = g('C36'); return typeof v === 'number' ? Math.round(v) : NaN; },
-    customShare: () => inputs.L42 === true,
+    rankCp: () => { const v = cpOf(wb); return typeof v === 'number' ? Math.round(v) : NaN; },
+    customShare: () => inputs.A_B4 === true,
+    migrate: (i) => migrateV2(i || {}),
+    cpOfInputs,
+    sheetVersion: () => (M.meta && M.meta.version) || '',
     // 랭킹에 못 올리는 버프(피시방·에너지드링크·지애)를 켰으면 그 이름들
     // 이벤트 버프(펀치킹·할로윈 등 기간 한정)도 '미적용'이 아니면 못 올림
     rankBuffs: () => Object.keys(EXTRA_BUFF).filter(a => inputs[a] === true).map(a => EXTRA_BUFF[a])
@@ -1108,7 +1175,7 @@
   }
   function renderOpt() {
     const card = $('#optCard'); if (!card || !OPT) return;
-    const cp = g('C36');
+    const cp = cpOf(wb);
     const bad = isEmptySetting(inputs) || $('#rCP').classList.contains('err') || typeof cp !== 'number' ||
       !(Number(g('C11')) > 0) || !(Number(g('C12')) > 0) || !(Number(g('C13')) > 0);
     let r = null;
@@ -1205,7 +1272,7 @@
   }
   function renderSock() {
     const card = $('#sockCard'); if (!card) return;
-    const bad = isEmptySetting(inputs) || !(Number(g('C11')) > 0) || !(Number(g('C12')) > 0) || !(Number(g('C13')) > 0) || typeof g('C36') !== 'number';
+    const bad = isEmptySetting(inputs) || !(Number(g('C11')) > 0) || !(Number(g('C12')) > 0) || !(Number(g('C13')) > 0) || typeof cpOf(wb) !== 'number';
     card.hidden = bad || !!shared; if (card.hidden) return;
     const cfg = sockCfg(), body = $('#sockBody'); body.textContent = '';
     const res = sockRes && !sockRes.err && sockRes.key === store.current ? sockRes : null;
@@ -1230,18 +1297,21 @@
 
   // ---------- 시작 ----------
   function selfTest() {
-    const t = new E.Workbook(M); const v = t.get(SH, 'C36'); const exp = M.check['<Main>!C36'];
-    const ok = typeof v === 'number' && Math.abs(v - exp) < 1e-6 * Math.abs(exp);
+    const t = new E.Workbook(M); const v = cpOf(t); const exp = M.meta && M.meta.cpCheck;
+    const ok = typeof v === 'number' && typeof exp === 'number' && Math.abs(v - exp) < 1e-6 * Math.abs(exp);
     // 시트 예시 값과 다를 때만 알림(같으면 아무것도 안 띄움)
     const n = $('#selfTest'); n.textContent = ok ? '' : '시트 예시 값과 계산 결과가 다릅니다. 제보 부탁드립니다.'; n.hidden = ok;
   }
   persist();
   applyInputs();
+  if (fixOptions()) { store.profiles[store.current] = Object.assign({}, inputs); persist(); }
   function syncNick() {
     const n = $('#nickIn'); if (!n) return;
     n.readOnly = !!shared;
     n.value = shared ? (shared.nk || '') : nickOf(store.current);
   }
+  // 실투력 시트 버전(제목 아래 회색 글씨)
+  if ($('#sheetVer') && M.meta && M.meta.version) $('#sheetVer').textContent = `실질전투력 시트 ${M.meta.version} 기준`;
   renderForms(); renderProfiles(); wireProfiles(); syncNick(); wireSelection(); wireCapture(); wireShare(); wireOpt(); wireSock();
   refresh();
   openHash();
