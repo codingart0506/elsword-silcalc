@@ -10,6 +10,22 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const { el, toast, fmtInt, korUnit } = A;
 
+  // ---------- 방문 통계(익명) ----------
+  // 하루(한국 시간)마다 방문 수 · 그날 처음 연 브라우저 수 · 처음 온 브라우저 수, 스크린샷 읽기 · 아바타 추천 횟수만 더함. IP·기기 번호는 안 보냄
+  function track(kind, extra) {
+    try {
+      fetch(SB_URL + '/rest/v1/rpc/track', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', apikey: SB_KEY },
+        body: JSON.stringify(Object.assign({ p_kind: kind }, extra || {})) }).catch(() => {});
+    } catch (e) { /* 통계는 실패해도 그만 */ }
+  }
+  window.SilTrack = track;
+  (function visit() {
+    const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    let last = null;
+    try { last = localStorage.getItem('silcalc.seen'); localStorage.setItem('silcalc.seen', today); } catch (e) { /* 무시 */ }
+    track('visit', { p_today: last !== today, p_first: !last });
+  })();
+
   // ---------- 서버 연결(필요할 때만 불러옴) ----------
   let sbP = null;
   // 이 브라우저에 저장된 갱신 코드들(승인된 것 먼저, 최대 5개)
@@ -54,14 +70,22 @@
     if (s < 86400 * 30) return `${Math.round(s / 86400)}일 전`;
     return new Date(ts).toLocaleDateString('ko-KR');
   }
-  // 스크린샷은 JPEG로 줄여서 올림(가로 최대 1920)
-  function toJpeg(src) {
+  // 스크린샷 저장(가로 최대 1920): 되는 브라우저는 WebP(같은 글자 선명도에 JPEG의 절반쯤 크기), 안 되면 JPEG.
+  // 원본(관리자 확인용)은 0.8, 랭킹에 보이는 사본은 0.7 — 사본이 여러 번 받아지는 쪽이라 더 줄임
+  function encodeImg(src, q) {
     const k = Math.min(1, 1920 / src.width);
     const c = document.createElement('canvas');
     c.width = Math.round(src.width * k); c.height = Math.round(src.height * k);
     c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
-    return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('사진을 변환하지 못했어요')), 'image/jpeg', 0.85));
+    return new Promise((res, rej) => c.toBlob(b => {
+      if (b && b.type === 'image/webp') return res(b);
+      c.toBlob(j => j ? res(j) : rej(new Error('사진을 변환하지 못했어요')), 'image/jpeg', 0.85);
+    }, 'image/webp', q));
   }
+  const toOrig = (src) => encodeImg(src, 0.8);
+  const toPub = (src) => encodeImg(src, 0.7);
+  const extOf = (b) => b && b.type === 'image/webp' ? 'webp' : 'jpg';
+  const isPubPath = (p) => /_p\.(jpg|webp)$/.test(p || '');
   async function blobToCanvas(blob) {
     const bmp = await createImageBitmap(blob);
     const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
@@ -267,8 +291,8 @@
       return blobToCanvas(b);
     })().catch(e => { cvP = null; throw e; }));
     const save = async (pc) => {
-      const path = `${folder}/${uuid()}_p.jpg`;
-      const up = await c.storage.from('shots').upload(path, await toJpeg(pc), { contentType: 'image/jpeg', upsert: false });
+      const blob = await toPub(pc), path = `${folder}/${uuid()}_p.${extOf(blob)}`;
+      const up = await c.storage.from('shots').upload(path, blob, { contentType: blob.type, upsert: false });
       if (up.error) throw up.error;
       const { error } = await fix(path); if (error) throw error;
       setPub(path);
@@ -1082,8 +1106,8 @@
     st.set = async (src, note) => {
       try {
         const cv = src instanceof HTMLCanvasElement ? src : await blobToCanvas(src);
-        st.img = await toJpeg(cv);
-        const pc = privacyBlur(cv); st.pub = pc ? await toJpeg(pc) : null;
+        st.img = await toOrig(cv);
+        const pc = privacyBlur(cv); st.pub = pc ? await toPub(pc) : null;
         box.innerHTML = ''; box.classList.add('has');
         box.append(el('img', { src: URL.createObjectURL(st.img), alt: '올릴 스크린샷' }), el('span', { text: note || '다른 사진으로 바꾸려면 다시 누르세요' }));
       } catch (e) { toast('사진을 읽지 못했어요'); }
@@ -1150,12 +1174,12 @@
       send.disabled = true; send.textContent = '보내는 중';
       try {
         const c = await sb();
-        const id = uuid(), path = `apply/${id}.jpg`;
-        const up = await c.storage.from('shots').upload(path, img, { contentType: 'image/jpeg', upsert: false });
+        const id = uuid(), path = `apply/${id}.${extOf(img)}`;
+        const up = await c.storage.from('shots').upload(path, img, { contentType: img.type || 'image/jpeg', upsert: false });
         if (up.error) throw up.error;
         // 랭킹에 보일 사진(캐릭터·상세 스탯 창 밖을 흐리게). 원본은 관리자만 봄
-        const pubPath = pub ? `apply/${id}_p.jpg` : null;
-        if (pubPath) { const u2 = await c.storage.from('shots').upload(pubPath, pub, { contentType: 'image/jpeg', upsert: false }); if (u2.error) throw u2.error; }
+        const pubPath = pub ? `apply/${id}_p.${extOf(pub)}` : null;
+        if (pubPath) { const u2 = await c.storage.from('shots').upload(pubPath, pub, { contentType: pub.type || 'image/jpeg', upsert: false }); if (u2.error) throw u2.error; }
         const token = genToken();
         const { error } = await c.rpc('submit_application_v2', {
           p_nickname: n, p_server: '', p_cls: A.cls(), p_cp: cp, p_inputs: A.rankInputs(), p_code: code, p_shot: path, p_token: token, p_pub: pubPath,
@@ -1212,11 +1236,11 @@
       send.disabled = true; send.textContent = '보내는 중';
       try {
         const c = await sb();
-        const id = uuid(), path = `update/${id}.jpg`;
-        const up = await c.storage.from('shots').upload(path, pick.img, { contentType: 'image/jpeg', upsert: false });
+        const id = uuid(), path = `update/${id}.${extOf(pick.img)}`;
+        const up = await c.storage.from('shots').upload(path, pick.img, { contentType: pick.img.type || 'image/jpeg', upsert: false });
         if (up.error) throw up.error;
         let pubPath = null;
-        if (pick.pub) { pubPath = `update/${id}_p.jpg`; const u2 = await c.storage.from('shots').upload(pubPath, pick.pub, { contentType: 'image/jpeg', upsert: false }); if (u2.error) pubPath = null; }
+        if (pick.pub) { pubPath = `update/${id}_p.${extOf(pick.pub)}`; const u2 = await c.storage.from('shots').upload(pubPath, pick.pub, { contentType: pick.pub.type || 'image/jpeg', upsert: false }); if (u2.error) pubPath = null; }
         const { error } = await c.rpc('update_cp_v3', { p_token: r.token, p_cls: A.cls(), p_cp: cp, p_inputs: A.rankInputs(), p_shot: path, p_edited: A.edited(), p_pub: pubPath, p_code: code });
         if (error) throw error;
         try { localStorage.removeItem(updKey(r)); } catch (e) { /* 무시 */ }
@@ -1313,7 +1337,7 @@
   async function adminPanel(c, body) {
     body.innerHTML = '';
     // 한 화면에 다 늘어놓으면 너무 길어서 탭으로 나눔(마지막에 본 탭 기억). 탭 줄은 내려도 위에 붙어 있음
-    const TABS = [['apps', '신청'], ['upd', '갱신'], ['chars', '캐릭터'], ['logs', '열람 기록'], ['wm', '워터마크 찾기'], ['admins', '관리자']];
+    const TABS = [['apps', '신청'], ['upd', '갱신'], ['chars', '캐릭터'], ['logs', '열람 기록'], ['stats', '방문'], ['wm', '워터마크 찾기'], ['admins', '관리자']];
     const bar = el('div', { class: 'seg adm-tabs', role: 'tablist', 'aria-label': '관리 메뉴' });
     const panes = {}, tabBtn = {}, cntEl = {};
     for (const [k, t] of TABS) {
@@ -1457,6 +1481,22 @@
     const searchBox = (ph) => el('input', { type: 'search', class: 'adm-search', placeholder: ph, autocomplete: 'off', enterkeyhint: 'search' });
     const has = (s, q) => String(s || '').toLowerCase().includes(q);
 
+    // ---------- 방문 통계 ----------
+    {
+      const box = el('div', { class: 'adm-sec' }, el('p', { class: 'rank-note', text: '깃허브 페이지 주소로 들어온 방문이에요(한국 시간 하루 기준). 방문자는 그날 사이트를 연 브라우저 수, 처음 온 사람은 처음 연 브라우저 수예요.' }));
+      panes.stats.append(box);
+      c.rpc('admin_site_stats', { p_days: 60 }).then(({ data, error }) => {
+        if (error) { box.append(el('p', { class: 'rank-note', text: '불러오지 못했어요. ' + errMsg(error) })); return; }
+        const rows = data || [];
+        if (!rows.length) { box.append(el('p', { class: 'rank-note', text: '아직 기록이 없어요' })); return; }
+        const sum = (n, k) => rows.slice(0, n).reduce((a, r) => a + (Number(r[k]) || 0), 0);
+        box.append(el('p', { class: 'adm-stat-sum', text: `최근 7일: 방문자 ${fmtInt(sum(7, 'visitors'))}명 · 방문 ${fmtInt(sum(7, 'views'))}번 · 처음 온 사람 ${fmtInt(sum(7, 'new_visitors'))}명 · 스크린샷 읽기 ${fmtInt(sum(7, 'ocr'))}번 · 아바타 추천 ${fmtInt(sum(7, 'avatar'))}번` }));
+        const cols = [['visitors', '방문자'], ['views', '방문'], ['new_visitors', '처음 온 사람'], ['ocr', '스크린샷 읽기'], ['avatar', '아바타 추천']];
+        const tb = el('tbody');
+        for (const r of rows) tb.append(el('tr', null, el('th', { scope: 'row', text: String(r.day).slice(5).replace('-', '/') }), ...cols.map(([k]) => el('td', { text: fmtInt(Number(r[k]) || 0) }))));
+        box.append(el('div', { class: 'adm-stats-wrap' }, el('table', { class: 'adm-stats' }, el('thead', null, el('tr', null, el('th', { scope: 'col', text: '날짜' }), ...cols.map(([, t]) => el('th', { scope: 'col', text: t })))), tb)));
+      }).catch(e => box.append(el('p', { class: 'rank-note', text: '불러오지 못했어요. ' + errMsg(e) })));
+    }
     // ---------- 열람 기록 ----------
     // 누가 언제 무엇을 봤는지 + 기기 수(갱신 코드 돌려쓰기 확인). 이상하면 그 사람을 캐릭터 탭에서 숨기면 랭킹도 못 봐요
     const LOG_PAGE = 40;
@@ -1517,7 +1557,7 @@
     ps.forEach((p, i) => { p.rank = i + 1; });
     setCnt('chars', ps.length);
     // 예전에 올라간 사진 중 흐린 사본이 아닌 것: 다른 사람 이름을 가린 사본으로 바꿈(원본은 갱신 기록에 남음)
-    const raw = ps.filter(p => p.shot_path && !/_p\.jpg$/.test(p.shot_path));
+    const raw = ps.filter(p => p.shot_path && !isPubPath(p.shot_path));
     if (raw.length) {
       const fix = el('button', { type: 'button', class: 'btn', text: `예전 랭킹 사진 ${raw.length}장 이름 가리기` });
       fix.onclick = async () => {
@@ -1527,8 +1567,8 @@
             const b = await shotBlob(c, p.shot_path); if (!b) throw new Error('사진 없음');
             const cv = await blobToCanvas(b);
             const pc = privacyBlur(cv); if (!pc) { miss.push(p.nickname); continue; }
-            const path = `apply/${uuid()}_p.jpg`;
-            const up = await c.storage.from('shots').upload(path, await toJpeg(pc), { contentType: 'image/jpeg', upsert: false });
+            const blob = await toPub(pc), path = `apply/${uuid()}_p.${extOf(blob)}`;
+            const up = await c.storage.from('shots').upload(path, blob, { contentType: blob.type, upsert: false });
             if (up.error) throw up.error;
             const { error: e } = await c.rpc('admin_set_pub', { p_id: p.id, p_path: path });
             if (e) throw e;
@@ -1538,6 +1578,33 @@
         fix.textContent = `${done}장 가렸어요${miss.length ? `, 못 가린 사진: ${miss.join(', ')}` : ''}`;
       };
       all.append(fix);
+    }
+    // 예전에 JPEG로 올린 랭킹 사진을 WebP로 다시 저장(같은 글자 선명도에 크기 절반쯤 → 보는 사람마다 받는 양이 줄어 저장소 전송량 절약)
+    const jpgs = ps.filter(p => p.shot_path && /_p\.jpg$/.test(p.shot_path));
+    if (jpgs.length) {
+      const sq = el('button', { type: 'button', class: 'btn', text: `랭킹 사진 ${jpgs.length}장 용량 줄이기` });
+      const sqOut = el('p', { class: 'rank-note' });
+      sq.onclick = async () => {
+        sq.disabled = true; let done = 0, before = 0, after = 0; const miss = [];
+        for (const p of jpgs) {
+          sqOut.textContent = `줄이는 중이에요 (${done + miss.length + 1}/${jpgs.length})`;
+          try {
+            const b = await shotBlob(c, p.shot_path); if (!b) throw new Error('사진 없음');
+            const nb = await toPub(await blobToCanvas(b));
+            if (nb.type !== 'image/webp' || nb.size >= b.size * 0.9) { miss.push(p.nickname); continue; }
+            const path = `${/^update\//.test(p.shot_path) ? 'update' : 'apply'}/${uuid()}_p.webp`;
+            const up = await c.storage.from('shots').upload(path, nb, { contentType: 'image/webp', upsert: false });
+            if (up.error) throw up.error;
+            const { error: e } = await c.rpc('admin_set_pub', { p_id: p.id, p_path: path });
+            if (e) throw e;
+            before += b.size; after += nb.size; p.shot_path = path; done++;
+          } catch (e) { console.warn(e); miss.push(p.nickname); }
+        }
+        const kb = (n) => Math.round(n / 1024).toLocaleString('ko-KR') + 'KB';
+        sqOut.textContent = `${done}장을 줄였어요 (${kb(before)} → ${kb(after)})${miss.length ? `. 그대로 둔 사진: ${miss.join(', ')}` : ''}`;
+        sq.textContent = '랭킹 사진 용량 줄이기 끝';
+      };
+      all.append(el('div', { class: 'adm-recalc' }, sq, sqOut));
     }
     const chQ = searchBox('닉네임 또는 전직 검색');
     const onlyHid = el('input', { type: 'checkbox' });
@@ -1566,8 +1633,8 @@
           const cv = await blobToCanvas(b);
           const rects = await editKeep(cv, privacyRects(cv) || []);
           if (rects) {
-            const path = `${/^update\//.test(origPath) ? 'update' : 'apply'}/${uuid()}_p.jpg`;
-            const up = await c.storage.from('shots').upload(path, await toJpeg(blurKeep(cv, rects)), { contentType: 'image/jpeg', upsert: false });
+            const blob = await toPub(blurKeep(cv, rects)), path = `${/^update\//.test(origPath) ? 'update' : 'apply'}/${uuid()}_p.${extOf(blob)}`;
+            const up = await c.storage.from('shots').upload(path, blob, { contentType: blob.type, upsert: false });
             if (up.error) throw up.error;
             const { error: e } = await c.rpc('admin_set_player_pub', { p_id: p.id, p_path: path });
             if (e) throw e;

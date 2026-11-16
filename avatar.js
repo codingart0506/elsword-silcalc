@@ -596,6 +596,7 @@
     if (!APP.cls()) { result = { err: '계산기 탭에서 전직을 먼저 골라 주세요' }; renderResult(); return; }
     if (!(num('C11') > 0)) { result = { err: '계산기 탭에 지금 스탯이 없어요. 상세 스탯 창 스크린샷을 먼저 읽어 주세요' }; renderResult(); return; }
     btn.disabled = true; btn.textContent = '계산 중…';
+    if (window.SilTrack) window.SilTrack('avatar');
     setTimeout(() => {
       try {
         const p = prof(), c = calcOpts(), cur = curStats();

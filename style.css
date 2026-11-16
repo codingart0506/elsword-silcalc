@@ -647,3 +647,12 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .cart-row .atma-sel select:first-child { width: 150px; }
 .cart-row .atma-sel select:last-child { width: 160px; }
 @media (max-width: 520px) { .cart-row .atma-sel { width: 100%; } .cart-row .atma-sel select:first-child, .cart-row .atma-sel select:last-child { width: auto; flex: 1; min-width: 0; } }
+
+/* 관리자: 방문 통계 */
+.adm-stat-sum { font-size: 15px; font-weight: 600; margin: 4px 0 10px; }
+.adm-stats-wrap { overflow-x: auto; }
+.adm-stats { border-collapse: collapse; font-size: 14px; min-width: 460px; }
+.adm-stats th, .adm-stats td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.adm-stats th[scope=row], .adm-stats thead th:first-child { text-align: left; }
+.adm-stats thead th { color: var(--mute); font-weight: 600; font-size: 13px; }
+.adm-recalc { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 8px 0 14px; }
