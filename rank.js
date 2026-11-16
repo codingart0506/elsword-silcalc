@@ -416,7 +416,7 @@
   const nf = (v) => String(Math.round(Number(v) * 100) / 100);
   function shareText(i) {
     i = i || {};
-    if (i.L42 === true) return `${nf(i.K46 ?? 65)} : ${nf(i.I46 ?? 35)} (${i.M46 || '강초뎀 적용 이전'} 기준)`;
+    if (i.L42 === true) return `${nf(i.K46 ?? 65)} : ${nf(i.I46 ?? 35)} (${/이후/.test(i.M46 || '') ? '딜 미터로 잰 딜 비율' : '스킬 쓰는 비율'})`;
     return `자동 (${Number(i.C29) > Number(i.C30) ? '강렬' : '초월'} 주력)`;
   }
   async function playerDetail(c, r) {
