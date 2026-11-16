@@ -1060,7 +1060,14 @@
   }
 
   // 피시방·에너지드링크·지애·이벤트 버프, 추피 보정·가동률 DPS 전환을 켠 세팅은 랭킹에 올리지 않음(서버에도 안 보냄)
+  // 랭킹은 같은 필드 기준으로만 비교: 전투력 출력 기준 필드가 '네블론 레이드 : 글리터 보스'일 때만 신청·갱신
+  const RANK_FIELD = '네블론 레이드 : 글리터 보스';
   function buffBlocked() {
+    const field = String(A.val ? (A.val('I8') ?? '') : '');
+    if (field !== RANK_FIELD) {
+      A.dialog({ title: '랭킹에 올릴 수 없어요', text: `랭킹은 전투력 출력 기준 필드가 '${RANK_FIELD}'일 때만 올릴 수 있어요. 지금은 '${field.replace(/\s*\n\s*/g, ' ') || '-'}'이에요. 계산기의 스킬·장비 탭에서 필드를 바꾼 뒤 다시 눌러 주세요.`, ok: '확인' });
+      return true;
+    }
     const bf = A.rankBuffs ? A.rankBuffs() : [];
     if (!bf.length) return false;
     A.dialog({ title: '랭킹에 올릴 수 없어요', text: `${bf.join(', ')}이(가) 켜져 있어요. 이걸 켠 세팅은 랭킹에 올릴 수 없어요. 계산기의 스킬·장비 탭에서 끈 뒤(이벤트 버프는 '미적용'으로) 다시 눌러 주세요.`, ok: '확인' });
