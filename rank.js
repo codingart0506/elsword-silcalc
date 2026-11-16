@@ -1424,16 +1424,13 @@
     // ---------- 갱신 ----------
     const held = el('div', { class: 'adm-sec' }, el('h3', { text: '확인 기다리는 갱신' }),
       el('p', { class: 'rank-note', text: '갱신은 모두 여기서 확인한 뒤에 랭킹에 올라가요. 채팅의 인증 코드·닉네임과 스탯이 맞는지 보고 반영하세요.' }));
-    const live = el('div', { class: 'adm-sec' }, el('h3', { text: '바로 반영된 갱신' }),
-      el('p', { class: 'rank-note', text: '예전 방식(인증 코드 없이 바로 반영)으로 들어온 갱신이에요. 사진을 보고 확인하거나, 이상하면 되돌려요.' }));
-    panes.upd.append(held, live);
+    panes.upd.append(held);
     const { data: hs, error: e2 } = await c.from('cp_history')
       .select('id,cp,prev_cp,cls,inputs,prev_inputs,edited,status,created_at,shot_path,pub_path,verify_code,player_id,players(nickname,hidden)')
-      .in('status', ['held', 'live']).order('created_at', { ascending: false }).limit(60);
+      .eq('status', 'held').order('created_at', { ascending: false }).limit(60);
     if (e2) throw e2;
-    const hsHeld = hs.filter(h => h.status === 'held'), hsLive = hs.filter(h => h.status === 'live');
+    const hsHeld = hs;
     if (!hsHeld.length) held.append(el('p', { class: 'rank-note', text: '확인할 갱신이 없어요' }));
-    if (!hsLive.length) live.append(el('p', { class: 'rank-note', text: '새로 반영된 갱신이 없어요' }));
     const act = async (h, action, item, done) => {
       let memo = '';
       if (action === 'reject' || action === 'revert') {
@@ -1478,7 +1475,6 @@
       return item;
     };
     for (const h of hsHeld) held.append(updItem(h));
-    for (const h of hsLive) live.append(updItem(h));
     recount();
 
     // 목록 아래 쪽수 넘기기
