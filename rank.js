@@ -760,7 +760,7 @@
   function wmFinder(c, ps) {
     ps = ps || [];
     // 1) 퍼진 사진: 어느 캐릭터 사진인지 고르면, 원본과 맞대어 누구 무늬인지 찾음
-    const who = el('input', { type: 'search', class: 'adm-search', placeholder: '사진 속 캐릭터 (비워 두면 자동)', list: 'wmChars', autocomplete: 'off' });
+    const who = el('input', { type: 'search', class: 'adm-search', placeholder: '캡처에 나온 랭킹 캐릭터 (모르면 비워 두세요)', list: 'wmChars', autocomplete: 'off' });
     const dl = el('datalist', { id: 'wmChars' }); for (const p of ps) dl.append(el('option', { value: p.nickname }));
     const out = el('div', { class: 'wm-out wm-result' });
     let leakCv = null, busy = false;
@@ -780,7 +780,7 @@
           // 사진 속 캐릭터를 모르면: 랭킹 캐릭터 사진마다 대충 맞대 보고(작게) 가장 잘 맞는 캐릭터를 고름
           const list = ps.filter(x => x.shot_path); let top = [];
           for (let k = 0; k < list.length; k++) {
-            note.textContent = `사진 속 캐릭터를 찾는 중이에요 (${k + 1}/${list.length})`;
+            note.textContent = `캡처에 나온 캐릭터를 찾는 중이에요 (${k + 1}/${list.length})`;
             try { const o = await loadShot(list[k].shot_path); if (!o) continue; const at = await locate(o, leakCv, null, true); if (at) top.push({ p: list[k], pk: at.pk }); } catch (e) { /* 넘어감 */ }
             await new Promise(r => setTimeout(r, 0));
           }
@@ -816,10 +816,10 @@
         const sure = top.z >= 6 && gap >= 3, likely = !sure && top.z >= 4.5 && gap >= 2;
         out.textContent = '';
         out.append(el('p', { class: 'wm-verdict' + (sure ? ' sure' : likely ? ' likely' : '') },
-          sure ? `${top.name} 님이 본 화면이에요` : likely ? `${top.name} 님일 가능성이 높아요` : '누가 본 화면인지 못 찾았어요',
+          sure ? `퍼뜨린 사람: ${top.name} 님 (이 사람 화면에서 찍은 캡처예요)` : likely ? `퍼뜨린 사람: ${top.name} 님일 가능성이 높아요` : '누구 화면에서 찍은 캡처인지 못 찾았어요',
           sure || likely ? el('small', { text: ` (점수 ${z1(top.z)}, 다음 ${z1(second)})` }) : null));
         const seen = (vl || []).filter(v => v.viewer_nick === top.name).slice(0, 5).map(v => new Date(v.at).toLocaleString('ko-KR'));
-        out.append(el('p', { class: 'rank-note', text: `사진 속 캐릭터: ${p2.nickname}` + ((sure || likely) && seen.length ? ` · ${top.name} 님이 본 시각: ${seen.join(', ')}${(vl || []).filter(v => v.viewer_nick === top.name).length > 5 ? ' 외' : ''}` : '') }));
+        out.append(el('p', { class: 'rank-note', text: `캡처에 나온 캐릭터: ${p2.nickname}` + ((sure || likely) && seen.length ? ` · ${top.name} 님이 이 캐릭터를 본 시각: ${seen.join(', ')}${(vl || []).filter(v => v.viewer_nick === top.name).length > 5 ? ' 외' : ''}` : '') }));
         out.append(el('ol', { class: 'wm-cands' }, ...sc.slice(0, 5).map(x => el('li', { text: `${x.name}  ${z1(x.z)}` }))));
       } catch (e) { console.warn(e); out.textContent = '찾지 못했어요. ' + errMsg(e); }
       busy = false;
