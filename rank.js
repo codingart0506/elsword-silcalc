@@ -355,9 +355,33 @@
   views.addEventListener('click', (e) => { const b = e.target.closest('button[data-view]'); if (b) setView(b.dataset.view); });
 
   // ---------- 랭킹 목록 ----------
-  // 10등씩 쪽으로 나눠 보여 줌(이전·다음)
+  // 10등씩 쪽으로 나눠 보여 줌(이전·쪽 번호·다음)
   const PAGE = 10;
-  let rkCls = '', rkPage = 0, rkBusy = false;
+  let rkCls = '', rkPage = 0, rkBusy = false, rkTotal = null, rkTotalFor = null;
+  // 전체 인원: 실투력 -1보다 높은 사람 수(= 모두)를 순위 조회로 셈
+  async function countRank(c) {
+    try {
+      const { data, error } = await c.rpc('rank_pos', { p_cp: -1, p_cls: rkCls || null });
+      if (error) throw error;
+      const r = data && data[0]; if (!r) throw new Error('no');
+      rkTotal = Math.max(0, (rkCls ? r.in_cls : r.overall) - 1); rkTotalFor = rkCls;
+    } catch (e) { rkTotal = null; rkTotalFor = null; }
+  }
+  function drawPages(more) {
+    const box = $('#rankPages'); box.textContent = '';
+    const pages = rkTotal != null ? Math.max(1, Math.ceil(rkTotal / PAGE), rkPage + 1) : rkPage + 1 + (more ? 1 : 0);
+    const span = window.matchMedia('(max-width: 520px)').matches ? 1 : 2;
+    const show = new Set([0, pages - 1]);
+    for (let i = rkPage - span; i <= rkPage + span; i++) if (i >= 0 && i < pages) show.add(i);
+    let last = -1;
+    const btn = (i) => box.append(el('button', { type: 'button', class: 'rk-pg' + (i === rkPage ? ' on' : ''), 'aria-current': i === rkPage ? 'page' : 'false', 'aria-label': `${i + 1}쪽 (${i * PAGE + 1}위부터)`, text: String(i + 1), onclick: () => goTo(i) }));
+    for (const i of [...show].sort((a, b) => a - b)) {
+      if (i - last === 2) btn(last + 1);
+      else if (i - last > 2) box.append(el('span', { class: 'rk-gap', 'aria-hidden': 'true', text: '…' }));
+      btn(i); last = i;
+    }
+    return pages;
+  }
   async function loadRank(reset) {
     if (rkBusy) return; rkBusy = true;
     const list = $('#rankList'), empty = $('#rankEmpty'), pager = $('#rankPager');
@@ -387,6 +411,7 @@
       const { data, error } = await c.rpc('rank_list', { p_cls: rkCls || null, p_offset: rkPage * PAGE, p_limit: PAGE + 1 });
       if (error) throw error;
       if (!data.length && rkPage > 0) { rkPage--; rkBusy = false; return loadRank(false); }
+      if (reset || rkTotalFor !== rkCls) await countRank(c);
       more = data.length > PAGE;
       list.innerHTML = '';
       renderRows(data.slice(0, PAGE), rkPage * PAGE);
@@ -398,8 +423,9 @@
     }
     const n = list.children.length;
     pager.hidden = !(rkPage > 0 || more);
+    const pages = pager.hidden ? ($('#rankPages').textContent = '', 1) : drawPages(more);
     $('#btnRankPrev').disabled = rkPage === 0; $('#btnRankNext').disabled = !more;
-    $('#rankPageNo').textContent = n ? `${rkPage * PAGE + 1}~${rkPage * PAGE + n}위` : '';
+    $('#rankPageNo').textContent = n ? `${rkPage * PAGE + 1}~${rkPage * PAGE + n}위` + (rkTotal != null ? ` · 전체 ${rkTotal}명` : '') : '';
     rkBusy = false;
   }
   // 1·2·3등은 금·은·동 왕관
@@ -996,7 +1022,8 @@
     const li = $(`#rankList li[data-id="${m.id}"]`);
     if (li) { li.scrollIntoView({ block: 'center', behavior: 'smooth' }); li.classList.add('flash'); setTimeout(() => li.classList.remove('flash'), 1800); }
   }
-  const goPage = (d) => { if (rkBusy) return; rkPage = Math.max(0, rkPage + d); loadRank(false).then(() => $('#rankList').scrollIntoView({ block: 'nearest', behavior: 'smooth' })); };
+  const goTo = (i) => { if (rkBusy || i === rkPage) return; rkPage = Math.max(0, i); loadRank(false).then(() => $('#rankList').scrollIntoView({ block: 'nearest', behavior: 'smooth' })); };
+  const goPage = (d) => goTo(rkPage + d);
   $('#btnRankPrev').onclick = () => goPage(-1);
   $('#btnRankNext').onclick = () => goPage(1);
 
