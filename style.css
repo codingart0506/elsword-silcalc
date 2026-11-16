@@ -41,6 +41,7 @@ kbd { font-family: inherit; font-size: 13px; font-weight: 600; padding: 1px 7px;
   .main .rows { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; }
   .main .grp.wide .rows { grid-template-columns: 1fr; }
   .main .grp .rows .srow { border-bottom: 1px solid var(--line); }
+  .main .grp .rows .srow.spacer.pc { display: block; border-bottom-color: transparent; }
   .main .grp { padding-top: 20px; }
   .seg { max-width: 520px; }
   .in-head { margin-bottom: 18px; }

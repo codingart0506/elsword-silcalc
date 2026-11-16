@@ -69,7 +69,8 @@
       { bar: '캐릭터 버프 스킬', note: '직업 고유 패시브·버프는 직업에 맞게 자동으로 들어가요', fields: [{ c: 'L11', lab: 'I11' }] },
       { bar: '도핑', fields: [{ c: 'J17', lab: 'I17' }, { c: 'J18', lab: 'I18' }, { c: 'J19', lab: 'I19' }, { c: 'J20', lab: 'I20' }, { c: 'J21', lab: 'I21' }, { c: 'J22', lab: 'I22' }, { c: 'J23', lab: 'I23' },
         { c: 'ZB1', t: '피시방 버프' }, { c: 'ZB3', t: '에너지드링크' }, { c: 'ZB2', t: '지애 버프' }] },
-      { bar: '장비 종류와 강화', fields: [[{ c: 'J26', lab: 'I26' }, { c: 'L26' }], [{ c: 'J27', lab: 'I27' }, { c: 'L27' }], [{ c: 'J28', lab: 'I28' }, { c: 'L28' }], [{ c: 'J29', lab: 'I29' }, { c: 'L29' }], [{ c: 'J30', lab: 'I30' }, { c: 'L30' }],
+      // PC 두 칸 배치: 무기 한 줄, 그 아래 상의·하의 / 장갑·신발 / 세트 효과·아트마
+      { bar: '장비 종류와 강화', fields: [[{ c: 'J26', lab: 'I26' }, { c: 'L26' }], { spacer: 'pc' }, [{ c: 'J27', lab: 'I27' }, { c: 'L27' }], [{ c: 'J28', lab: 'I28' }, { c: 'L28' }], [{ c: 'J29', lab: 'I29' }, { c: 'L29' }], [{ c: 'J30', lab: 'I30' }, { c: 'L30' }],
         { c: 'G33', t: '세트 효과' }, [{ c: 'G34', t: '아트마' }, { c: 'H34' }]] },
       { bar: '카트리지', note: '종류와 수치(단계)', wide: true, fields: [[{ c: 'J31', lab: 'I31' }, { c: 'L31' }], [{ c: 'J32', lab: 'I32' }, { c: 'L32' }], [{ c: 'J33', lab: 'I33' }, { c: 'L33' }], [{ c: 'J34', lab: 'I34' }, { c: 'L34' }]] },
       { bar: '전투력 출력 기준 필드', fields: [{ c: 'I8', t: '필드' }], extra: 'field' },
@@ -305,7 +306,7 @@
   let activeTab = 'stat';
   try { activeTab = localStorage.getItem(LS + '.tab') || 'stat'; } catch (e) { /* 무시 */ }
   function fieldRow(spec) {
-    if (spec.spacer) return el('div', { class: 'srow spacer', 'aria-hidden': 'true' });
+    if (spec.spacer) return el('div', { class: 'srow spacer' + (spec.spacer === 'pc' ? ' pc' : ''), 'aria-hidden': 'true' });
     const fields = Array.isArray(spec) ? spec : [spec];
     const f0 = fields[0];
     const row = el('div', { class: 'srow' + (fields.length > 1 ? ' multi' : '') + (f0.plain ? ' plain' : '') });
