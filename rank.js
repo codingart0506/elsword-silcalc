@@ -11,7 +11,7 @@
   const { el, toast, fmtInt, korUnit } = A;
 
   // ---------- 방문 통계(익명) ----------
-  // 하루(한국 시간)마다 방문 수 · 그날 처음 연 브라우저 수 · 처음 온 브라우저 수, 스크린샷 읽기 · 아바타 추천 횟수만 더함. IP·기기 번호는 안 보냄
+  // 하루(한국 시간)마다 방문 수 · 그날 처음 연 브라우저 수 · 처음 온 브라우저 수, 아바타 추천 횟수만 더함. IP·기기 번호는 안 보냄
   function track(kind, extra) {
     try {
       fetch(SB_URL + '/rest/v1/rpc/track', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', apikey: SB_KEY },
@@ -1502,8 +1502,8 @@
         const rows = data || [];
         if (!rows.length) { box.append(el('p', { class: 'rank-note', text: '아직 기록이 없어요' })); return; }
         const sum = (n, k) => rows.slice(0, n).reduce((a, r) => a + (Number(r[k]) || 0), 0);
-        box.append(el('p', { class: 'adm-stat-sum', text: `최근 7일: 방문자 ${fmtInt(sum(7, 'visitors'))}명 · 방문 ${fmtInt(sum(7, 'views'))}번 · 처음 온 사람 ${fmtInt(sum(7, 'new_visitors'))}명 · 스크린샷 읽기 ${fmtInt(sum(7, 'ocr'))}번 · 아바타 추천 ${fmtInt(sum(7, 'avatar'))}번` }));
-        const cols = [['visitors', '방문자'], ['views', '방문'], ['new_visitors', '처음 온 사람'], ['ocr', '스크린샷 읽기'], ['avatar', '아바타 추천']];
+        box.append(el('p', { class: 'adm-stat-sum', text: `최근 7일: 방문자 ${fmtInt(sum(7, 'visitors'))}명 · 방문 ${fmtInt(sum(7, 'views'))}번 · 처음 온 사람 ${fmtInt(sum(7, 'new_visitors'))}명 · 아바타 추천 ${fmtInt(sum(7, 'avatar'))}번` }));
+        const cols = [['visitors', '방문자'], ['views', '방문'], ['new_visitors', '처음 온 사람'], ['avatar', '아바타 추천']];
         const tb = el('tbody');
         for (const r of rows) tb.append(el('tr', null, el('th', { scope: 'row', text: String(r.day).slice(5).replace('-', '/') }), ...cols.map(([k]) => el('td', { text: fmtInt(Number(r[k]) || 0) }))));
         box.append(el('div', { class: 'adm-stats-wrap' }, el('table', { class: 'adm-stats' }, el('thead', null, el('tr', null, el('th', { scope: 'col', text: '날짜' }), ...cols.map(([, t]) => el('th', { scope: 'col', text: t })))), tb)));

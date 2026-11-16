@@ -749,7 +749,6 @@
       try { if (gear && gear.cls && !shared) { pt.textContent = '캐릭터 이름 읽는 중'; res.name = await O.readName(shot, gear.cls); } } catch (e) { console.error(e); }
       pendingExtras = { gotRange: !!(res.found && res.found.C12) };
       showOcrResult(res, gear);
-      if (window.SilTrack) window.SilTrack('ocr');
       prog.hidden = true;
       // 읽은 값은 바로 적용(못 읽었으면 결과 안내만 남김)
       if (document.querySelector('#ocrBody input[type=checkbox]:checked')) applyOcr();
