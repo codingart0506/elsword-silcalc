@@ -71,7 +71,7 @@
     return new Date(ts).toLocaleDateString('ko-KR');
   }
   // 스크린샷 저장(가로 최대 1920): 되는 브라우저는 WebP(같은 글자 선명도에 JPEG의 절반쯤 크기), 안 되면 JPEG.
-  // 원본(관리자 확인용)은 0.8, 랭킹에 보이는 사본은 0.7 — 사본이 여러 번 받아지는 쪽이라 더 줄임
+  // 원본(관리자 확인용)은 0.8, 랭킹에 보이는 사본은 0.6 — 사본이 여러 번 받아지는 쪽이라 더 줄임(0.6에서도 스탯 글자는 또렷함)
   function encodeImg(src, q) {
     const k = Math.min(1, 1920 / src.width);
     const c = document.createElement('canvas');
@@ -83,7 +83,7 @@
     }, 'image/webp', q));
   }
   const toOrig = (src) => encodeImg(src, 0.8);
-  const toPub = (src) => encodeImg(src, 0.7);
+  const toPub = (src) => encodeImg(src, 0.6);
   const extOf = (b) => b && b.type === 'image/webp' ? 'webp' : 'jpg';
   const isPubPath = (p) => /_p\.(jpg|webp)$/.test(p || '');
   async function blobToCanvas(blob) {
@@ -201,7 +201,19 @@
     }
     return out;
   }
-  function privacyBlur(src) { const k = privacyRects(src); return k ? blurKeep(src, k) : null; }
+  // 랭킹에 보일 사본: 또렷한 칸(캐릭터 창·상세 스탯 창)만 남게 둘레를 잘라 냄. 흐린 바깥은 볼 게 없고 용량만 차지해서
+  function cropKeep(src, keep) {
+    if (!keep || !keep.length) return src;
+    const W = src.width, H = src.height, m = Math.round(Math.min(W, H) * 0.01);
+    const a = Math.max(0, Math.floor(Math.min(...keep.map(r => Math.min(r[0], r[2])))) - m), b = Math.max(0, Math.floor(Math.min(...keep.map(r => Math.min(r[1], r[3])))) - m);
+    const c = Math.min(W, Math.ceil(Math.max(...keep.map(r => Math.max(r[0], r[2])))) + m), d = Math.min(H, Math.ceil(Math.max(...keep.map(r => Math.max(r[1], r[3])))) + m);
+    if (c - a < W * 0.3 || d - b < H * 0.3) return src; // 너무 작게 잡히면 자르지 않음
+    const out = document.createElement('canvas'); out.width = c - a; out.height = d - b;
+    out.getContext('2d').drawImage(src, a, b, c - a, d - b, 0, 0, c - a, d - b);
+    return out;
+  }
+  const pubOf = (src, keep) => cropKeep(blurKeep(src, keep), keep);
+  function privacyBlur(src) { const k = privacyRects(src); return k ? pubOf(src, k) : null; }
   window.SilBlur = privacyBlur;
   window.SilBlurRects = privacyRects;
 
@@ -303,7 +315,7 @@
       try {
         const cv = await loadOrig();
         const rects = await editKeep(cv, privacyRects(cv) || []);
-        if (rects) { await save(blurKeep(cv, rects)); toast('랭킹에 보일 사진을 바꿨어요'); }
+        if (rects) { await save(pubOf(cv, rects)); toast('랭킹에 보일 사진을 바꿨어요'); }
       } catch (e) { console.warn(e); toast('저장하지 못했어요. ' + errMsg(e)); }
       editBtn.disabled = false;
     };
@@ -1590,7 +1602,8 @@
           sqOut.textContent = `줄이는 중이에요 (${done + miss.length + 1}/${jpgs.length})`;
           try {
             const b = await shotBlob(c, p.shot_path); if (!b) throw new Error('사진 없음');
-            const nb = await toPub(await blobToCanvas(b));
+            const cv0 = await blobToCanvas(b); let k0 = null; try { k0 = privacyRects(cv0); } catch (e) { k0 = null; }
+            const nb = await toPub(cropKeep(cv0, k0));
             if (nb.type !== 'image/webp' || nb.size >= b.size * 0.9) { miss.push(p.nickname); continue; }
             const path = `${/^update\//.test(p.shot_path) ? 'update' : 'apply'}/${uuid()}_p.webp`;
             const up = await c.storage.from('shots').upload(path, nb, { contentType: 'image/webp', upsert: false });
@@ -1633,7 +1646,7 @@
           const cv = await blobToCanvas(b);
           const rects = await editKeep(cv, privacyRects(cv) || []);
           if (rects) {
-            const blob = await toPub(blurKeep(cv, rects)), path = `${/^update\//.test(origPath) ? 'update' : 'apply'}/${uuid()}_p.${extOf(blob)}`;
+            const blob = await toPub(pubOf(cv, rects)), path = `${/^update\//.test(origPath) ? 'update' : 'apply'}/${uuid()}_p.${extOf(blob)}`;
             const up = await c.storage.from('shots').upload(path, blob, { contentType: blob.type, upsert: false });
             if (up.error) throw up.error;
             const { error: e } = await c.rpc('admin_set_player_pub', { p_id: p.id, p_path: path });
