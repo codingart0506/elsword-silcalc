@@ -498,14 +498,16 @@
         const lose = x !== top, pct = lose ? ` (−${((top.cp - x.cp) / top.cp * 100).toFixed(2)}%)` : '';
         const line = el('p', { class: 'av-rival-row' + (lose ? '' : ' win') }, el('span', { class: 'n' }, `${x.n} + ${x.suit || '한벌 없음'}`, x.crit > 0 ? el('small', { text: ` 크리 ${Math.round(x.crit * 1000) / 10}%` }) : ''), el('b', { text: fmt(x.cp) }), el('span', { class: 'p', text: pct }));
         const sNote = withSock ? el('p', { class: 'av-rival-note', text: sockTxt(x) }) : '';
-        if (!lose || !x.cand) { cmpBox.append(line, sNote); continue; }
+        if (!x.cand) { cmpBox.append(line, sNote); continue; }
         const rec2 = Object.assign({ '아바타5셋': x.cand.fiveSetDisplay, '한벌': x.suit || '' }, x.cand.partToDisplay);
         const diff = PARTS.filter(part => (rec[part] || '') !== (rec2[part] || ''));
-        if (!diff.length) { line.classList.add('alt'); cmpBox.append(line, sNote, el('p', { class: 'av-rival-note', text: '아바타·한벌은 위 추천과 같아요' })); continue; }
+        if (!diff.length) { if (lose) line.classList.add('alt'); cmpBox.append(line, sNote, lose ? el('p', { class: 'av-rival-note', text: '아바타·한벌은 위 추천과 같아요' }) : ''); continue; }
         const tb2 = el('tbody');
         for (const part of diff) tb2.append(el('tr', { class: 'chg' }, el('th', { scope: 'row', text: PART_LABEL[part] || part }), el('td', { class: 'to', text: short(rec2[part] || '') || '-' })));
         cmpBox.append(el('details', { class: 'av-rival-more' }, el('summary', null, line), sNote, el('p', { class: 'av-rival-note', text: `추천과 다른 부위 ${diff.length}곳` }), el('table', { class: 'av-table' }, tb2)));
       }
+      const tableBottom = keepNow ? (p.bottom || '') : r.best.bottom;
+      if (withSock && tableBottom && tableBottom !== top.n) cmpBox.append(el('p', { class: 'av-rival-note tip', text: `위 표의 추천(${tableBottom})은 크리·극대를 맞추기 전 실투력으로 고른 거예요. 크리·극대를 지금 값에 맞춰서 비교하면 ${top.n} 쪽이 더 높아요` }));
       box.append(cmpBox);
     } else if (p.bottom && BOTTOMS[p.bottom] && APP.cpWith) {
       const cmp = Object.keys(BOTTOMS).map(n => ({ n, cp: APP.cpWith(bottomOver({}, p.bottom, n)) }));
@@ -645,40 +647,40 @@
   function bottomRivals(r, worn, base, ctx) {
     const bNow = prof().bottom || '', now = worn['한벌'] || '';
     if (!bNow || !BOTTOMS[bNow] || !r || !r.best || !r.cands || !APP.cpWith) return null;
+    // 크리·극대화를 지금 값에 맞춰 놓고 잼: 모자라면 힘트마(보스 데미지 마법석)를 빼고 크리·극대 마법석을 넣고, 넘치면 힘트마로 되돌림.
+    // 한벌·아바타를 고를 때부터 이렇게 맞춘 실투력으로 비교함(예: 족쇄 쪽은 크리 있는 한벌이 힘트마를 덜 빼서 유리할 수 있음)
+    const inp0 = APP.inputs(), T = Number(inp0.C17) || 0, TM = Number(inp0.C19) || 0;
+    const canMatch = !!APP.sockMatch && (T > 0 || TM > 0);
+    const measure = (o) => {
+      if (canMatch) { const sk = APP.sockMatch(o, { C17: T, C19: TM }); if (sk && sk.cp > 0) return { cp: sk.cp, sock: sk, crit: Number(sk.over.C17) || 0, max: Number(sk.over.C19) || 0, o }; }
+      return { cp: APP.cpWith(o), crit: Number('C17' in o ? o.C17 : inp0.C17) || 0, max: Number('C19' in o ? o.C19 : inp0.C19) || 0, o };
+    };
     const pickSuits = (bn) => {
       let ss = suitChoices(worn);
-      if (ss.length > 3) {
-        const sc = ss.map(n => ({ n, v: APP.cpWith(bottomOver(suitOver(Object.assign({}, base), now, n), bNow, bn)) })).sort((a, b) => b.v - a.v);
-        ss = [...new Set(sc.slice(0, 3).map(x => x.n).concat(now))];
+      if (ss.length > 4) {
+        const sc = ss.map(n => ({ n, v: measure(bottomOver(suitOver(Object.assign({}, base), now, n), bNow, bn)).cp })).sort((a, b) => b.v - a.v);
+        ss = [...new Set(sc.slice(0, 4).map(x => x.n).concat(now))];
       }
       return ss;
     };
+    const pool = r.cands.includes(r.best) ? r.cands : r.cands.concat([r.best]);
+    const toS = (c) => Object.assign({ '아바타5셋': c.fiveSetDisplay || '' }, c.partToDisplay);
+    const W = {}; for (const pt of ['아바타5셋'].concat(R.ALL_PARTS)) if (worn[pt]) W[pt] = worn[pt];
     const out = [];
     for (const bn of Object.keys(BOTTOMS)) {
-      const critOf = (o) => Number('C17' in (o || {}) ? o.C17 : APP.inputs().C17) || 0;
-      if (bn === r.best.bottom) { out.push({ n: bn, cp: r.best.cp, suit: r.best.suit, cand: r.best, crit: critOf(r.best.over), o: r.best.over }); continue; }
       const suits = pickSuits(bn);
-      const bestFor = (c) => { let b = null; for (const sName of suits) { const o = Object.assign({}, base, overridesFor(r, worn, c)); suitOver(o, now, sName); bottomOver(o, bNow, bn); const v = APP.cpWith(o); if (!b || v > b.cp) b = { cp: v, suit: sName, crit: critOf(o), o }; } return b; };
-      const sc = r.cands.map(c => Object.assign({ c }, bestFor(c))).filter(x => x.cp > 0).sort((a, b) => b.cp - a.cp);
+      const bestFor = (c) => { let b = null; for (const sName of suits) { const o = Object.assign({}, base, overridesFor(r, worn, c)); suitOver(o, now, sName); bottomOver(o, bNow, bn); const m = measure(o); if (!b || m.cp > b.cp) b = Object.assign({ suit: sName }, m); } return b; };
+      const sc = pool.map(c => Object.assign({ c }, bestFor(c))).filter(x => x.cp > 0).sort((a, b) => b.cp - a.cp);
       if (!sc.length) continue;
       let best = sc[0];
       try {
-        const toS = (c) => Object.assign({ '아바타5셋': c.fiveSetDisplay || '' }, c.partToDisplay);
-        const W = {}; for (const pt of ['아바타5셋'].concat(R.ALL_PARTS)) if (worn[pt]) W[pt] = worn[pt];
         const pol = polish(r, worn, base, ctx, sc.slice(0, 5).map(x => toS(x.c)).concat([W]), best.suit, bn);
         if (pol) { const b2 = bestFor(pol); if (b2 && b2.cp > best.cp + 0.5) best = Object.assign({ c: pol }, b2); }
       } catch (e) { console.error(e); }
-      out.push({ n: bn, cp: best.cp, suit: best.suit, cand: best.c, crit: best.crit, o: best.o });
+      out.push({ n: bn, cp: best.cp, suit: best.suit, cand: best.c, crit: best.crit, max: best.max, sock: best.sock || null, o: best.o });
     }
     if (out.length < 2) return null;
-    // 크리·극대화를 지금 값에 맞춰 놓고 비교: 모자라면 힘트마(보스 데미지 마법석)를 빼고 크리·극대 마법석을 넣고, 넘치면 힘트마로 되돌림
-    const inp0 = APP.inputs(), T = Number(inp0.C17) || 0, TM = Number(inp0.C19) || 0;
-    if (APP.sockMatch && (T > 0 || TM > 0)) for (const x of out) {
-      const sk = x.o ? APP.sockMatch(x.o, { C17: T, C19: TM }) : null;
-      if (sk && sk.cp > 0) { x.sock = sk; x.cp0 = x.cp; x.cp = sk.cp; x.crit = Number(sk.over.C17) || x.crit; x.max = Number(sk.over.C19) || 0; }
-    }
-    out.maxT = TM;
-    out.critT = T;
+    out.critT = T; out.maxT = TM;
     return out;
   }
   function suitChoices(worn) {
