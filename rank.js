@@ -565,16 +565,49 @@
     badge.append(el('span', { class: 'n', text: '0' }));
     li.append(el('button', { type: 'button', class: 'rk-row', 'aria-expanded': 'false', onclick: (e) => (r.img ? fixedGodDetail(li, r, e.currentTarget) : toggleDetail(li, r, e.currentTarget, true)) },
       badge,
-      el('span', { class: 'rk-who' }, el('span', { class: 'rk-name', text: `[신] ${r.nickname}` }), el('span', { class: 'rk-meta' }, el('span', { text: '신.' }))),
+      el('span', { class: 'rk-who' }, el('span', { class: 'rk-name', text: r.nickname }), el('span', { class: 'rk-meta' }, el('span', { text: '신.' }))),
       el('span', { class: 'rk-cp' }, el('b', { text: '측정 불가' }))));
     li.hidden = !godOn;
     return li;
   }
   function showGods() {
-    $('#rankTitle').classList.toggle('god-on', godOn);
-    document.querySelectorAll('#rankList > li.rk-god').forEach((li) => { li.hidden = !godOn; });
+    const rows = document.querySelectorAll('#rankList > li.rk-god');
+    $('#rankTitle').classList.toggle('has-god', rows.length > 0); // 신이 있을 때만 제목에 가끔 빛이 지나감(눌러 보라는 힌트)
+    $('#rankTitle').classList.toggle('god-on', godOn && rows.length > 0);
+    rows.forEach((li) => { li.hidden = !godOn; li.classList.remove('leave'); });
   }
-  $('#rankTitle').addEventListener('click', () => { godOn = !godOn; showGods(); });
+  // 강림 연출: 화면이 살짝 어두워지고, 위에서 빛기둥이 내려와 신 줄에 닿으면 빛가루가 피어오르고 후광이 내려앉음. 1~3위 왕관은 고개를 숙임
+  function godFx(li) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const r = li.getBoundingClientRect(), b = li.querySelector('.rk-god-no').getBoundingClientRect();
+    const cx = b.left + b.width / 2, cy = r.top + r.height / 2;
+    const fx = el('div', { class: 'god-fx', 'aria-hidden': 'true' });
+    fx.style.setProperty('--x', `${cx}px`); fx.style.setProperty('--y', `${cy}px`);
+    const beam = el('div', { class: 'god-beam' }); beam.style.left = `${cx - 40}px`; beam.style.height = `${Math.max(40, cy)}px`;
+    const word = el('div', { class: 'god-word', text: '강림' }); word.style.left = `${r.left + r.width / 2}px`; word.style.top = `${Math.max(24, r.top - 36)}px`;
+    fx.append(beam, word);
+    for (let i = 0; i < 28; i++) {
+      const p = el('span', { class: 'god-p' });
+      p.style.left = `${r.left + 8 + Math.random() * (r.width - 16)}px`; p.style.top = `${r.top + r.height * (0.25 + Math.random() * 0.6)}px`;
+      p.style.setProperty('--dx', `${Math.round((Math.random() - 0.5) * 70)}px`); p.style.setProperty('--dy', `${-40 - Math.round(Math.random() * 60)}px`);
+      p.style.animationDuration = `${(0.9 + Math.random() * 1.1).toFixed(2)}s`; p.style.animationDelay = `${(0.35 + Math.random() * 0.6).toFixed(2)}s`;
+      fx.append(p);
+    }
+    document.body.append(fx);
+    li.classList.add('descend');
+    const list = $('#rankList'); list.classList.add('bow');
+    setTimeout(() => { fx.remove(); li.classList.remove('descend'); list.classList.remove('bow'); }, 2600);
+  }
+  $('#rankTitle').addEventListener('click', () => {
+    const rows = [...document.querySelectorAll('#rankList > li.rk-god')];
+    if (!rows.length) return;
+    godOn = !godOn;
+    if (godOn) { showGods(); godFx(rows[0]); return; }
+    // 숨길 때는 위로 스르륵 사라짐
+    $('#rankTitle').classList.remove('god-on');
+    rows.forEach((li) => li.classList.add('leave'));
+    setTimeout(showGods, 280);
+  });
   // 지금 계산 방식(A.calcVer) 전에 올린 기록: 다시 갱신하면 사라짐
   const oldCalc = (r) => !!A.calcVer && (r.calc ?? null) !== A.calcVer();
   function renderRows(rows, start) {
