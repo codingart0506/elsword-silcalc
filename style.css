@@ -348,17 +348,20 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .rk-meta { font-size: 13px; color: var(--mute); display: flex; gap: 8px; flex-wrap: wrap; }
 .rk-old { font-size: 12px; font-weight: 600; color: #b25e09; background: #fff4e5; border-radius: 6px; padding: 0 6px; }
 .rk-old-note { color: #b25e09; }
-/* 장난 줄 '신.' (1위 위) */
+/* 신: 랭킹 제목을 누르면 제목이 영롱해지고 1위 위에 나타남 */
+#rankTitle { -webkit-user-select: none; user-select: none; }
+#rankTitle.god-on { background: linear-gradient(90deg, #7c5cf5, #3b82f6, #14b8a6, #f5b400, #ec4899, #7c5cf5); background-size: 400% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: godShine 6s linear infinite; }
+@keyframes godShine { from { background-position: 0 0; } to { background-position: 400% 0; } }
+.rank-list li.rk-god:not([hidden]) { animation: godIn .45s ease-out; }
+@keyframes godIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 .rank-list li.rk-god .rk-row { background: linear-gradient(100deg, #f5efff 0%, #edf4ff 55%, #fff7e2 100%); }
-.rank-list li.rk-god .rk-row:hover { background: linear-gradient(100deg, #eee5ff 0%, #e4eeff 55%, #fff1cc 100%); }
+.rank-list li.rk-god .rk-row:hover, .rank-list li.rk-god.open .rk-row { background: linear-gradient(100deg, #eee5ff 0%, #e4eeff 55%, #fff1cc 100%); }
 .rk-god-no { display: flex; flex-direction: column; align-items: center; line-height: 1; color: #7c5cf5; }
 .rk-god-no svg { width: 26px; height: 10px; fill: none; stroke: #f2b705; stroke-width: 1.8; }
 .rk-god-no .n { font-size: 17px; font-weight: 800; margin-top: 1px; }
 .rk-god .rk-name { color: #6d4ae8; }
-.rk-god .rk-cp b { font-size: 22px; line-height: 1; color: #6d4ae8; }
-.rk-god-tag { font-size: 12px; font-weight: 600; color: #6d4ae8; background: #ece5ff; border-radius: 6px; padding: 0 6px; }
-.rk-god-note { margin: 0; padding: 4px 6px 14px 62px; font-size: 13px; color: var(--sub); }
-@media (max-width: 600px) { .rk-god-note { padding-left: 44px; } }
+.rk-god .rk-cp b { font-size: 15px; color: #6d4ae8; }
+@media (prefers-reduced-motion: reduce) { #rankTitle.god-on, .rank-list li.rk-god:not([hidden]) { animation: none; } }
 .rk-cp { text-align: right; display: flex; flex-direction: column; }
 .rk-cp b { font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .rk-cp small { font-size: 12px; color: var(--mute); }
@@ -741,3 +744,4 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .oc-price .oc-t input { width: 86px; }
 .oc-price-sub { font-size: 13px; color: var(--mute); }
 .oc-goal-hint { margin-top: 14px; line-height: 1.6; }
+.rk-god .rk-shot img { width: auto; max-width: 100%; margin: 0 auto; }

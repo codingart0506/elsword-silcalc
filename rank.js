@@ -508,7 +508,11 @@
       more = data.length > PAGE;
       list.innerHTML = '';
       renderRows(data.slice(0, PAGE), rkPage * PAGE);
-      if (!rkCls && rkPage === 0 && data.length) list.prepend(godRow());
+      if (rkPage === 0) {
+        const gs = (rkCls ? [] : GOD_FIXED).concat((await loadGods(c)).filter((x) => !rkCls || x.cls === rkCls));
+        for (const x of gs.slice().reverse()) list.prepend(godRow(x));
+      }
+      showGods();
       if (!reset) drawMine();
       empty.hidden = data.length > 0;
       if (!data.length) empty.textContent = rkCls ? `${rkCls} 랭킹에 아직 아무도 없어요` : '아직 올라온 캐릭터가 없어요. 계산기에서 "랭킹에 올리기"로 첫 번째가 되어 보세요';
@@ -531,22 +535,46 @@
     box.append(el('span', { class: 'n', text: String(n) }));
     return box;
   }
-  // 장난: 전체 랭킹 첫 쪽 맨 위(1위 위)에 '신.' 한 줄. 진짜 캐릭터가 아니라 순위·인원 수에는 안 들어감
-  function godRow() {
-    const note = el('p', { class: 'rk-god-note', text: '엘리오스를 만든 분이라 실투력 계산기로는 못 재요. 장난으로 넣은 줄이고, 진짜 순위는 아래 1위부터예요.' });
-    note.hidden = true;
-    const badge = el('span', { class: 'rk-no rk-god-no', 'aria-label': '순위 밖' });
+  // 신: 관리자가 '신'으로 정한 캐릭터. 서버에서 숫자 순위·인원 수·내 순위 계산에서 빠짐.
+  // 평소엔 숨겨 두고, 랭킹 제목 글자를 누르면 제목이 영롱해지면서 1위 위에 나타남(다시 누르면 숨김)
+  let gods = [], godsAt = 0, godOn = false;
+  // 서버 캐릭터가 아닌 고정 신(사진은 사이트 파일). 전체 랭킹에만 보임
+  const GOD_FIXED = [{ id: 'god-ganadarap', nickname: '가나다랍', img: 'god.jpg' }];
+  function fixedGodDetail(li, r, btnEl) {
+    const open = li.classList.toggle('open');
+    btnEl.setAttribute('aria-expanded', String(open));
+    let box = li.querySelector('.rk-detail');
+    if (!open) { if (box) box.hidden = true; return; }
+    if (box) { box.hidden = false; return; }
+    const img = el('img', { alt: `${r.nickname} 스크린샷`, src: r.img });
+    const shot = el('button', { type: 'button', class: 'rk-shot', 'aria-label': '사진 크게 보기' }, img);
+    shot.onclick = () => lightbox(img.src, img.alt, true);
+    box = el('div', { class: 'rk-detail' }, shot, el('div', { class: 'rk-side' }, el('p', { class: 'rk-cap', text: '실투력 측정 불가' })));
+    li.append(box);
+  }
+  async function loadGods(c) {
+    if (Date.now() - godsAt < FRESH) return gods;
+    try { const { data, error } = await c.rpc('rank_gods'); if (error) throw error; gods = data || []; } catch (e) { gods = []; }
+    godsAt = Date.now();
+    return gods;
+  }
+  function godRow(r) {
+    const li = el('li', { class: 'rk-god', 'data-id': r.id });
+    const badge = el('span', { class: 'rk-no rk-god-no', 'aria-label': '신' });
     badge.innerHTML = '<svg viewBox="0 0 26 10" aria-hidden="true"><ellipse cx="13" cy="5" rx="10" ry="3.3"/></svg>';
     badge.append(el('span', { class: 'n', text: '0' }));
-    const row = el('button', { type: 'button', class: 'rk-row', 'aria-expanded': 'false' },
+    li.append(el('button', { type: 'button', class: 'rk-row', 'aria-expanded': 'false', onclick: (e) => (r.img ? fixedGodDetail(li, r, e.currentTarget) : toggleDetail(li, r, e.currentTarget, true)) },
       badge,
-      el('span', { class: 'rk-who' },
-        el('span', { class: 'rk-name', text: '신.' }),
-        el('span', { class: 'rk-meta' }, el('span', { text: '모든 전직' }), el('span', { text: '태초에 갱신' }), el('span', { class: 'rk-god-tag', text: '장난 · 순위 밖' }))),
-      el('span', { class: 'rk-cp' }, el('b', { text: '∞' }), el('small', { text: '측정 불가' })));
-    row.onclick = () => { note.hidden = !note.hidden; row.setAttribute('aria-expanded', String(!note.hidden)); };
-    return el('li', { class: 'rk-god' }, row, note);
+      el('span', { class: 'rk-who' }, el('span', { class: 'rk-name', text: `[신] ${r.nickname}` }), el('span', { class: 'rk-meta' }, el('span', { text: '신.' }))),
+      el('span', { class: 'rk-cp' }, el('b', { text: '측정 불가' }))));
+    li.hidden = !godOn;
+    return li;
   }
+  function showGods() {
+    $('#rankTitle').classList.toggle('god-on', godOn);
+    document.querySelectorAll('#rankList > li.rk-god').forEach((li) => { li.hidden = !godOn; });
+  }
+  $('#rankTitle').addEventListener('click', () => { godOn = !godOn; showGods(); });
   // 지금 계산 방식(A.calcVer) 전에 올린 기록: 다시 갱신하면 사라짐
   const oldCalc = (r) => !!A.calcVer && (r.calc ?? null) !== A.calcVer();
   function renderRows(rows, start) {
@@ -943,7 +971,7 @@
     box.onclick = close; document.addEventListener('keydown', onKey);
     document.body.append(box);
   }
-  async function toggleDetail(li, r, btnEl) {
+  async function toggleDetail(li, r, btnEl, god) {
     const open = li.classList.toggle('open');
     btnEl.setAttribute('aria-expanded', String(open));
     let box = li.querySelector('.rk-detail');
@@ -962,7 +990,7 @@
       shot,
       el('div', { class: 'rk-side' },
         cap,
-        el('p', { class: 'rk-cap', text: `실투력 ${fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신` }),
+        el('p', { class: 'rk-cap', text: `실투력 ${god ? '측정 불가' : fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신` }),
         shareP,
         el('div', { class: 'rk-btns' },
           el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => openPlayer(r) }),
@@ -988,7 +1016,7 @@
         busy = false;
       };
       cap.remove();
-      if (await shotCached(r.shot_path)) await loadPic();
+      if (god || await shotCached(r.shot_path)) await loadPic(); // 신은 열면 사진까지 바로 보여 줌
       if (!img.src) { shot.classList.add('ask'); shot.setAttribute('aria-label', '사진 보기'); shot.append(ask); }
     } catch (e) { cap.textContent = '사진을 불러오지 못했어요.'; }
   }
@@ -1630,7 +1658,7 @@
     const all = el('div', { class: 'adm-sec' },
       el('p', { class: 'rank-note', text: '숨기면 랭킹에서 빠지고 그 사람은 랭킹도 못 봐요(분탕 차단). 삭제하면 랭킹, 갱신 기록, 사진이 모두 지워지고 되돌릴 수 없어요.' }));
     panes.chars.append(all);
-    const { data: ps, error: e3 } = await c.from('players').select('id,nickname,cls,cp,hidden,hide_reason,updated_at,shot_path').order('cp', { ascending: false }).limit(1000);
+    const { data: ps, error: e3 } = await c.from('players').select('id,nickname,cls,cp,hidden,hide_reason,updated_at,shot_path,god').order('cp', { ascending: false }).limit(1000);
     if (e3) throw e3;
     ps.forEach((p, i) => { p.rank = i + 1; });
     setCnt('chars', ps.length);
@@ -1732,13 +1760,24 @@
     const chPager = pager((d) => { chPg += d; drawChars(); all.scrollIntoView({ block: 'start' }); });
     all.append(el('div', { class: 'adm-find' }, chQ, el('label', { class: 'adm-chk' }, onlyHid, '숨긴 캐릭터만')), chInfo, chBox, chPager);
     const charItem = (p) => {
-      const tag = () => p.hidden ? ` (숨김${p.hide_reason ? ': ' + p.hide_reason : ''})` : '';
+      const tag = () => (p.god ? ' [신]' : '') + (p.hidden ? ` (숨김${p.hide_reason ? ': ' + p.hide_reason : ''})` : '');
       const nm = el('span', { class: 'nm', text: `${p.rank}. ${p.nickname}${tag()}` });
       const hide = el('button', { type: 'button', class: 'btn', text: p.hidden ? '다시 보이기' : '숨기기' });
       const del = el('button', { type: 'button', class: 'btn danger', text: '삭제' });
       const seeLog = el('button', { type: 'button', class: 'btn', text: '열람 기록' });
       seeLog.onclick = () => { logQ.value = p.nickname; show('logs'); loadLogs(); };
       // 랭킹에 보이는 사진의 가린 곳을 다시 정함(원본은 갱신 기록에 남아 있음)
+      // 신으로 정하면 숫자 순위에서 빠지고, 랭킹 제목을 눌렀을 때만 1위 위에 '[신] 닉네임'으로 보임
+      const godB = el('button', { type: 'button', class: 'btn', text: p.god ? '신 해제' : '신으로' });
+      godB.onclick = async () => {
+        const nv = !p.god; godB.disabled = true;
+        const { error } = await c.rpc('admin_set_god', { p_id: p.id, p_on: nv });
+        godB.disabled = false;
+        if (error) { toast('바꾸지 못했어요. ' + errMsg(error)); return; }
+        p.god = nv; godB.textContent = nv ? '신 해제' : '신으로'; nm.textContent = `${p.rank}. ${p.nickname}${tag()}`;
+        godsAt = 0; canAt = 0; for (const k of Object.keys(totals)) delete totals[k];
+        toast(nv ? `${p.nickname}: 신으로 정했어요` : `${p.nickname}: 신에서 내렸어요`);
+      };
       const fixShot = el('button', { type: 'button', class: 'btn', text: '사진 가릴 곳 고치기' });
       fixShot.hidden = !p.shot_path;
       fixShot.onclick = async () => {
@@ -1764,7 +1803,7 @@
       const item = el('div', { class: 'adm-item adm-plain' }, el('div', { class: 'adm-info' }, nm,
         el('span', { text: `${p.cls}, 실투력 ${fmtInt(p.cp)}` }),
         el('small', { text: `${ago(p.updated_at)} 갱신` }),
-        el('div', { class: 'adm-acts' }, hide, seeLog, fixShot, del)));
+        el('div', { class: 'adm-acts' }, hide, seeLog, fixShot, godB, del)));
       hide.onclick = async () => {
         const nv = !p.hidden;
         const why = await setHidden(c, p.id, nv); if (why === null) return;
