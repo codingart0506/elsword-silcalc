@@ -926,3 +926,5 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .av-vs-st td.same { color: var(--mute); }
 .av-vs-st td.up { color: var(--up); font-weight: 600; }
 .av-vs-st td.down { color: var(--down); font-weight: 600; }
+.av-seg-b .s { word-break: keep-all; line-height: 1.35; }
+.av-seg-b .s .n { white-space: nowrap; }

@@ -495,7 +495,9 @@
       const MODE_TXT = { ceil: '지금 크리 이상', near: '지금 크리에 가깝게', floor: '지금 크리보다 살짝 덜', plain: '' };
       const SHORT_B = { '영혼의 족쇄': '족쇄', '글로잉 플라워': '글플' };
       const sorted = (md) => rv.modes[md].slice().sort((x, y) => y.cp - x.cp);
-      const gap = (md) => { const l = sorted(md); return { top: l[0], d: (l[0].cp - l[1].cp) / l[1].cp * 100 }; };
+      const gap = (md) => { const l = sorted(md); return { top: l[0], low: l[1], d: (l[0].cp - l[1].cp) / l[1].cp * 100 }; };
+      // 이/가: 마지막 글자에 받침이 있으면 '이'
+      const iga = (w) => { const c = String(w).charCodeAt(String(w).length - 1) - 0xAC00; return c >= 0 && c < 11172 && c % 28 ? '이' : '가'; };
       // 지금(계산기에 넣은 값) → 이 세팅: 바꾸는 것마다 [이름, 지금, 바뀐 것]
       const changesOf = (x) => {
         const out = [];
@@ -525,9 +527,9 @@
       const seg = matched ? el('div', { class: 'av-rival-seg', role: 'group', 'aria-label': '크리 맞추는 방식' }) : null;
       const draw = () => {
         if (seg) for (const bt of seg.children) bt.setAttribute('aria-pressed', String(bt.dataset.m === cur));
-        const { top, d } = gap(cur);
+        const { top, low, d } = gap(cur);
         head.textContent = '';
-        head.append(el('p', { class: 'av-vs-verdict' }, d < 0.3 ? `거의 같아요. ${top.n}가 ${d.toFixed(2)}% 높아요` : `${top.n}가 ${d.toFixed(2)}% 더 높아요`));
+        head.append(el('p', { class: 'av-vs-verdict' }, d < 0.3 ? `거의 같아요. ${top.n}${iga(top.n)} ${low.n}보다 ${d.toFixed(2)}% 높아요` : `${top.n}${iga(top.n)} ${low.n}보다 ${d.toFixed(2)}% 더 높아요`));
         head.append(el('p', { class: 'av-rival-note', text: matched
           ? `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 고르고, 크리는 ${MODE_TXT[cur]}(${pc(rv.critT)} 기준) 힘트마를 바꿔 맞췄어요. 극대화는 ${goalM}(${pc(rv.maxT)})까지 채우는 게 더 높을 때만 채워요`
           : `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 골랐어요` }));
@@ -550,7 +552,7 @@
         }
       };
       if (seg) {
-        for (const md of rv.order) { const g = gap(md); seg.append(el('button', { type: 'button', class: 'av-seg-b', 'data-m': md, onclick: () => { cur = md; draw(); } }, el('span', { class: 't', text: MODE_TXT[md] }), el('span', { class: 's', text: `${SHORT_B[g.top.n] || g.top.n} +${g.d.toFixed(2)}%` }))); }
+        for (const md of rv.order) { const g = gap(md); seg.append(el('button', { type: 'button', class: 'av-seg-b', 'data-m': md, onclick: () => { cur = md; draw(); } }, el('span', { class: 't', text: MODE_TXT[md] }), el('span', { class: 's' }, `${SHORT_B[g.top.n] || g.top.n}${iga(SHORT_B[g.top.n] || g.top.n)} ${SHORT_B[g.low.n] || g.low.n}보다 `, el('span', { class: 'n', text: `+${g.d.toFixed(2)}%` })))); }
         cmpBox.append(el('p', { class: 'av-seg-h', text: '크리 맞추는 방식' }), seg);
       }
       cmpBox.append(cards); draw();
