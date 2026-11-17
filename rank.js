@@ -706,7 +706,7 @@
       S.draw((g, t) => {
         const a = env(t, 0.05, 0.6, 1.7, 3.0);
         if (c.big) drawRays(g, rx, -c.H * 0.35, rx, c.cy, 26, 0.95, c.cy + c.H * 0.75, a, t, true);
-        else drawRays(g, c.cx + 40, -60, c.cx + 40, c.cy, 9, 0.22, c.cy + 260, a * 1.2, t, true);
+        else drawRays(g, c.cx, -60, c.cx, c.cy, 9, 0.22, c.cy + 260, a * 1.2, t, true);
         bloom(g, rx, c.cy, c.r.width * (c.big ? 0.75 : 0.9), c.r.height * 2.2, '255,214,140', env(t, 0.35, 0.6, 0.9, 2.4));
         if (c.big) { // 가로 렌즈 빛(애너모픽)
           const a2 = env(t, 0.4, 0.55, 0.8, 1.8); g.globalCompositeOperation = 'lighter';
@@ -1048,8 +1048,9 @@
     const kind = FX[window.__godFx] ? window.__godFx : pickW(FX_W, lastFx);
     lastFx = kind;
     logEgg('reveal:' + kind);
-    const r = li.getBoundingClientRect(), b = li.querySelector('.rk-god-no').getBoundingClientRect();
-    const c = { r, cx: b.left + b.width / 2, cy: r.top + r.height / 2, big: bigFx(), W: innerWidth, H: innerHeight };
+    // 번개·유성·빛 고리가 꽂히는 곳: 줄 가운데의 신 이름
+    const r = li.getBoundingClientRect(), nm = (li.querySelector('.rk-who') || li).getBoundingClientRect();
+    const c = { r, cx: nm.left + nm.width / 2, cy: r.top + r.height / 2, big: bigFx(), W: innerWidth, H: innerHeight };
     const fx = el('div', { class: `god-fx fx-${kind}` + (c.big ? ' big' : ''), 'aria-hidden': 'true' });
     fx.style.setProperty('--x', `${c.cx}px`); fx.style.setProperty('--y', `${c.cy}px`);
     // 화면은 어둡게, 신 줄만 타원 조명으로 밝게
