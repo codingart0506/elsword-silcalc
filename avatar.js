@@ -490,15 +490,20 @@
     if (rv && rv.modes) {
       // 하의 악세마다 아바타·한벌을 따로 골라 본 최고 세팅끼리 비교. 크리·극대는 마법석(힘트마)으로 맞추는 두 방식을 같이 보여 줌
       const pc = (v) => `${Math.round(v * 1000) / 10}%`, inpA = APP.inputs();
+      const goalC = rv.byCap ? '만크' : '지금 크리', goalM = rv.byCap ? '만극' : '지금 극대화';
+      const MODE_TXT = { ceil: `크리 ${goalC} 지킴`, near: '크리 가깝게', floor: '크리 살짝 덜', plain: '' };
+      const MODE_SUB = {
+        ceil: `극대화는 ${goalM}, 크리는 ${goalC} 밑으로 안 내려가게 힘트마를 빼서 채웠어요. 넘치는 크리·극대 마법석은 힘트마로 돌렸어요`,
+        near: `극대화는 ${goalM}을 지키고, 크리는 ${goalC}에 가장 가깝게(조금 넘거나 모자라게) 맞췄어요`,
+        floor: `극대화는 ${goalM}을 지키고, 크리는 ${goalC}보다 마법석 한 칸만큼 모자라게 맞췄어요. 힘트마를 한 칸 덜 빼요`, plain: '' };
       const goal = rv.byCap ? '만크극' : '지금 값';
-      const MODE_TXT = { ceil: `${goal} 지킴`, near: '마법석 최소(가장 가깝게)', plain: '' };
-      const MODE_SUB = { ceil: `크리·극대가 ${goal} 밑으로 안 내려가게 힘트마를 빼서 채우고, 넘치는 크리·극대 마법석은 힘트마로 돌렸어요`, near: `${goal}에 가장 가깝게 맞췄어요. 마법석을 덜 바꾸는 대신 조금 모자랄 수 있어요`, plain: '' };
       const sorted = (md) => rv.modes[md].slice().sort((x, y) => y.cp - x.cp);
-      const gapTxt = (md) => { const l = sorted(md); return `${l[0].n}가 ${((l[0].cp - l[1].cp) / l[0].cp * 100).toFixed(2)}% 높아요`; };
+      const SHORT_B = { '영혼의 족쇄': '족쇄', '글로잉 플라워': '글플' };
+      const gapTxt = (md) => { const l = sorted(md); return `${SHORT_B[l[0].n] || l[0].n} +${((l[0].cp - l[1].cp) / l[1].cp * 100).toFixed(2)}%`; };
       const matched = rv.order[0] !== 'plain';
       const cmpBox = el('div', { class: 'av-rival' });
       cmpBox.append(el('p', { class: 'av-rival-h' }, el('b', { text: '하의 악세 비교' }),
-        el('span', { text: matched ? (rv.byCap ? ` 하의 악세마다 아바타·한벌·아바타 악세를 따로 맞추고, 크리·극대는 만크극(크리 ${pc(rv.critT)}, 극대화 ${pc(rv.maxT)}. 이 전직은 여기서부터 더 올려도 실투력이 그대로예요)에 맞춰 비교했어요` : ` 하의 악세마다 아바타·한벌·아바타 악세를 따로 맞추고, 크리·극대는 지금 값(크리 ${pc(rv.critT)}, 극대화 ${pc(rv.maxT)})에 맞춰 비교했어요`) : ' 하의 악세마다 아바타·한벌을 따로 맞춰 본 최고 세팅이에요' })));
+        el('span', { text: matched ? (rv.byCap ? ` 하의 악세마다 아바타·한벌·아바타 악세를 따로 맞추고, 크리·극대는 만크극(크리 ${pc(rv.critT)}, 극대화 ${pc(rv.maxT)}. 이 전직은 여기서부터 더 올려도 실투력이 그대로예요)을 기준으로 비교했어요. 극대화는 늘 만극을 지키고, 크리는 세 가지로 맞춰 봤어요` : ` 하의 악세마다 아바타·한벌·아바타 악세를 따로 맞추고, 크리·극대는 지금 값(크리 ${pc(rv.critT)}, 극대화 ${pc(rv.maxT)})에 맞춰 비교했어요`) : ' 하의 악세마다 아바타·한벌을 따로 맞춰 본 최고 세팅이에요' })));
       const list = el('div');
       let cur = rv.order[0];
       const seg = matched ? el('div', { class: 'av-rival-seg', role: 'group', 'aria-label': '크리·극대 맞추는 방식' }) : null;
@@ -679,9 +684,10 @@
     const T = capC || Number(inp0.C17) || 0, TM = capM || Number(inp0.C19) || 0;
     const canMatch = !!APP.sockMatch && (T > 0 || TM > 0);
     // ceil: 크리·극대를 지금 값 이상으로 맞춤 / near: 지금 값에 가장 가깝게(마법석을 덜 바꾸고, 조금 모자랄 수 있음)
-    const MODES = canMatch ? ['ceil', 'near'] : ['plain'];
+    // 극대화는 늘 만극 이상(ceil). 크리만 세 가지로: 만크 지킴(ceil) / 가장 가깝게(near) / 살짝 모자라게(floor, 마법석 한 칸 덜)
+    const MODES = canMatch ? ['ceil', 'near', 'floor'] : ['plain'];
     const measure = (o, md) => {
-      if (md !== 'plain') { const sk = APP.sockMatch(o, { C17: T, C19: TM, mode: md }); if (sk && sk.cp > 0) return { cp: sk.cp, sock: sk, crit: Number(sk.over.C17) || 0, max: Number(sk.over.C19) || 0, o }; }
+      if (md !== 'plain') { const sk = APP.sockMatch(o, { C17: T, C19: TM, modeC: md, modeM: 'ceil' }); if (sk && sk.cp > 0) return { cp: sk.cp, sock: sk, crit: Number(sk.over.C17) || 0, max: Number(sk.over.C19) || 0, o }; }
       return { cp: APP.cpWith(o), crit: Number('C17' in o ? o.C17 : inp0.C17) || 0, max: Number('C19' in o ? o.C19 : inp0.C19) || 0, o };
     };
     const pickSuits = (bn) => {
@@ -699,14 +705,16 @@
     for (const bn of Object.keys(BOTTOMS)) {
       const suits = pickSuits(bn);
       // 한 세팅(아바타 후보 c)에서 한벌마다 재고, 방식마다 가장 높은 것
-      const evalC = (c) => { const res = {}; for (const sName of suits) { const o = Object.assign({}, base, overridesFor(r, worn, c)); suitOver(o, now, sName); bottomOver(o, bNow, bn); for (const md of MODES) { const m = measure(o, md); if (!res[md] || m.cp > res[md].cp) res[md] = Object.assign({ suit: sName, c }, m); } } return res; };
-      const all = pool.map(evalC);
+      const evalC = (c, mds) => { const res = {}; for (const sName of suits) { const o = Object.assign({}, base, overridesFor(r, worn, c)); suitOver(o, now, sName); bottomOver(o, bNow, bn); for (const md of mds) { const m = measure(o, md); if (!res[md] || m.cp > res[md].cp) res[md] = Object.assign({ suit: sName, c }, m); } } return res; };
+      // 후보 전부는 첫 방식으로만 재고, 다른 방식은 위쪽 후보 12개만 다시 잼(시간 줄이려고)
+      const all = pool.map(c => evalC(c, [MODES[0]]));
+      if (MODES.length > 1) { const top12 = all.filter(x => x[MODES[0]]).sort((a, b) => b[MODES[0]].cp - a[MODES[0]].cp).slice(0, 12); for (const x of top12) Object.assign(x, evalC(x[MODES[0]].c, MODES.slice(1))); }
       const best = {}; for (const md of MODES) for (const x of all) if (x[md] && x[md].cp > 0 && (!best[md] || x[md].cp > best[md].cp)) best[md] = x[md];
       if (!best[MODES[0]]) continue;
       try {
         const starts = all.filter(x => x[MODES[0]]).sort((a, b) => b[MODES[0]].cp - a[MODES[0]].cp).slice(0, 5).map(x => toS(x[MODES[0]].c));
         const pol = polish(r, worn, base, ctx, starts.concat([W]), best[MODES[0]].suit, bn);
-        if (pol) { const pr = evalC(pol); for (const md of MODES) if (pr[md] && (!best[md] || pr[md].cp > best[md].cp + 0.5)) best[md] = pr[md]; }
+        if (pol) { const pr = evalC(pol, MODES); for (const md of MODES) if (pr[md] && (!best[md] || pr[md].cp > best[md].cp + 0.5)) best[md] = pr[md]; }
       } catch (e) { console.error(e); }
       // 마법석으로 크리·극대를 맞춘 값으로 아바타 악세를 한 칸씩 더 바꿔 봄(모자란 적응력을 다른 악세로 채우는 경우 등)
       for (const md of MODES) if (best[md] && md !== 'plain') {

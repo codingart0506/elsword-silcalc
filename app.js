@@ -1427,7 +1427,9 @@
     const cfg = sockCfg(), val = (k) => Number(cfg.v[k] ?? (SOCK.find(o => o.k === k) || {}).v) || 0;
     const counted = SOCK.some(o => Number(cfg.n[o.k]) > 0), have = (k) => counted ? Math.max(0, Math.round(Number(cfg.n[k]) || 0)) : Infinity;
     const src = Object.assign({}, inputs, extra || {}), o = Object.assign({}, extra || {});
-    const r6 = (x) => Math.round(x * 1e6) / 1e6, bStep = val('boss') / 100, near = (tgt || {}).mode === 'near';
+    // 옵션마다 맞추는 방식: ceil = 기준 이상 / near = 기준에 가장 가깝게 / floor = 기준보다 마법석 한 칸만큼 모자라게
+    const r6 = (x) => Math.round(x * 1e6) / 1e6, bStep = val('boss') / 100;
+    const modeOf = (c) => (tgt || {})[c === 'C17' ? 'modeC' : 'modeM'] || (tgt || {}).mode || 'ceil';
     let boss = Number(src.C21) || 0, bossLeft = have('boss'), short = false;
     const moves = [];
     for (const [c, k, toRaw, toWin] of [['C17', 'crit', SOCK_CI, SOCK_CW], ['C19', 'max', SOCK_MI, SOCK_MW]]) {
@@ -1439,11 +1441,12 @@
       let n = 0;
       if (win(0) < T - 1e-4) { while (win(n) < T - 1e-4 && ok(n + 1) && n < 30) n++; }
       else { while (ok(n - 1) && n > -30 && win(n - 1) >= T - 1e-4) n--; }
-      if (near && win(n) >= T - 1e-4 && ok(n - 1)) {
+      const md = modeOf(c);
+      if (md !== 'ceil' && win(n) >= T - 1e-4 && ok(n - 1)) {
         const alt = n - 1, dA = Math.abs(win(alt) - T), dN = Math.abs(win(n) - T);
-        if (dA < dN - 1e-6 || (Math.abs(dA - dN) <= 1e-6 && Math.abs(alt) < Math.abs(n))) n = alt;
+        if (md === 'floor' || dA < dN - 1e-6 || (Math.abs(dA - dN) <= 1e-6 && Math.abs(alt) < Math.abs(n))) n = alt;
       }
-      if (win(n) < T - 1e-4 && !near) short = true;
+      if (win(n) < T - 1e-4 && md === 'ceil') short = true;
       if (n > 0) bossLeft -= n;
       boss -= n * bStep;
       if (n) moves.push({ k, t: (SOCK.find(x => x.k === k) || {}).t || k, n });

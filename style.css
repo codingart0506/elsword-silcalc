@@ -689,9 +689,9 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .av-rival-row.alt { border-top: 1px solid var(--line); }
 .av-rival-note { margin: 0 0 4px; font-size: 12.5px; color: var(--mute); }
 .av-rival-note.tip { margin-top: 8px; color: var(--sub); }
-.av-rival-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 8px; }
+.av-rival-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 8px; }
 .av-seg-b { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--sub); font: inherit; text-align: left; cursor: pointer; }
-.av-seg-b .t { font-size: 12.5px; }
+.av-seg-b .t { font-size: 12.5px; line-height: 1.35; word-break: keep-all; }
 .av-seg-b .s { font-size: 13.5px; font-weight: 600; color: var(--text); }
 .av-seg-b[aria-pressed="true"] { border-color: var(--blue); background: var(--blue-weak); }
 .av-seg-b[aria-pressed="true"] .t { color: var(--blue-dark); }
