@@ -687,22 +687,23 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     const tIn = h('input', { type: 'text', inputmode: 'decimal', class: 'num oc-target', value: String(prof().target), 'aria-label': '목표 점수' });
     tIn.onchange = () => { let v = Number(tIn.value); if (!Number.isFinite(v)) v = 90; v = Math.max(0, Math.min(100, Math.round(v * 10) / 10)); prof().target = v; persist(); paintResult(); };
     const T = prof().target, pT = an.atLeast[Math.min(10000, Math.ceil(T * 100 - 1e-7))], pTop = an.atLeastTop[Math.min(10000, Math.ceil(T * 100 - 1e-7))];
-    const line = (lead, p) => h('p', { class: 'oc-p' }, lead, h('b', { text: fmtP(p) }),
-      p > 0 ? h('span', {}, ` · 평균 ${fmtTries(p)} · `, h('span', { class: 'nw', text: costText(kind, p) })) : h('span', { text: ' · 나올 수 없어요' }));
+    // 확률 한 덩어리: 위 줄은 무엇·확률, 아래 줄은 평균 횟수·비용
+    const block = (label, p) => h('div', { class: 'oc-pb' },
+      h('div', { class: 'oc-pb-h' }, label, h('b', { class: 'oc-pb-v', text: fmtP(p) })),
+      h('div', { class: 'oc-pb-s' }, p > 0 ? [`평균 ${fmtTries(p)}`, h('span', { class: 'oc-dot', text: '·' }), h('span', { class: 'nw', text: costText(kind, p) })] : '나올 수 없어요'));
     if (!side) goal.append(h('h3', { text: '한 번 돌릴 때' }));
     if (linesOk(s.cur)) {
       const sCur = score(1), pB = an.atLeast[Math.min(10000, Math.floor(sCur * 100 + 1e-7) + 1)];
-      goal.append(line('지금보다 좋은 옵션 ', pB));
+      goal.append(block(h('span', { text: '지금보다 좋은 옵션' }), pB));
     }
-    goal.append(h('p', { class: 'oc-p' }, h('span', { class: 'oc-t' }, tIn, h('span', { text: '점 이상' })), ' ', h('b', { text: fmtP(pT) }),
-      pT > 0 ? h('span', {}, ` · 평균 ${fmtTries(pT)} · `, h('span', { class: 'nw', text: costText(kind, pT) })) : h('span', { text: ' · 나올 수 없어요' })));
+    goal.append(block(h('span', { class: 'oc-t' }, tIn, h('span', { text: '점 이상' })), pT));
     // 현금 환산 시세(바꿀 수 있음)
     const pr = price(), key = kind === 'w' ? 'ed' : 'stone';
     const pIn = h('input', { type: 'text', inputmode: 'numeric', class: 'num oc-price-in', value: pr[key].toLocaleString('ko-KR'), 'aria-label': kind === 'w' ? '1억 ED 시세(원)' : '변환석 1개 값(원)' });
     pIn.onchange = () => { let v = Number(String(pIn.value).replace(/[^0-9.]/g, '')); if (!(v >= 0)) v = PRICE0[key]; pr[key] = Math.round(v); persist(); paintResult(); };
-    goal.append(h('p', { class: 'oc-p oc-price' }, h('span', { class: 'oc-t' }, h('span', { text: kind === 'w' ? '1억 ED 시세' : '변환석 1개' }), pIn, h('span', { text: '원' })),
-      h('span', { class: 'oc-price-sub', text: kind === 'w' ? ' 현금 환산에 써요' : ' 캐시 기준' })));
-    goal.append(h('p', { class: 'oc-hint', text: `옵션 종류만 맞으면(수치가 모두 최대라면) ${T}점 이상: ${fmtP(pTop)}${pTop > 0 ? ` · 평균 ${fmtTries(pTop)}` : ''}. 100점은 ${an.bestIds.map((i) => CAT[i - 1].n).join(' + ')} 모두 최대예요. 수치 단계는 고르게, 옵션은 넥슨 공개 확률대로 뽑아요` }));
+    goal.append(h('div', { class: 'oc-price' }, h('span', { class: 'oc-t' }, h('span', { text: kind === 'w' ? '1억 ED 시세' : '변환석 1개' }), pIn, h('span', { text: '원' })),
+      h('span', { class: 'oc-price-sub', text: kind === 'w' ? '현금 환산에 써요' : '캐시 기준' })));
+    goal.append(h('p', { class: 'oc-hint oc-goal-hint', text: `옵션 종류만 맞으면(수치가 모두 최대라면) ${T}점 이상: ${fmtP(pTop)}${pTop > 0 ? ` · 평균 ${fmtTries(pTop)}` : ''}. 100점은 ${an.bestIds.map((i) => CAT[i - 1].n).join(' + ')} 모두 최대예요. 수치 단계는 고르게, 옵션은 넥슨 공개 확률대로 뽑아요` }));
   }
   function applyNew() {
     const L = last; if (!L || !L.nxt || !L.an) return;
@@ -779,6 +780,23 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     if (first && wantOpen) setOcView(true);
   };
   if (enabled) api.enable();
+  // 시험용 링크: 주소에 ?test=코드 가 맞으면 이 브라우저에서 계속 켜 둠(코드 원문은 소스에 없고 해시만 둠).
+  // 코드를 바꿔 다시 올리면 예전 코드로 켠 브라우저는 다시 꺼짐
+  const TEST_HASH = '1251817aa0992094375c30df4ad1a190f42f7681aa3b905f51f8e7c87f0d000c', TEST_KEY = 'silcalc.octest';
+  (async () => {
+    const qs = new URLSearchParams(location.search), code = qs.get('test');
+    let ok = false;
+    try { ok = localStorage.getItem(TEST_KEY) === TEST_HASH; } catch (e) { /* 무시 */ }
+    if (!ok && code && root.crypto && crypto.subtle) {
+      try {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code.trim()));
+        ok = [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, '0')).join('') === TEST_HASH;
+        if (ok) { try { localStorage.setItem(TEST_KEY, TEST_HASH); } catch (e) { /* 무시 */ } toast('옵션 변환 시험 기능을 켰어요'); }
+      } catch (e) { /* 무시 */ }
+    }
+    if (code) { qs.delete('test'); const q = qs.toString(); history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash); }
+    if (ok) { api.enable(); if (code) setOcView(true); }
+  })();
   APP.onRefresh(() => { if (visible()) renderItem(); schedule(); });
   renderAll(); schedule();
 

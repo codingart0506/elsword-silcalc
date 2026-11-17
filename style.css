@@ -708,6 +708,14 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .oc-t input { width: 56px; text-align: right; padding: 4px 8px; }
 .oc-msg { margin: 12px 0 0; font-size: 14px; color: var(--blue); font-weight: 600; }
 @media (max-width: 480px) { .oc-row { grid-template-columns: 18px minmax(0, 1fr) 112px; } }
-.oc-price { margin-top: 10px; }
-.oc-price .oc-t input { width: 78px; }
+/* 한 번 돌릴 때: 확률마다 한 덩어리, 덩어리 사이에 줄 */
+.oc-side .oc-now { margin: 0 0 6px; }
+.oc-pb { padding: 14px 0; border-top: 1px solid var(--line); }
+.oc-pb-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; color: var(--sub); }
+.oc-pb-v { font-size: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
+.oc-pb-s { margin-top: 6px; font-size: 14px; color: var(--mute); line-height: 1.5; font-variant-numeric: tabular-nums; }
+.oc-dot { margin: 0 6px; }
+.oc-price { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 14px; color: var(--sub); }
+.oc-price .oc-t input { width: 86px; }
 .oc-price-sub { font-size: 13px; color: var(--mute); }
+.oc-goal-hint { margin-top: 14px; line-height: 1.6; }
