@@ -1422,26 +1422,32 @@
   }
   // 크리·극대화를 목표값에 맞추기: 모자라면 힘트마(보스 데미지 마법석)를 빼고 그 옵션 마법석을 넣고, 넘치면 그만큼 힘트마로 되돌림.
   // 보통 크리·극대가 모자랄 때 힘트마를 빼서 맞추니 그 방식대로 잼. 소켓 배분 최적화에 칸 수를 넣었으면 그 칸 수 안에서만 바꿈
+  // tgt.mode: 'ceil'(기본) = 지금 값 이상이 되게 / 'near' = 지금 값에 가장 가깝게(조금 모자라도 되고, 같으면 덜 바꿈)
   function sockMatch(extra, tgt) {
     const cfg = sockCfg(), val = (k) => Number(cfg.v[k] ?? (SOCK.find(o => o.k === k) || {}).v) || 0;
     const counted = SOCK.some(o => Number(cfg.n[o.k]) > 0), have = (k) => counted ? Math.max(0, Math.round(Number(cfg.n[k]) || 0)) : Infinity;
     const src = Object.assign({}, inputs, extra || {}), o = Object.assign({}, extra || {});
-    const r6 = (x) => Math.round(x * 1e6) / 1e6, bStep = val('boss') / 100;
+    const r6 = (x) => Math.round(x * 1e6) / 1e6, bStep = val('boss') / 100, near = (tgt || {}).mode === 'near';
     let boss = Number(src.C21) || 0, bossLeft = have('boss'), short = false;
     const moves = [];
     for (const [c, k, toRaw, toWin] of [['C17', 'crit', SOCK_CI, SOCK_CW], ['C19', 'max', SOCK_MI, SOCK_MW]]) {
       const T = Number((tgt || {})[c]) || 0, step = val(k) / 100;
       if (!(T > 0) || !(step > 0)) continue;
-      let raw = toRaw(Number(src[c]) || 0), n = 0;
-      if (toWin(raw) < T - 1e-4) {
-        while (toWin(raw) < T - 1e-4 && bossLeft > 0 && n < 30) { raw += step; boss -= bStep; bossLeft--; n++; }
-        if (toWin(raw) < T - 1e-4) short = true;
-      } else {
-        let left = have(k);
-        while (left > 0 && n > -30 && toWin(raw - step) >= T - 1e-4) { raw -= step; boss += bStep; left--; n--; }
+      // n > 0: 힘트마 n칸을 빼고 이 옵션 마법석으로 / n < 0: 이 옵션 마법석 -n칸을 힘트마로
+      const raw0 = toRaw(Number(src[c]) || 0), haveK = have(k);
+      const win = (n) => toWin(Math.max(0, raw0 + n * step)), ok = (n) => n >= 0 ? n <= bossLeft : -n <= haveK;
+      let n = 0;
+      if (win(0) < T - 1e-4) { while (win(n) < T - 1e-4 && ok(n + 1) && n < 30) n++; }
+      else { while (ok(n - 1) && n > -30 && win(n - 1) >= T - 1e-4) n--; }
+      if (near && win(n) >= T - 1e-4 && ok(n - 1)) {
+        const alt = n - 1, dA = Math.abs(win(alt) - T), dN = Math.abs(win(n) - T);
+        if (dA < dN - 1e-6 || (Math.abs(dA - dN) <= 1e-6 && Math.abs(alt) < Math.abs(n))) n = alt;
       }
+      if (win(n) < T - 1e-4 && !near) short = true;
+      if (n > 0) bossLeft -= n;
+      boss -= n * bStep;
       if (n) moves.push({ k, t: (SOCK.find(x => x.k === k) || {}).t || k, n });
-      o[c] = r6(toWin(Math.max(0, raw)));
+      o[c] = r6(win(n));
     }
     o.C21 = r6(Math.max(0, boss));
     return { over: o, cp: cpWith(o), moves, short, counted };
