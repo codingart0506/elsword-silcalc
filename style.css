@@ -385,8 +385,15 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .rank-list.bow .rk-no.crown svg { transform-origin: 50% 100%; animation: crownBow 1.1s 1.1s ease-in-out; }
 @keyframes crownBow { 0%, 100% { transform: none; } 35%, 65% { transform: rotate(-20deg) translateY(2px); } }
 .rank-list li.rk-god.leave { animation: godOut .28s ease-in forwards; }
+/* 신 카드 사진 열 때 */
+.god-fx.soft { background: radial-gradient(circle at var(--x) var(--y), rgba(255, 240, 190, .25) 0, rgba(24, 14, 56, .2) 60%); animation-duration: 2s; }
+.rk-shot.god-reveal { animation: godGlow 1.8s .1s ease-out; }
+.rk-shot.god-reveal img { animation: godPhotoIn 1.2s ease-out; }
+@keyframes godPhotoIn { 0% { filter: brightness(2.6) blur(10px) saturate(.2); transform: scale(1.05); } 55% { filter: brightness(1.25) blur(0) saturate(1); } 100% { filter: none; transform: none; } }
+.rk-shot.god-reveal::after { content: ''; position: absolute; inset: 0; z-index: 6; pointer-events: none; background: linear-gradient(115deg, transparent 35%, rgba(255, 246, 210, .8) 47%, rgba(200, 180, 255, .55) 53%, transparent 65%); transform: translateX(-110%); animation: godSweep 1.1s .45s ease-in-out forwards; }
+@keyframes godSweep { to { transform: translateX(110%); } }
 @keyframes godOut { to { opacity: 0; transform: translateY(-8px); } }
-@media (prefers-reduced-motion: reduce) { #rankTitle.god-on, #rankTitle.has-god:not(.god-on), #rankTitle.has-god:not(.god-on)::after, .rank-list li.rk-god:not([hidden]), .rank-list li.rk-god.leave { animation: none; } #rankTitle.has-god:not(.god-on) { background: none; color: inherit; } }
+@media (prefers-reduced-motion: reduce) { .rk-shot.god-reveal, .rk-shot.god-reveal img, .rk-shot.god-reveal::after { animation: none; } #rankTitle.god-on, #rankTitle.has-god:not(.god-on), #rankTitle.has-god:not(.god-on)::after, .rank-list li.rk-god:not([hidden]), .rank-list li.rk-god.leave { animation: none; } #rankTitle.has-god:not(.god-on) { background: none; color: inherit; } }
 .rk-cp { text-align: right; display: flex; flex-direction: column; }
 .rk-cp b { font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .rk-cp small { font-size: 12px; color: var(--mute); }

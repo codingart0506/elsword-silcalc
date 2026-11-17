@@ -545,12 +545,13 @@
     btnEl.setAttribute('aria-expanded', String(open));
     let box = li.querySelector('.rk-detail');
     if (!open) { if (box) box.hidden = true; return; }
-    if (box) { box.hidden = false; return; }
+    if (box) { box.hidden = false; godPhotoFx(box.querySelector('.rk-shot')); return; }
     const img = el('img', { alt: `${r.nickname} 스크린샷`, src: r.img });
     const shot = el('button', { type: 'button', class: 'rk-shot', 'aria-label': '사진 크게 보기' }, img);
     shot.onclick = () => lightbox(img.src, img.alt, true);
     box = el('div', { class: 'rk-detail' }, shot, el('div', { class: 'rk-side' }, el('p', { class: 'rk-cap', text: '실투력 측정 불가' })));
     li.append(box);
+    img.decode().catch(() => {}).then(() => godPhotoFx(shot));
   }
   async function loadGods(c) {
     if (Date.now() - godsAt < FRESH) return gods;
@@ -576,6 +577,27 @@
     $('#rankTitle').classList.toggle('god-on', godOn && rows.length > 0);
     rows.forEach((li) => { li.hidden = !godOn; li.classList.remove('leave'); });
   }
+  // 빛가루: rect 안 아래쪽에서 피어올라 흩어짐
+  function sparkles(fx, r, n) {
+    for (let i = 0; i < n; i++) {
+      const p = el('span', { class: 'god-p' });
+      p.style.left = `${r.left + 8 + Math.random() * Math.max(0, r.width - 16)}px`; p.style.top = `${r.top + r.height * (0.25 + Math.random() * 0.65)}px`;
+      p.style.setProperty('--dx', `${Math.round((Math.random() - 0.5) * 70)}px`); p.style.setProperty('--dy', `${-40 - Math.round(Math.random() * 60)}px`);
+      p.style.animationDuration = `${(0.9 + Math.random() * 1.1).toFixed(2)}s`; p.style.animationDelay = `${(0.3 + Math.random() * 0.6).toFixed(2)}s`;
+      fx.append(p);
+    }
+  }
+  // 신 카드에서 사진을 열 때: 사진이 하얀 빛 속에서 서서히 또렷해지고, 빛줄기가 한 번 훑고 지나가며 테두리가 빛나고 빛가루가 피어오름
+  function godPhotoFx(shot) {
+    if (!shot || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    shot.classList.remove('god-reveal'); void shot.offsetWidth; shot.classList.add('god-reveal');
+    const r = shot.getBoundingClientRect();
+    const fx = el('div', { class: 'god-fx soft', 'aria-hidden': 'true' });
+    fx.style.setProperty('--x', `${r.left + r.width / 2}px`); fx.style.setProperty('--y', `${r.top + r.height / 2}px`);
+    sparkles(fx, r, 26);
+    document.body.append(fx);
+    setTimeout(() => { fx.remove(); shot.classList.remove('god-reveal'); }, 2200);
+  }
   // 강림 연출: 화면이 살짝 어두워지고, 위에서 빛기둥이 내려와 신 줄에 닿으면 빛가루가 피어오르고 후광이 내려앉음. 1~3위 왕관은 고개를 숙임
   function godFx(li) {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -586,13 +608,7 @@
     const beam = el('div', { class: 'god-beam' }); beam.style.left = `${cx - 40}px`; beam.style.height = `${Math.max(40, cy)}px`;
     const word = el('div', { class: 'god-word', text: '강림' }); word.style.left = `${r.left + r.width / 2}px`; word.style.top = `${Math.max(24, r.top - 36)}px`;
     fx.append(beam, word);
-    for (let i = 0; i < 28; i++) {
-      const p = el('span', { class: 'god-p' });
-      p.style.left = `${r.left + 8 + Math.random() * (r.width - 16)}px`; p.style.top = `${r.top + r.height * (0.25 + Math.random() * 0.6)}px`;
-      p.style.setProperty('--dx', `${Math.round((Math.random() - 0.5) * 70)}px`); p.style.setProperty('--dy', `${-40 - Math.round(Math.random() * 60)}px`);
-      p.style.animationDuration = `${(0.9 + Math.random() * 1.1).toFixed(2)}s`; p.style.animationDelay = `${(0.35 + Math.random() * 0.6).toFixed(2)}s`;
-      fx.append(p);
-    }
+    sparkles(fx, r, 28);
     document.body.append(fx);
     li.classList.add('descend');
     const list = $('#rankList'); list.classList.add('bow');
@@ -1009,7 +1025,7 @@
     btnEl.setAttribute('aria-expanded', String(open));
     let box = li.querySelector('.rk-detail');
     if (!open) { if (box) box.hidden = true; return; }
-    if (box) { box.hidden = false; return; }
+    if (box) { box.hidden = false; if (god) godPhotoFx(box.querySelector('.rk-shot:not(.ask)')); return; }
     const img = el('img', { alt: `${r.nickname} 실투력 스크린샷` });
     const cap = el('p', { class: 'rk-cap', text: '사진 불러오는 중이에요' });
     const shareP = el('p', { class: 'rk-cap', text: '초월:강렬 비율 불러오는 중' });
@@ -1043,7 +1059,7 @@
           const bu = u ? await bakeShot(u, viewerName() + '|' + r.shot_path) : null;
           if (bu) { marked = true; img.src = bu; }
           else if (u) { img.src = u; shot.append(watermark()); }
-          if (u) { loadPic = null; ask.remove(); shot.classList.remove('ask'); shot.setAttribute('aria-label', '사진 크게 보기'); }
+          if (u) { loadPic = null; ask.remove(); shot.classList.remove('ask'); shot.setAttribute('aria-label', '사진 크게 보기'); if (god) img.decode().catch(() => {}).then(() => godPhotoFx(shot)); }
           else { askT.textContent = '사진을 불러오지 못했어요'; askS.textContent = '다시 누르면 한 번 더 불러와요'; }
         } catch (e) { askT.textContent = '사진을 불러오지 못했어요'; askS.textContent = '다시 누르면 한 번 더 불러와요'; }
         busy = false;
