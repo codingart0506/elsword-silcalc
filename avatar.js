@@ -797,8 +797,8 @@
     document.body.classList.toggle('view-avatar', on);
     $('#avView').hidden = !on;
     if (on) {
-      document.body.classList.remove('view-rank', 'view-admin');
-      for (const id of ['#rankView', '#adminView']) { const x = $(id); if (x) x.hidden = true; }
+      document.body.classList.remove('view-rank', 'view-admin', 'view-optchg');
+      for (const id of ['#rankView', '#adminView', '#ocView']) { const x = $(id); if (x) x.hidden = true; }
       render(); window.scrollTo(0, 0);
     }
     const views = $('#views');

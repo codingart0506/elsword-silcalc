@@ -381,6 +381,9 @@
     document.body.classList.toggle('view-rank', v === 'rank');
     document.body.classList.toggle('view-admin', v === 'admin');
     document.body.classList.toggle('view-avatar', v === 'avatar');
+    document.body.classList.toggle('view-optchg', v === 'optchg');
+    if ($('#ocView')) $('#ocView').hidden = v !== 'optchg';
+    if (v === 'optchg' && window.SilOptChg && window.SilOptChg.show) window.SilOptChg.show();
     $('#rankView').hidden = v !== 'rank';
     if ($('#avView')) $('#avView').hidden = v !== 'avatar';
     if (v === 'avatar' && window.SilAvatar) window.SilAvatar.render();
@@ -1310,6 +1313,7 @@
       const { data: isAdmin, error } = await c.rpc('claim_admin');
       if (error) throw error;
       if (!isAdmin) { body.innerHTML = ''; body.append(el('p', { text: '관리자 계정이 아니에요.' })); return; }
+      adminFeatures();
       await adminPanel(c, body);
     } catch (e) { body.innerHTML = ''; body.append(el('p', { text: '불러오지 못했어요. ' + errMsg(e) })); }
   }
@@ -1736,6 +1740,18 @@
 
   // ---------- 시작 ----------
   const qs = new URLSearchParams(location.search);
+  // 관리자로 로그인해 있으면 시험 중인 기능(옵션 변환 탭)을 켬. 로그인한 적이 없으면 아무것도 안 불러옴
+  function adminFeatures() { if (window.SilOptChg && window.SilOptChg.enable) window.SilOptChg.enable(); }
+  (async () => {
+    try {
+      if (!Object.keys(localStorage).some((k) => /^sb-.+-auth-token$/.test(k))) return;
+      const c = await sb();
+      const { data: { session } } = await c.auth.getSession();
+      if (!session) return;
+      const { data } = await c.rpc('claim_admin');
+      if (data === true) adminFeatures();
+    } catch (e) { /* 확인 못 하면 그냥 숨겨 둠 */ }
+  })();
   if (qs.has('admin')) setView('admin');
   else if (qs.has('rank')) setView('rank');
   else if (qs.has('avatar')) setView('avatar');

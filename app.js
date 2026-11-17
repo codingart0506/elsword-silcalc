@@ -723,7 +723,14 @@
     document.addEventListener('paste', async (e) => {
       if (document.body.classList.contains('view-avatar')) return; // 아바타 탭에서는 아바타 인식으로
       const it = [...(e.clipboardData ? e.clipboardData.items : [])].find(i => i.type.startsWith('image/'));
-      if (it) { e.preventDefault(); showShot(await O.imageFromBlob(it.getAsFile())); }
+      if (it) {
+        e.preventDefault();
+        const img = await O.imageFromBlob(it.getAsFile());
+        const OC = window.SilOptChg;
+        if (OC && document.body.classList.contains('view-optchg')) { OC.take(img, 'auto'); return; } // 옵션 변환 탭
+        if (OC && OC.claim && OC.claim(img)) return; // 옵션 변환 창 사진이면 옵션 변환 탭으로
+        showShot(img);
+      }
     });
     const card = $('#ocrCard');
     card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('drop-on'); });
@@ -1225,6 +1232,10 @@
     onRefresh: (f) => { hooks.push(f); },
     refresh: () => refresh(),
     toast, el, fmtInt, korUnit, dialog,
+    // 옵션 변환 점수(optchg.js): 계산 칸 읽기 · 스탯 여러 칸 한 번에 바꾸기
+    sheetGet: (sh, a) => { const v = wb.get(sh, a); return E.isErr(v) ? NaN : v; },
+    setVals: (o) => { for (const [a, v] of Object.entries(o || {})) setIn(a, v); refresh(); scheduleAutosave(); },
+    empty: () => isEmptySetting(inputs),
   };
 
   // ---------- 크극 최적화: 스탯창의 크리·극대·보뎀을 합계 그대로 다시 나눠 실투력이 가장 높은 배분을 한눈에 보여 줌 ----------
