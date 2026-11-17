@@ -28,7 +28,9 @@
   const KEY = 'silcalc.av.v1';
   let st;
   try { st = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { st = {}; }
-  st.p = st.p || {}; st.o = Object.assign({ guild: '2.5% (5레벨)', elixir: false, adaptEtc: 0, bossEtc: 0, medal: '없음', critAdd: 0, critMul: 1, cool: 35, coolAtLeast: true }, st.o || {});
+  st.p = st.p || {}; st.o = Object.assign({ guild: '2.5% (5레벨)', elixir: false, adaptEtc: 0, bossEtc: 0, medal: '없음', critAdd: 0, critMul: 1, cool: 0, coolAtLeast: true }, st.o || {});
+  // 목표 쿨감 기본값이 35 → 0(조건 없음)으로 바뀜. 쿨감도 실투력에 들어가 있어서 조건 없이 실투력만 보고 고르는 게 기본
+  if (st.o.coolV !== 2) { if (Number(st.o.cool) === 35) st.o.cool = 0; st.o.coolV = 2; try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { /* 무시 */ } }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { /* 저장 공간 없음 */ } };
   const prof = () => { const k = APP.key() || 'default'; if (!st.p[k]) st.p[k] = { worn: {}, fixed: {}, how: {} }; return st.p[k]; };
 
@@ -315,8 +317,9 @@
     const numIn = (key, w) => { const i = el('input', { type: 'text', inputmode: 'decimal', class: 'num', value: String(o[key] ?? '') }); if (w) i.style.width = w; i.onchange = () => { const v = Number(String(i.value).replace(',', '.')); o[key] = isFinite(v) ? v : 0; i.value = o[key]; save(); result = null; renderResult(); }; return i; };
     const selIn = (key, opts) => { const s = el('select'); for (const t of opts) s.append(el('option', { value: t, text: t })); s.value = o[key]; s.onchange = () => { o[key] = s.value; save(); result = null; renderResult(); }; return s; };
     const chk = (key) => { const b = el('input', { type: 'checkbox' }); b.checked = !!o[key]; b.onchange = () => { o[key] = b.checked; save(); result = null; renderResult(); }; return b; };
-    const cool = el('span', { class: 'av-inline' }, numIn('cool', '56px'), el('span', { text: '%' }), el('label', { class: 'av-fix' }, chk('coolAtLeast'), el('span', { text: '이상이면 됨' })));
-    row('목표 쿨감', cool, `0이면 쿨감 조건 없이 계산해요. ${APP.cls() || '이 직업'} 쿨감 상한은 ${APP.coolCap ? APP.coolCap() : 35}%라서 그 위는 상한까지만 맞춰요`);
+    const cool = el('span', { class: 'av-inline', id: 'avCoolBox' });
+    row('목표 쿨감', cool, '조건 없음이면 쿨감도 실투력에 넣어서 가장 높은 조합을 골라요. 쿨감을 꼭 맞추고 싶을 때만 골라 주세요. 아바타 쿨감은 5%씩이라 기본(아바타·악세 없이) 쿨감에서 5%씩 오른 값만 고를 수 있어요');
+    renderCool();
     row('길드 사냥꾼의 본능', selIn('guild', OPT_SEL.guild));
     row('적응의 영약', chk('elixir'));
     row('글리터의 훈장 카트리지 세트', selIn('medal', OPT_SEL.medal));
@@ -405,7 +408,32 @@
     });
     box.append(el('div', { class: 'av-own-set' }, el('span', { class: 'av-own-name', text: '일반 악세 하의' }), el('div', { class: 'av-chips' }, ...bChips)));
   }
+  // 목표 쿨감 목록: 아바타·악세를 뺀 쿨감 + 5%씩(직업 쿨감 상한까지)
+  function coolChoices() {
+    const cap = APP.coolCap ? APP.coolCap() : 35, now = Number(curStats()['쿨감']) || 0;
+    if (!(now > 0)) return { cap, bare: null, list: [] };
+    const worn = R.wornContribution(db, prof().worn || {}).sums['쿨감'] || 0;
+    const r2 = (x) => Math.round(x * 100) / 100, bare = r2(Math.max(0, now - worn)), list = [];
+    for (let t = bare; t < cap - 1e-9; t += 5) if (t > 0) list.push(r2(t));
+    list.push(cap); // 아무리 껴도 상한까지
+    return { cap, bare, list: [...new Set(list)] };
+  }
+  function renderCool() {
+    const box = $('#avCoolBox'); if (!box) return; box.textContent = '';
+    const o = st.o, { cap, bare, list } = coolChoices();
+    const s = el('select', { 'aria-label': '목표 쿨감' });
+    s.append(el('option', { value: '0', text: '조건 없음' }));
+    for (const t of list) s.append(el('option', { value: String(t), text: `${t}%${t === bare ? ' (기본)' : ''}${t === cap ? ' (상한)' : ''}` }));
+    const want = Number(o.cool) || 0, eff = want > 0 ? (list.find((t) => t >= want - 1e-9) ?? list[list.length - 1]) : 0;
+    s.value = String(eff ?? 0);
+    s.onchange = () => { o.cool = Number(s.value) || 0; save(); result = null; renderResult(); };
+    const atLeast = el('input', { type: 'checkbox' }); atLeast.checked = o.coolAtLeast !== false;
+    atLeast.onchange = () => { o.coolAtLeast = atLeast.checked; save(); result = null; renderResult(); };
+    box.append(s);
+    if (want > 0) box.append(el('label', { class: 'av-fix' }, atLeast, el('span', { text: '이상이면 됨' })));
+  }
   function renderResult() {
+    renderCool();
     const box = $('#avResult'); if (!box) return; box.textContent = '';
     if (!result) return;
     if (result.err) { box.append(el('p', { class: 'av-hint warn', text: result.err })); return; }
@@ -432,7 +460,8 @@
       : el('span', null, '추천대로 바꾸면 실뎀 ', el('b', { class: 'up', text: '+' + g.toFixed(2) + '%' }));
     else if (!changed || keepNow) head = el('span', { text: byCp ? '지금 세팅이 이미 실투력이 가장 높아요' : '지금 세팅이 이미 가장 좋아요' });
     else {
-      const lead = `목표 쿨감 ${T}%를 맞추는 조합 중에서는 이 세팅이 가장 높아요. 지금 세팅(쿨감 ${Math.round(curCool * 100) / 100}%)과 비교하면 `;
+      const want = Number(st.o.cool) || 0, tText = want > 0 && Math.abs(want - T) > 0.005 ? `${want}% 이상(아바타 쿨감이 5%씩이라 ${T}%)` : `${T}%`;
+      const lead = `목표 쿨감 ${tText}를 맞추는 조합 중에서는 이 세팅이 가장 높아요. 지금 세팅(쿨감 ${Math.round(curCool * 100) / 100}%)과 비교하면 `;
       head = byCp
         ? (up <= -1 ? el('span', null, lead + '실투력 ', el('b', { text: fmt(r.cpNow) }), ' → ', el('b', { class: 'down', text: fmt(r.best.cp) }), el('span', { class: 'av-gain-sub down', text: ` (−${(-up / r.cpNow * 100).toFixed(2)}%)` })) : el('span', { text: lead + '실투력은 같아요' }))
         : el('span', { text: lead + (g < -0.0005 ? `실뎀 ${g.toFixed(2)}%` : '실뎀은 같아요') });
@@ -447,9 +476,10 @@
     const extraRow = (label, now, want) => { const same = now === want; tb.append(el('tr', { class: same ? '' : 'chg' }, el('th', { scope: 'row', text: label }), el('td', { text: now || '-' }), el('td', { class: same ? 'same' : 'to', text: same ? '그대로' : (want || '-') }))); };
     if (showBottom) extraRow('하의 악세', p.bottom || '', keepNow ? (p.bottom || '') : r.best.bottom);
     for (const [c, v] of buffs) { const now = String(APP.val(c) ?? ''); extraRow(buffLabel(c), now, keepNow ? now : v); }
+    if (r.best.coolReal != null && curCool > 0) { const c2 = (x) => `${Math.round(x * 100) / 100}%`; extraRow('쿨감', c2(curCool), keepNow ? c2(curCool) : c2(r.best.coolReal)); }
     box.append(el('table', { class: 'av-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '부위' })), el('th', { scope: 'col', text: '지금' }), el('th', { scope: 'col', text: '추천' }))), tb));
     if (keepNow) { box.append(el('p', { class: 'av-hint', text: '조건에 맞는 다른 조합은 모두 지금 세팅보다 낮았어요' })); return; }
-    box.append(el('p', { class: 'av-hint', text: `${r.best.polished ? '세트' : '3세트'}: ${r.best.setLabels.join(' · ')} | ${r.mode}${r.best.coolReal != null ? ` | 쿨감 ${r.best.coolReal}%` : ''}${changed && !r.best.polished ? ` | 시트(룰루) 점수로는 실뎀 ${g >= 0 ? '+' : ''}${g.toFixed(2)}%` : ''}` }));
+    box.append(el('p', { class: 'av-hint', text: `${r.best.polished ? '세트' : '3세트'}: ${r.best.setLabels.join(' · ')} | ${r.mode}${changed && !r.best.polished ? ` | 시트(룰루) 점수로는 실뎀 ${g >= 0 ? '+' : ''}${g.toFixed(2)}%` : ''}` }));
     if (r.cands && r.cands.length > 1 && r.best.cp > 0) box.append(el('p', { class: 'av-hint', text: r.best.polished ? '3세트 조합 후보들과 지금 세팅에서 부위를 더 바꿔 가며 계산기 실투력이 가장 높아지는 조합을 찾았어요. 세트 효과는 3세트까지만 쳤어요' : `계산기 실투력 기준으로 모든 조합을 비교해서 고른 결과예요. 마지막에 후보 ${r.cands.length}개를 계산기로 정확히 다시 쟀어요` }));
   }
   // 아바타 점수 상위 조합을 계산기 본체(시트와 같은 실투력 계산)에 넣어 실투력으로 다시 줄 세움
