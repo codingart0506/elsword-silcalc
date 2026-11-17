@@ -473,8 +473,8 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     return n;
   };
   const toast = (t) => (APP.toast ? APP.toast(t) : null);
-  // 시험 중: 관리자로 로그인했을 때만 켬(rank.js가 enable을 부름). 미리보기판은 SIL_OC_ON으로 처음부터 켬
-  let enabled = !!root.SIL_OC_ON;
+  // 누구나 씀(시험 기간 끝남)
+  let enabled = true;
 
   // 저장: 캐릭터(프로필)별 장비마다 지금 옵션·새 옵션·강화
   const LS = 'silcalc.optchg';
@@ -813,23 +813,9 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     if (first && wantOpen) setOcView(true);
   };
   if (enabled) api.enable();
-  // 시험용 링크: 주소에 ?test=코드 가 맞으면 이 브라우저에서 계속 켜 둠(코드 원문은 소스에 없고 해시만 둠).
-  // 코드를 바꿔 다시 올리면 예전 코드로 켠 브라우저는 다시 꺼짐
-  const TEST_HASH = '1251817aa0992094375c30df4ad1a190f42f7681aa3b905f51f8e7c87f0d000c', TEST_KEY = 'silcalc.octest';
-  (async () => {
-    const qs = new URLSearchParams(location.search), code = qs.get('test');
-    let ok = false;
-    try { ok = localStorage.getItem(TEST_KEY) === TEST_HASH; } catch (e) { /* 무시 */ }
-    if (!ok && code && root.crypto && crypto.subtle) {
-      try {
-        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code.trim()));
-        ok = [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, '0')).join('') === TEST_HASH;
-        if (ok) { try { localStorage.setItem(TEST_KEY, TEST_HASH); } catch (e) { /* 무시 */ } toast('옵션 변환 시험 기능을 켰어요'); }
-      } catch (e) { /* 무시 */ }
-    }
-    if (code) { qs.delete('test'); const q = qs.toString(); history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash); }
-    if (ok) { api.enable(); if (code) setOcView(true); }
-  })();
+  // 예전 시험용 링크(?test=코드)로 들어오면 주소에서 그 부분만 지우고, 그때 켜 둔 표시도 지움
+  try { localStorage.removeItem('silcalc.octest'); } catch (e) { /* 무시 */ }
+  { const qs = new URLSearchParams(location.search); if (qs.has('test')) { qs.delete('test'); const q = qs.toString(); history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash); } }
   APP.onRefresh(() => { if (visible()) renderItem(); schedule(); });
   renderAll(); schedule();
 

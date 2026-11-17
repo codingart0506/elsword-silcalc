@@ -488,51 +488,58 @@
     // 하의 악세 비교: 지금 실투력은 스탯 창(지금 낀 하의 악세가 이미 들어 있음)으로 재서 칸만 바꿔선 안 변하니, 따로 보여 줌
     const rv = !keepNow && r.best.rivals;
     if (rv && rv.modes) {
-      // 하의 악세마다 아바타·한벌을 따로 골라 본 최고 세팅끼리 비교. 크리·극대는 마법석(힘트마)으로 맞추는 두 방식을 같이 보여 줌
-      const pc = (v) => `${Math.round(v * 1000) / 10}%`, inpA = APP.inputs();
-      const goalC = '지금 크리', goalM = rv.byCap ? '만극' : '지금 극대화';
-      const MODE_TXT = { ceil: '크리 지금 이상', near: '크리 가깝게', floor: '크리 살짝 덜', plain: '' };
-      const MODE_SUB = {
-        ceil: `극대화는 ${goalM}, 크리는 ${goalC} 밑으로 안 내려가게 힘트마를 빼서 채웠어요. 넘치는 크리·극대 마법석은 힘트마로 돌렸어요`,
-        near: `극대화는 ${goalM}을 지키고, 크리는 ${goalC}에 가장 가깝게(조금 넘거나 모자라게) 맞췄어요`,
-        floor: `극대화는 ${goalM}을 지키고, 크리가 모자라 힘트마를 빼야 하는 쪽만 한 칸 덜 빼서 ${goalC}보다 살짝 모자라게 뒀어요. 이미 ${goalC}인 쪽은 그대로예요`, plain: '' };
-      const goal = '지금 크리·극대';
-      const sorted = (md) => rv.modes[md].slice().sort((x, y) => y.cp - x.cp);
+      // 하의 악세 비교: 하의 악세마다 아바타·한벌·마법석까지 맞춘 가장 좋은 세팅을 나란히 보여 줌. 지금 실투력 대비 몇 %인지와 바꿀 것을 같이
+      const pc = (v) => `${Math.round(v * 1000) / 10}%`, inpA = APP.inputs(), base0 = r.cpNow > 0 ? r.cpNow : APP.cpWith({});
+      const vsNow = (v) => { const d = (v / base0 - 1) * 100; return `${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(2)}%`; };
+      const matched = rv.order[0] !== 'plain', goalM = rv.byCap ? '만극' : '지금 극대화';
+      const MODE_TXT = { ceil: '지금 크리 이상', near: '지금 크리에 가깝게', floor: '지금 크리보다 살짝 덜', plain: '' };
       const SHORT_B = { '영혼의 족쇄': '족쇄', '글로잉 플라워': '글플' };
-      const gapTxt = (md) => { const l = sorted(md); return `${SHORT_B[l[0].n] || l[0].n} +${((l[0].cp - l[1].cp) / l[1].cp * 100).toFixed(2)}%`; };
-      const matched = rv.order[0] !== 'plain';
-      const cmpBox = el('div', { class: 'av-rival' });
-      cmpBox.append(el('p', { class: 'av-rival-h' }, el('b', { text: '하의 악세 비교' }),
-        el('span', { text: matched ? ` 하의 악세마다 아바타·한벌·아바타 악세를 따로 맞추고 비교했어요. 극대화는 ${goalM}(${pc(rv.maxT)}${rv.byCap ? ', 이 전직은 여기서부터 더 올려도 실투력이 그대로예요' : ''}) 이상으로 맞추고, 크리는 실투력에 넣은 지금 크리(${pc(rv.critT)})를 기준으로 세 가지로 맞춰 봤어요` : ' 하의 악세마다 아바타·한벌을 따로 맞춰 본 최고 세팅이에요' })));
-      const list = el('div');
-      let cur = rv.order[0];
-      const seg = matched ? el('div', { class: 'av-rival-seg', role: 'group', 'aria-label': '크리·극대 맞추는 방식' }) : null;
-      const drawList = () => {
-        list.textContent = '';
-        if (seg) for (const b of seg.children) b.setAttribute('aria-pressed', String(b.dataset.m === cur));
-        const srt = sorted(cur), top = srt[0];
-        if (MODE_SUB[cur]) list.append(el('p', { class: 'av-rival-note', text: MODE_SUB[cur] }));
-        const sockTxt = (x) => { const k = x.sock; if (!k) return ''; const ch = k.moves.map(m => m.n > 0 ? `힘트마 ${m.n}칸 → ${m.t} 마법석` : `${m.t} 마법석 ${-m.n}칸 → 힘트마`); return `극대화 ${pc(x.max)} · ` + (ch.length ? ch.join(', ') : '마법석 그대로') + (k.short ? ` (힘트마를 다 빼도 ${goal}에 못 미쳐요)` : ''); };
-        for (const x of srt) {
-          const lose = x !== top, pct = lose ? ` (−${((top.cp - x.cp) / top.cp * 100).toFixed(2)}%)` : '';
-          const adapt = Number('C14' in (x.o || {}) ? x.o.C14 : inpA.C14) || 0;
-          const line = el('p', { class: 'av-rival-row' + (lose ? '' : ' win') }, el('span', { class: 'n' }, `${x.n} + ${x.suit || '한벌 없음'}`, el('small', { text: ` 크리 ${pc(x.crit)} · 적응 ${pc(adapt)}` })), el('b', { text: fmt(x.cp) }), el('span', { class: 'p', text: pct }));
-          const aNote = x.adaptShort ? ` · 적응력이 상한에 ${pc(x.adaptShort)} 모자라요. 다른 아바타 악세로 채우는 것까지 재 봤는데 이 세팅이 가장 높았어요(다른 악세로 채우면 최대 +${(x.adaptGain * 100).toFixed(2)}%, 그 악세에서 잃는 것 빼기 전)` : '';
-          const sNote = x.sock || aNote ? el('p', { class: 'av-rival-note', text: (x.sock ? sockTxt(x) : '') + aNote }) : '';
-          if (!x.cand) { list.append(line, sNote); continue; }
+      const sorted = (md) => rv.modes[md].slice().sort((x, y) => y.cp - x.cp);
+      const gap = (md) => { const l = sorted(md); return { top: l[0], d: (l[0].cp - l[1].cp) / l[1].cp * 100 }; };
+      const changesOf = (x) => {
+        const out = [];
+        if (x.n !== p.bottom) out.push(`하의 악세 → ${x.n}`);
+        if (x.cand) {
           const rec2 = Object.assign({ '아바타5셋': x.cand.fiveSetDisplay, '한벌': x.suit || '' }, x.cand.partToDisplay);
-          const diff = PARTS.filter(part => (rec[part] || '') !== (rec2[part] || ''));
-          if (!diff.length) { if (lose) line.classList.add('alt'); list.append(line, sNote, el('p', { class: 'av-rival-note', text: '아바타·한벌·아바타 악세가 위 추천과 같아요' })); continue; }
-          const tb2 = el('tbody');
-          for (const part of diff) tb2.append(el('tr', { class: 'chg' }, el('th', { scope: 'row', text: PART_LABEL[part] || part }), el('td', { class: 'to', text: short(rec2[part] || '') || '-' })));
-          list.append(el('details', { class: 'av-rival-more' }, el('summary', null, line), el('p', { class: 'av-rival-note', text: `위 추천과 다른 부위 ${diff.length}곳` }), el('table', { class: 'av-table' }, tb2)), sNote);
+          for (const part of PARTS) { const a0 = p.worn[part] || '', b0 = rec2[part] || ''; if (b0 && a0 !== b0) out.push(`${PART_LABEL[part] || part} → ${short(b0)}`); }
+        }
+        for (const [c, v] of buffs) if (String(APP.val(c) ?? '') !== String(v)) out.push(`${buffLabel(c)} → ${v}`);
+        if (x.sock) for (const m of x.sock.moves) out.push(m.n > 0 ? `힘트마 ${m.n}칸 → ${m.t} 마법석` : `${m.t} 마법석 ${-m.n}칸 → 힘트마`);
+        return out;
+      };
+      const cmpBox = el('div', { class: 'av-rival' });
+      const head = el('div'), cards = el('div', { class: 'av-vs' });
+      cmpBox.append(el('p', { class: 'av-rival-h' }, el('b', { text: '하의 악세 비교' })), head);
+      let cur = rv.order[0];
+      const seg = matched ? el('div', { class: 'av-rival-seg', role: 'group', 'aria-label': '크리 맞추는 방식' }) : null;
+      const draw = () => {
+        if (seg) for (const bt of seg.children) bt.setAttribute('aria-pressed', String(bt.dataset.m === cur));
+        const { top, d } = gap(cur);
+        head.textContent = '';
+        head.append(el('p', { class: 'av-vs-verdict' }, d < 0.3 ? `거의 같아요. ${top.n}가 ${d.toFixed(2)}% 높아요` : `${top.n}가 ${d.toFixed(2)}% 더 높아요`));
+        head.append(el('p', { class: 'av-rival-note', text: matched
+          ? `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 고르고, 극대화는 ${goalM}(${pc(rv.maxT)})까지, 크리는 ${MODE_TXT[cur]}(${pc(rv.critT)} 기준) 힘트마를 바꿔 맞췄어요`
+          : `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 골랐어요` }));
+        if (matched && rv.modes[cur].every(x => x.cp < base0)) head.append(el('p', { class: 'av-rival-note', text: '두 쪽 다 지금보다 낮은 건 극대화를 만극까지 채우거나 크리를 맞추느라 힘트마를 뺐기 때문이에요' }));
+        cards.textContent = '';
+        const order = rv.modes[cur].slice().sort((x, y) => (x.n === p.bottom ? -1 : 0) - (y.n === p.bottom ? -1 : 0));
+        for (const x of order) {
+          const win = x === top, adapt = Number('C14' in (x.o || {}) ? x.o.C14 : inpA.C14) || 0, ch = changesOf(x);
+          cards.append(el('div', { class: 'av-vs-card' + (win ? ' win' : '') },
+            el('p', { class: 'nm' }, el('b', { text: x.n }), x.n === p.bottom ? el('span', { class: 'tag', text: '지금' }) : '', win ? el('span', { class: 'tag win', text: '더 높음' }) : ''),
+            el('p', { class: 'cp' }, fmt(x.cp), el('span', { class: 'dv ' + (x.cp >= base0 ? 'up' : 'down'), text: `지금보다 ${vsNow(x.cp)}` })),
+            el('p', { class: 'st', text: `크리 ${pc(x.crit)} · 극대화 ${pc(x.max)} · 적응력 ${pc(adapt)}` }),
+            el('p', { class: 'ch-h', text: ch.length ? '이렇게 바꿔요' : '지금 그대로예요' }),
+            ch.length ? el('ul', { class: 'ch' }, ...ch.map(t => el('li', { text: t }))) : '',
+            x.sock && x.sock.short ? el('p', { class: 'av-rival-note', text: '힘트마를 다 빼도 기준 크리·극대에 못 미쳐요' }) : '',
+            x.adaptShort ? el('p', { class: 'av-rival-note', text: `적응력이 상한에 ${pc(x.adaptShort)} 모자라요. 다른 악세로 채울 수 있으면 최대 +${(x.adaptGain * 100).toFixed(2)}%(그 악세에서 잃는 것 빼기 전)` }) : ''));
         }
       };
       if (seg) {
-        for (const md of rv.order) seg.append(el('button', { type: 'button', class: 'av-seg-b', 'data-m': md, onclick: () => { cur = md; drawList(); } }, el('span', { class: 't', text: MODE_TXT[md] }), el('span', { class: 's', text: gapTxt(md) })));
-        cmpBox.append(seg);
+        for (const md of rv.order) { const g = gap(md); seg.append(el('button', { type: 'button', class: 'av-seg-b', 'data-m': md, onclick: () => { cur = md; draw(); } }, el('span', { class: 't', text: MODE_TXT[md] }), el('span', { class: 's', text: `${SHORT_B[g.top.n] || g.top.n} +${g.d.toFixed(2)}%` }))); }
+        cmpBox.append(el('p', { class: 'av-seg-h', text: '크리 맞추는 방식' }), seg);
       }
-      cmpBox.append(list); drawList();
+      cmpBox.append(cards); draw();
       const tableBottom = r.best.bottom, top0 = sorted(rv.order[0])[0];
       if (matched && tableBottom && tableBottom !== top0.n) cmpBox.append(el('p', { class: 'av-rival-note tip', text: `위 표의 추천(${tableBottom})은 크리·극대를 맞추기 전 실투력으로 고른 거예요` }));
       box.append(cmpBox);

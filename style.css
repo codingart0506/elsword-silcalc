@@ -689,6 +689,22 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .av-rival-row.alt { border-top: 1px solid var(--line); }
 .av-rival-note { margin: 0 0 4px; font-size: 12.5px; color: var(--mute); }
 .av-rival-note.tip { margin-top: 8px; color: var(--sub); }
+.av-vs-verdict { margin: 0 0 4px; font-size: 16px; font-weight: 700; color: var(--text); }
+.av-seg-h { margin: 10px 0 4px; font-size: 12.5px; color: var(--mute); }
+.av-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+@media (max-width: 600px) { .av-vs { grid-template-columns: 1fr; } }
+.av-vs-card { padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.av-vs-card.win { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) inset; }
+.av-vs-card .nm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 14px; color: var(--text); }
+.av-vs-card .tag { padding: 1px 7px; border-radius: 999px; background: var(--fill); color: var(--sub); font-size: 11.5px; font-weight: 600; }
+.av-vs-card .tag.win { background: var(--blue-weak); color: var(--blue-dark); }
+.av-vs-card .cp { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 6px 0 2px; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.av-vs-card .dv { font-size: 13px; font-weight: 600; }
+.av-vs-card .dv.up { color: var(--up); }
+.av-vs-card .dv.down { color: var(--down); }
+.av-vs-card .st { margin: 0 0 8px; font-size: 12.5px; color: var(--mute); }
+.av-vs-card .ch-h { margin: 0 0 2px; font-size: 12.5px; font-weight: 600; color: var(--sub); }
+.av-vs-card .ch { margin: 0 0 4px; padding-left: 16px; font-size: 13px; color: var(--text); line-height: 1.6; }
 .av-rival-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 8px; }
 .av-seg-b { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--sub); font: inherit; text-align: left; cursor: pointer; }
 .av-seg-b .t { font-size: 12.5px; line-height: 1.35; word-break: keep-all; }
