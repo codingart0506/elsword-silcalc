@@ -317,8 +317,7 @@
     const numIn = (key, w) => { const i = el('input', { type: 'text', inputmode: 'decimal', class: 'num', value: String(o[key] ?? '') }); if (w) i.style.width = w; i.onchange = () => { const v = Number(String(i.value).replace(',', '.')); o[key] = isFinite(v) ? v : 0; i.value = o[key]; save(); result = null; renderResult(); }; return i; };
     const selIn = (key, opts) => { const s = el('select'); for (const t of opts) s.append(el('option', { value: t, text: t })); s.value = o[key]; s.onchange = () => { o[key] = s.value; save(); result = null; renderResult(); }; return s; };
     const chk = (key) => { const b = el('input', { type: 'checkbox' }); b.checked = !!o[key]; b.onchange = () => { o[key] = b.checked; save(); result = null; renderResult(); }; return b; };
-    const cool = el('span', { class: 'av-inline', id: 'avCoolBox' });
-    row('목표 쿨감', cool, '조건 없음이면 쿨감도 실투력에 넣어서 가장 높은 조합을 골라요. 쿨감을 꼭 맞추고 싶을 때만 골라 주세요. 아바타 쿨감은 5%씩이라 기본(아바타·악세 없이) 쿨감에서 5%씩 오른 값만 고를 수 있어요');
+    // 목표 쿨감은 자주 바꾸는 값이라 접힌 '계산 조건' 말고 '추천 받기' 버튼 바로 위(#avCoolBox)에 둠
     renderCool();
     row('길드 사냥꾼의 본능', selIn('guild', OPT_SEL.guild));
     row('적응의 영약', chk('elixir'));
@@ -424,7 +423,7 @@
   function renderCool() {
     const box = $('#avCoolBox'); if (!box) return; box.textContent = '';
     const o = st.o, { cap, bare, list } = coolChoices();
-    const s = el('select', { 'aria-label': '목표 쿨감' });
+    const s = el('select', { id: 'avCoolSel' });
     s.append(el('option', { value: '0', text: '조건 없음' }));
     for (const t of list) s.append(el('option', { value: String(t), text: `${t}%${t === bare ? ' (기본)' : ''}${t === cap ? ' (상한)' : ''}` }));
     const want = Number(o.cool) || 0, eff = want > 0 ? (list.find((t) => t >= want - 1e-9) ?? list[list.length - 1]) : 0;
@@ -434,6 +433,10 @@
     atLeast.onchange = () => { o.coolAtLeast = atLeast.checked; save(); result = null; renderResult(); };
     box.append(s);
     if (want > 0) box.append(el('label', { class: 'av-fix' }, atLeast, el('span', { text: '이상이면 됨' })));
+    const hint = $('#avCoolHint');
+    if (hint) hint.textContent = want > 0
+      ? `아바타 쿨감은 5%씩이라 기본 쿨감${bare != null ? `(아바타·악세 없이 ${bare}%)` : ''}에서 5%씩 오른 값만 고를 수 있어요.`
+      : '조건 없음이면 쿨감까지 실투력에 넣어 가장 높은 조합을 골라요. 쿨감을 꼭 맞춰야 할 때만 골라 주세요.';
   }
   function renderResult() {
     renderCool();
@@ -443,7 +446,7 @@
     const r = result.r, p = prof();
     if (result.warn && result.warn.length) {
       box.append(el('div', { class: 'av-warn' }, el('b', { text: '조건에 맞는 세팅이 없어요' }), ...result.warn.map(w => el('p', { text: w })),
-        result.relaxed ? el('p', { class: 'av-relax', text: `아래는 ${result.relaxed} 계산한 결과예요. 조건은 '계산 조건'·'보유 아바타'·고정 칸에서 바꿀 수 있어요` }) : ''));
+        result.relaxed ? el('p', { class: 'av-relax', text: `아래는 ${result.relaxed} 계산한 결과예요. 조건은 '목표 쿨감'·'계산 조건'·'보유 아바타'·고정 칸에서 바꿀 수 있어요` }) : ''));
     }
     if (!r.best) return;
     const g = r.gain * 100, fmt = (n) => Math.round(n).toLocaleString('ko-KR');

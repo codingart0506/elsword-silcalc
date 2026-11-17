@@ -6,7 +6,7 @@
 <title>엘소드 실투력 계산기</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%233182F6%22/%3E%3Cpath d=%22M9 20 L14 14 L18 17 L23 10%22 stroke=%22white%22 stroke-width=%223%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 
-<link rel="stylesheet" href="style.css?v=258e2ed4">
+<link rel="stylesheet" href="style.css?v=95d7693c">
 </head>
 <body>
 <div class="wrap">
@@ -163,6 +163,10 @@
     <section class="card av-res-card" aria-labelledby="avResTitle">
       <h2 id="avResTitle">추천 세팅</h2>
       <p class="opt-sub">5셋 + 3세트 9부위 + 남은 3부위 최적 세팅을 추천해요</p>
+      <div class="av-goal">
+        <div class="av-goal-row"><label class="lab" for="avCoolSel">목표 쿨감</label><span class="av-inline" id="avCoolBox"></span></div>
+        <p class="av-hint" id="avCoolHint">조건 없음이면 쿨감까지 실투력에 넣어 가장 높은 조합을 골라요. 쿨감을 꼭 맞춰야 할 때만 골라 주세요.</p>
+      </div>
       <button class="btn primary wide" id="btnAvRun" type="button">추천 받기</button>
       <div id="avResult" aria-live="polite"></div>
       <p class="av-credit">계산 방식: 엘소드 [룰루]님 가열기 아바타/액세서리 세팅 시뮬레이터 v1.5.1</p>
@@ -250,7 +254,7 @@
 <script src="avrec.js?v=814dbcd2"></script>
 <script src="app.js?v=a85c1d48"></script>
 <script src="optchg.js?v=fdbdd32d"></script>
-<script src="avatar.js?v=f6c4ab37"></script>
+<script src="avatar.js?v=7ac15af3"></script>
 <script src="rank.js?v=59d2e3dd"></script>
 </body>
 </html>
