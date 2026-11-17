@@ -355,7 +355,7 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .rank-list li.rk-god:not([hidden]) { animation: godIn .45s ease-out; }
 @keyframes godIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 /* 신 카드 배경: 보라·파랑·노랑이 계속 흐르고, 빛 한 줄이 주기적으로 훑고 지나감 */
-.rank-list li.rk-god .rk-row { position: relative; overflow: hidden; background: linear-gradient(100deg, #efe3ff 0%, #e2ecff 22%, #fff1c9 44%, #f7e2ff 66%, #e2ecff 84%, #efe3ff 100%); background-size: 300% 100%; animation: godBg 3.2s ease-in-out infinite alternate; }
+.rank-list li.rk-god .rk-row, .rank-list li.rk-god.open .rk-row { position: relative; overflow: hidden; background: linear-gradient(100deg, #efe3ff 0%, #e2ecff 22%, #fff1c9 44%, #f7e2ff 66%, #e2ecff 84%, #efe3ff 100%); background-size: 300% 100%; animation: godBg 3.2s ease-in-out infinite alternate; }
 .rank-list li.rk-god .rk-row:hover, .rank-list li.rk-god.open .rk-row { filter: saturate(1.35) brightness(.99); }
 @keyframes godBg { from { background-position: 0% 0; } to { background-position: 100% 0; } }
 .rank-list li.rk-god .rk-row::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(110deg, transparent 38%, rgba(255, 255, 255, .75) 48%, rgba(255, 236, 170, .5) 52%, transparent 62%); transform: translateX(-120%); animation: godRowShine 3.2s ease-in-out infinite; }
@@ -828,7 +828,14 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .oc-price .oc-t input { width: 86px; }
 .oc-price-sub { font-size: 13px; color: var(--mute); }
 .oc-goal-hint { margin-top: 14px; line-height: 1.6; }
-.rk-god .rk-shot img { width: auto; max-width: 100%; margin: 0 auto; }
+.rk-god .rk-shot:not(.ask) { width: fit-content; max-width: 100%; background: none; }
+.rk-god .rk-shot img { width: auto; max-width: 100%; }
+.rk-detail.god-detail { grid-template-columns: minmax(0, auto); justify-content: center; padding: 12px 6px 18px; }
+/* 신 줄: 이름을 줄 가운데에 */
+.rank-list li.rk-god .rk-row { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.rk-god .rk-god-no { justify-self: start; width: 44px; }
+.rk-god .rk-who { align-items: center; text-align: center; }
+.rk-god .rk-cp { justify-self: end; }
 /* 관리자: 이스터에그(신) 찾은 사람 */
 .adm-egg { margin: 8px 0 14px; padding: 12px 14px; border-radius: 12px; background: linear-gradient(100deg, #f5efff, #eef4ff 60%, #fff7e2); }
 .adm-egg-head { margin: 0; font-size: 14px; font-weight: 700; color: #5b3fd6; }

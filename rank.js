@@ -540,7 +540,7 @@
   let gods = [], godsAt = 0, godOn = false;
   // 서버 캐릭터가 아닌 고정 신(사진은 사이트 파일). 전체 랭킹에만 보임
   // focus: 사진 속 캐릭터 위치(가로·세로 비율). 사진을 열 때 강림 원이 여기서 터짐
-  const GOD_FIXED = [{ id: 'god-ganadarap', nickname: '가나다랍', img: 'god.jpg', focus: [0.215, 0.6], halo: [0.22, 0.33] }];
+  const GOD_FIXED = [{ id: 'god-ganadarap', nickname: '가나다랍', img: 'god.jpg', focus: [0.215, 0.6], halo: [0.211, 0.41] }];
   function fixedGodDetail(li, r, btnEl) {
     const open = li.classList.toggle('open');
     btnEl.setAttribute('aria-expanded', String(open));
@@ -550,7 +550,7 @@
     const img = el('img', { alt: `${r.nickname} 스크린샷`, src: r.img });
     const shot = el('button', { type: 'button', class: 'rk-shot', 'aria-label': '사진 크게 보기' }, img);
     shot.onclick = () => lightbox(img.src, img.alt, true);
-    box = el('div', { class: 'rk-detail' }, shot, el('div', { class: 'rk-side' }, el('p', { class: 'rk-cap', text: '실투력 측정 불가' })));
+    box = el('div', { class: 'rk-detail god-detail' }, shot);
     li.append(box);
     img.decode().catch(() => {}).then(() => godPhotoFx(shot, r.focus, r.halo));
   }
@@ -567,7 +567,7 @@
     badge.append(el('span', { class: 'n', text: '0' }));
     li.append(el('button', { type: 'button', class: 'rk-row', 'aria-expanded': 'false', onclick: (e) => (r.img ? fixedGodDetail(li, r, e.currentTarget) : toggleDetail(li, r, e.currentTarget, true)) },
       badge,
-      el('span', { class: 'rk-who' }, el('span', { class: 'rk-name', text: r.nickname }), el('span', { class: 'rk-meta' }, el('span', { text: '신.' }))),
+      el('span', { class: 'rk-who' }, el('span', { class: 'rk-name', text: r.nickname }), el('span', { class: 'rk-meta' }, el('span', { text: '신' }))),
       el('span', { class: 'rk-cp' }, el('b', { text: '측정 불가' }))));
     li.hidden = !godOn;
     return li;
@@ -1025,7 +1025,7 @@
     shot.style.setProperty('--fx', `${(f[0] * 100).toFixed(1)}%`); shot.style.setProperty('--fy', `${(f[1] * 100).toFixed(1)}%`);
     if (halo && img && !shot.querySelector('.god-halo')) {
       const h = el('span', { class: 'god-halo', 'aria-hidden': 'true' }); shot.append(h);
-      const place = () => { const sr = shot.getBoundingClientRect(), ir = img.getBoundingClientRect(); h.style.left = `${ir.left - sr.left + ir.width * halo[0]}px`; h.style.top = `${ir.top - sr.top + ir.height * halo[1]}px`; h.style.setProperty('--hw', `${Math.max(26, ir.width * 0.09)}px`); };
+      const place = () => { const sr = shot.getBoundingClientRect(), ir = img.getBoundingClientRect(); h.style.left = `${ir.left - sr.left + ir.width * halo[0]}px`; h.style.top = `${ir.top - sr.top + ir.height * halo[1]}px`; h.style.setProperty('--hw', `${Math.max(22, ir.width * 0.075)}px`); };
       place(); addEventListener('resize', place);
     }
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) { logEgg('photo'); return; }
@@ -1494,7 +1494,7 @@
       shot,
       el('div', { class: 'rk-side' },
         cap,
-        el('p', { class: 'rk-cap', text: `실투력 ${god ? '측정 불가' : fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신` }),
+        el('p', { class: 'rk-cap', text: god ? `${ago(r.updated_at)} 갱신` : `실투력 ${fmtInt(r.cp)}, ${ago(r.updated_at)} 갱신` }),
         shareP,
         el('div', { class: 'rk-btns' },
           el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => openPlayer(r) }),
