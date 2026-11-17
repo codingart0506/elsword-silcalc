@@ -19,7 +19,7 @@
     '모험가 성장 부스팅 투명 아바타': { atk: 30, crit: 5, max: 5, spd: 5, mos: 4, limited: true },
   };
   // 동작속도(spd)는 실투력 시트에 칸이 없어서 안 씀
-  const SUIT_CELL = { crit: 'C17', max: 'C19', mos: 'C33', pol: 'C20', adapt: 'C14', dot: 'C22' };
+  const SUIT_CELL = { crit: 'C17', max: 'C19', mos: 'C33', pol: 'C20', adapt: 'C14', dot: 'C22', boss: 'C21' };
   const db = R.prepareDb(A.items);
   const optionsOf = (part) => part === '아바타5셋' ? db.fiveSetList.map(s => db.fiveSetDisplay.get(s)) : part === '한벌' ? Object.keys(SUITS) : [...(db.partCandidates.get(part) || [])];
   const short = (d) => { const t = String(d || ''); const m = t.match(/^(.+?) : (.+)$/); return m ? m[2] + ' · ' + m[1] : t; };
