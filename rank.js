@@ -398,7 +398,7 @@
   // ---------- 랭킹 목록 ----------
   // 10등씩 쪽으로 나눠 보여 줌(이전·쪽 번호·다음)
   const PAGE = 10;
-  let rkCls = '', rkPage = 0, rkBusy = false, rkTotal = null, rkTotalFor = null;
+  let rkMode = 'all', rkCls = '', rkPage = 0, rkBusy = false, rkTotal = null, rkTotalFor = null;
   // 전체 인원: 실투력 -1보다 높은 사람 수(= 모두)를 순위 조회로 셈
   // 서버 요청 줄이기: 랭킹 볼 자격(10분)·내 순위·전체 인원(1분)은 잠깐 기억해 두고 다시 묻지 않음. 목록·상세는 서버가 매번 다시 확인함
   const FRESH = 60000, CAN_FRESH = 600000, totals = {};
@@ -459,6 +459,12 @@
             : '랭킹은 랭킹에 올라간 사람만 볼 수 있어요. 계산기에서 "랭킹에 올리기"로 신청해서 승인되면 볼 수 있어요. 다른 기기에서 승인받았다면 아래 "갱신 코드 입력"에 그때 받은 갱신 코드를 넣어 주세요.';
           pager.hidden = true; rkBusy = false; return;
         }
+      }
+      // 전직별인데 아직 전직을 안 골랐으면 목록 없이 안내만(검색해서 고르면 그 전직만 보여 줌)
+      if (rkMode === 'cls' && !rkCls) {
+        list.innerHTML = ''; pager.hidden = true; $('#rankPageNo').textContent = '';
+        empty.hidden = false; empty.textContent = '위 검색 칸에 전직 이름을 적어서 고르면 그 전직 랭킹만 보여요';
+        rkBusy = false; return;
       }
       // 한 명 더 받아서 다음 쪽이 있는지 알아봄
       const { data, error } = await c.rpc('rank_list', { p_cls: rkCls || null, p_offset: rkPage * PAGE, p_limit: PAGE + 1 });
@@ -954,8 +960,9 @@
   }
   function closeOpts() { clsOpts.hidden = true; clsQ.setAttribute('aria-expanded', 'false'); clsQ.removeAttribute('aria-activedescendant'); optIdx = -1; }
   function pickCls(c) { closeOpts(); clsQ.value = c; clsQ.blur(); setMode('cls', c); }
-  clsQ.addEventListener('focus', () => { clsQ.select(); optIdx = -1; drawOpts(); });
-  clsQ.addEventListener('input', () => { optIdx = 0; drawOpts(); });
+  // 목록은 글자를 적었을 때만 펼침(↓ 키로는 전체 목록)
+  clsQ.addEventListener('focus', () => { clsQ.select(); optIdx = -1; });
+  clsQ.addEventListener('input', () => { optIdx = 0; if (nsp(clsQ.value)) drawOpts(); else closeOpts(); });
   clsQ.addEventListener('blur', () => setTimeout(() => { closeOpts(); if (rkCls) clsQ.value = rkCls; }, 150));
   clsQ.addEventListener('keydown', (e) => {
     const n = clsOpts.querySelectorAll('.rk-find-opt').length;
@@ -967,10 +974,14 @@
   function setMode(mode, cls, keepPage) {
     for (const t of $('#rankMode').querySelectorAll('.tab')) t.classList.toggle('on', t.dataset.v === mode);
     findBox.hidden = mode !== 'cls';
-    if (mode === 'cls') { rkCls = cls || rkCls || A.cls() || CLASSES[0]; clsQ.value = rkCls; }
+    rkMode = mode;
+    // 전직별: 기본 전직 없이 비워 두고, 검색해서 고른 전직만 보여 줌
+    if (mode === 'cls') { rkCls = cls || ''; clsQ.value = rkCls; }
     else rkCls = '';
-    $('#rankTitle').textContent = rkCls ? `${rkCls} 랭킹` : '실투력 랭킹';
-    return loadRank(!keepPage);
+    $('#rankTitle').textContent = rkCls ? `${rkCls} 랭킹` : mode === 'cls' ? '전직별 랭킹' : '실투력 랭킹';
+    const done = loadRank(!keepPage);
+    if (mode === 'cls' && !rkCls) setTimeout(() => clsQ.focus(), 0);
+    return done;
   }
   function showClass(cls) { setMode('cls', cls); window.scrollTo(0, 0); }
   $('#rankMode').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) setMode(b.dataset.v); });
