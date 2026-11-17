@@ -338,7 +338,10 @@
       if (st.buffOn) {
         st.buffOk = st.buffOk || {};
         for (const c of BUFF_CELLS) {
-          const all = (APP.optionsOf(c) || []).filter(x => x !== '');
+          // '미사용'·'해당사항 없음'은 고를 거리가 아님(쓸 수 있는 버프는 쓰는 쪽이 늘 실투력이 높음). 지금 값일 때만 보여 줌
+          const now = String(APP.val(c) ?? '');
+          const all = (APP.optionsOf(c) || []).filter(x => x !== '' && (!NONE_BUFF.has(String(x)) || String(x) === now));
+          if (all.filter(x => String(x) !== now).length === 0) continue; // 지금 것 말고 고를 게 없으면(어둠의 문 사용 등) 줄을 안 보임
           if (!(c in st.buffOk)) st.buffOk[c] = all.slice();
           const ok = new Set(st.buffOk[c]);
           const chips = all.map(v => {
@@ -350,7 +353,7 @@
           });
           box.append(el('div', { class: 'av-own-set' }, el('span', { class: 'av-own-name', text: buffLabel(c) }), el('div', { class: 'av-chips' }, ...chips)));
         }
-        box.append(el('p', { class: 'av-hint', text: '파티 버프와 이벤트 버프는 계산기 탭에 넣은 그대로 써요' }));
+        box.append(el('p', { class: 'av-hint', text: '켜 둔 것 중에서 실투력이 가장 높은 걸 골라요. 미사용은 따로 고르지 않아요. 파티 버프와 이벤트 버프는 계산기 탭에 넣은 그대로 써요' }));
       }
     }
     box.append(el('p', { class: 'av-hint', text: `계산기에서 가져온 값: 환경 디버프 ${c.env}, 집결지 ${c.rally}, 파티 크뎀증 ${c.party ? '켬' : '끔'}, 마에스트로 헤일로 ${c.maestro ? '있음' : '없음'}, 초목의 아트마 ${c.atma}, 각인석 크뎀 ${c.imprint}` }));
@@ -579,12 +582,13 @@
   // 버프·영약(계산기 도핑 칸): 쓸 수 있다고 고른 것 중에서 실투력이 가장 높은 조합
   // 파티 버프(J21)는 파티에 따라 정해지고, 이벤트 버프(J22)는 기간 한정이라 넣지 않음
   const BUFF_CELLS = ['J17', 'J18', 'J19', 'J20', 'J23'];
+  const NONE_BUFF = new Set(['미사용', '해당사항 없음', '미적용', '미착용']);
   const buffLabel = (c) => { const v = APP.val('I' + c.slice(1)); return v && !String(v).startsWith('#') ? String(v).trim() : c; };
   function buffOptions(c) {
     const now = String(APP.val(c) ?? '');
     const ok = (st.buffOk || {})[c];
     const all = (APP.optionsOf ? APP.optionsOf(c) : []) || [];
-    const list = ok && ok.length ? all.filter(x => ok.includes(x)) : [];
+    const list = ok && ok.length ? all.filter(x => ok.includes(x) && !NONE_BUFF.has(String(x))) : [];
     return [...new Set([now].concat(list))].filter(x => x !== '');
   }
   // 바깥 루프 후보: 쓸 수 있는 버프 조합을 지금 아바타로 먼저 재서 위에서 M개만 안쪽(아바타 탐색)으로 넘김
