@@ -215,6 +215,40 @@
     return out;
   }
   const pubOf = (src, keep) => cropKeep(blurKeep(src, keep), keep);
+  // 이미 흐리게 만든 사진에서 또렷한 칸(가리지 않은 곳)의 둘레 [x0,y0,x1,y1]. 흐린 곳은 크게 줄였다 키운 거라
+  // 이웃 픽셀끼리 밝기 차이가 아주 작고, 또렷한 칸은 글자·테두리 때문에 차이가 큼. 못 찾으면 null
+  function sharpBox(src) {
+    const W = src.width, H = src.height;
+    let cv = src;
+    if (!cv.getContext) { cv = document.createElement('canvas'); cv.width = W; cv.height = H; cv.getContext('2d').drawImage(src, 0, 0); }
+    const d = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+    const B = Math.max(8, Math.round(Math.min(W, H) / 60)), nx = Math.ceil(W / B), ny = Math.ceil(H / B);
+    const L = new Float32Array(W * H);
+    for (let i = 0, p = 0; p < W * H; p++, i += 4) L[p] = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    const cnt = new Uint32Array(nx * ny);
+    for (let y = 1; y < H; y++) {
+      const row = y * W, by = ((y / B) | 0) * nx;
+      for (let x = 1; x < W; x++) {
+        const v = L[row + x];
+        if (Math.abs(v - L[row + x - 1]) > 36 || Math.abs(v - L[row - W + x]) > 36) cnt[by + ((x / B) | 0)]++;
+      }
+    }
+    const need = B * B * 0.012, on = (i, j) => i >= 0 && j >= 0 && i < nx && j < ny && cnt[j * nx + i] >= need;
+    let a = nx, b = ny, c = -1, e = -1;
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      if (!on(i, j)) continue;
+      let k = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if ((di || dj) && on(i + di, j + dj)) k++;
+      if (k < 2) continue; // 혼자 떨어진 칸은 압축 얼룩으로 봄
+      if (i < a) a = i; if (j < b) b = j; if (i > c) c = i; if (j > e) e = j;
+    }
+    if (c < 0) return null;
+    return [Math.max(0, (a - 1) * B), Math.max(0, (b - 1) * B), Math.min(W, (c + 2) * B), Math.min(H, (e + 2) * B)];
+  }
+  function cutBox(src, [a, b, c, d]) {
+    const out = document.createElement('canvas'); out.width = c - a; out.height = d - b;
+    out.getContext('2d').drawImage(src, a, b, c - a, d - b, 0, 0, c - a, d - b);
+    return out;
+  }
   function privacyBlur(src) { const k = privacyRects(src); return k ? pubOf(src, k) : null; }
   window.SilBlur = privacyBlur;
   window.SilBlurRects = privacyRects;
@@ -901,9 +935,12 @@
     const img = el('img', { alt: `${r.nickname} 실투력 스크린샷` });
     const cap = el('p', { class: 'rk-cap', text: '사진 불러오는 중이에요' });
     const shareP = el('p', { class: 'rk-cap', text: '초월:강렬 비율 불러오는 중' });
+    // 사진은 "사진 보기"를 눌러야 받음(세팅만 보러 펼치는 사람이 많아서 저장소 전송량을 아낌)
+    const askT = el('b', { text: '사진 보기' }), askS = el('small', { text: '누르면 스크린샷을 불러와요' });
+    const ask = el('span', { class: 'rk-ask' }, askT, askS);
     const shot = el('button', { type: 'button', class: 'rk-shot', 'aria-label': '사진 크게 보기' }, img);
-    let marked = false;
-    shot.onclick = () => { if (img.src) lightbox(img.src, img.alt, marked); };
+    let marked = false, loadPic = null;
+    shot.onclick = () => { if (img.src) lightbox(img.src, img.alt, marked); else if (loadPic) loadPic(); };
     box = el('div', { class: 'rk-detail' },
       shot,
       el('div', { class: 'rk-side' },
@@ -918,12 +955,24 @@
       const c = await sb();
       await playerDetail(c, r);
       shareP.textContent = `초월:강렬 비율 ${shareText(r.inputs)}`;
-      const u = r.shot_path ? await shotUrl(c, r.shot_path) : null;
-      const bu = u ? await bakeShot(u, viewerName() + '|' + r.shot_path) : null;
-      if (bu) { marked = true; img.src = bu; }
-      else if (u) { img.src = u; shot.append(watermark()); }
-      if (u) cap.remove(); // 사진이 뜨면 안내 문구는 없앰
-      else { shot.hidden = true; cap.textContent = '사진이 아직 없어요.'; }
+      if (!r.shot_path) { shot.hidden = true; cap.textContent = '사진이 아직 없어요.'; return; }
+      let busy = false;
+      loadPic = async () => {
+        if (busy) return; busy = true;
+        askT.textContent = '사진 불러오는 중이에요'; askS.textContent = '';
+        try {
+          const u = await shotUrl(c, r.shot_path);
+          const bu = u ? await bakeShot(u, viewerName() + '|' + r.shot_path) : null;
+          if (bu) { marked = true; img.src = bu; }
+          else if (u) { img.src = u; shot.append(watermark()); }
+          if (u) { loadPic = null; ask.remove(); shot.classList.remove('ask'); shot.setAttribute('aria-label', '사진 크게 보기'); }
+          else { askT.textContent = '사진을 불러오지 못했어요'; askS.textContent = '다시 누르면 한 번 더 불러와요'; }
+        } catch (e) { askT.textContent = '사진을 불러오지 못했어요'; askS.textContent = '다시 누르면 한 번 더 불러와요'; }
+        busy = false;
+      };
+      cap.remove();
+      if (await shotCached(r.shot_path)) await loadPic();
+      if (!img.src) { shot.classList.add('ask'); shot.setAttribute('aria-label', '사진 보기'); shot.append(ask); }
     } catch (e) { cap.textContent = '사진을 불러오지 못했어요.'; }
   }
   async function openPlayer(r) {
@@ -1290,9 +1339,15 @@
   // 사진은 한 번 받으면 이 브라우저에 보관해서 다시 볼 때는 서버에서 안 받음(저장소 전송량 절약).
   // 사진 경로는 올릴 때마다 새 이름(uuid)이라 내용이 바뀌지 않음
   const SHOT_CACHE = 'silcalc-shots-v1';
+  const shotKey = (path) => 'https://shots.silcalc.invalid/' + encodeURIComponent(path);
+  // 이 브라우저에 이미 받아 둔 사진인지(받아 둔 건 서버에서 안 받으니 바로 보여 줌)
+  async function shotCached(path) {
+    if (!path) return false;
+    try { const cache = await caches.open(SHOT_CACHE); return !!(await cache.match(shotKey(path))); } catch (e) { return false; }
+  }
   async function shotBlob(c, path) {
     if (!path) return null;
-    const key = 'https://shots.silcalc.invalid/' + encodeURIComponent(path);
+    const key = shotKey(path);
     let cache = null;
     try { cache = await caches.open(SHOT_CACHE); const hit = await cache.match(key); if (hit) return await hit.blob(); } catch (e) { cache = null; }
     const u = await signed(c, path); if (!u) return null;
@@ -1612,6 +1667,45 @@
         sq.textContent = '랭킹 사진 용량 줄이기 끝';
       };
       all.append(el('div', { class: 'adm-recalc' }, sq, sqOut));
+    }
+    // 둘레를 안 자르고 올라간 랭킹 사진(예전 것): 흐린 바깥을 잘라 내 다시 저장. 가린 곳은 그대로 두고 또렷한 칸 둘레만 남김
+    // 한 번 확인한 사진은 이 브라우저에 적어 둬서 다음에 다시 받지 않음
+    const CK = 'silcalc.cropChecked';
+    let cropSeen = {}; try { cropSeen = JSON.parse(localStorage.getItem(CK) || '{}') || {}; } catch (e) { cropSeen = {}; }
+    const todo = ps.filter(p => p.shot_path && isPubPath(p.shot_path) && !cropSeen[p.shot_path]);
+    if (todo.length) {
+      const cr = el('button', { type: 'button', class: 'btn', text: `랭킹 사진 ${todo.length}장 흐린 둘레 잘라 내기` });
+      const crOut = el('p', { class: 'rank-note', text: '안 잘린 사진만 골라서 자르고, 이미 잘린 사진은 그대로 둬요.' });
+      cr.onclick = async () => {
+        cr.disabled = true; let done = 0, same = 0, before = 0, after = 0; const miss = [];
+        const mark = (path) => { cropSeen[path] = 1; try { localStorage.setItem(CK, JSON.stringify(cropSeen)); } catch (e) { /* 무시 */ } };
+        for (let i = 0; i < todo.length; i++) {
+          const p = todo[i], was = p.shot_path;
+          crOut.textContent = `확인하는 중이에요 (${i + 1}/${todo.length})`;
+          try {
+            const b = await shotBlob(c, was); if (!b) throw new Error('사진 없음');
+            const cv = await blobToCanvas(b);
+            const box = sharpBox(cv);
+            if (!box) { miss.push(p.nickname); continue; }
+            const [x0, y0, x1, y1] = box;
+            if (x1 - x0 < cv.width * 0.3 || y1 - y0 < cv.height * 0.3 || (x1 - x0) * (y1 - y0) > cv.width * cv.height * 0.85) { same++; mark(was); continue; }
+            const nb = await toPub(cutBox(cv, box));
+            if (nb.size >= b.size * 0.95) { same++; mark(was); continue; }
+            const path = `${/^update\//.test(was) ? 'update' : 'apply'}/${uuid()}_p.${extOf(nb)}`;
+            const up = await c.storage.from('shots').upload(path, nb, { contentType: nb.type || 'image/webp', upsert: false });
+            if (up.error) throw up.error;
+            const { error: e } = await c.rpc('admin_set_player_pub', { p_id: p.id, p_path: path });
+            if (e) throw e;
+            mark(was); mark(path);
+            before += b.size; after += nb.size; p.shot_path = path; done++;
+          } catch (e) { console.warn(e); miss.push(p.nickname); }
+        }
+        const kb = (n) => Math.round(n / 1024).toLocaleString('ko-KR') + 'KB';
+        crOut.textContent = (done ? `${done}장을 잘랐어요 (${kb(before)} → ${kb(after)})` : '자를 사진이 없었어요')
+          + (same ? `. 이미 잘려 있던 사진 ${same}장은 그대로 뒀어요` : '') + (miss.length ? `. 못 자른 사진: ${miss.join(', ')}` : '');
+        cr.textContent = '흐린 둘레 잘라 내기 끝';
+      };
+      all.append(el('div', { class: 'adm-recalc' }, cr, crOut));
     }
     const chQ = searchBox('닉네임 또는 전직 검색');
     const onlyHid = el('input', { type: 'checkbox' });
