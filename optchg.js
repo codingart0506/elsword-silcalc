@@ -185,12 +185,12 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
   }
   function findBoxes(src) {
     const cv = canvasOf(src), W = cv.width, H = cv.height;
-    if (W < 200 || H < 150) return null;
+    if (W < 120 || H < 60) return null;
     const d = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
     const wh = new Uint8Array(W * H);
     for (let i = 0, p = 0; i < wh.length; i++, p += 4) wh[i] = d[p] > 222 && d[p + 1] > 222 && d[p + 2] > 222 ? 1 : 0;
     // 줄마다 긴 흰 구간 → 같은 (시작, 끝)이 많이 나오는 폭이 상자 폭 후보(변환 전·후 창은 같은 줄에 두 개)
-    const minRun = Math.max(150, W * 0.1), votes = new Map();
+    const minRun = Math.max(100, W * 0.1), votes = new Map();
     for (let y = 0; y < H; y++) {
       let run = 0, st = 0; const o = y * W;
       for (let x = 0; x <= W; x++) {
@@ -223,7 +223,7 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
       for (let y = 0; y <= H; y++) {
         let n = 0;
         if (y < H) { const o = y * W; for (let x = a; x < b; x++) n += wh[o + x]; }
-        const on = y < H && n >= (b - a) * 0.45;
+        const on = y < H && n >= (b - a) * 0.3;
         if (on && y0 < 0) y0 = y;
         if (!on && y0 >= 0) { ivs.push({ y0, y1: y }); y0 = -1; }
       }
@@ -248,7 +248,7 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
         if (c0 >= 0 && (!best || last - c0 > best[1] - best[0])) best = [c0, last];
         if (!best) return false;
         const cx = (best[0] + best[1]) / 2;
-        return Math.abs(cx - w / 2) < w * 0.1 && best[1] - best[0] < w * 0.92 && best[1] - best[0] > w * 0.15;
+        return Math.abs(cx - w / 2) < w * 0.1 && best[1] - best[0] < w * 0.92 && best[1] - best[0] > w * 0.08;
       };
       const boxes = ivs.filter((v) => okBox(v.y0, v.y1));
       // 높이가 비슷하고 틈이 좁게 이어진 묶음

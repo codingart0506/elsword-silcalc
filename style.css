@@ -908,3 +908,21 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .adm-egg-list li.done .nm { color: #6d4ae8; }
 .adm-egg-seen { flex-basis: 100%; display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--sub); }
 
+/* 하의 악세 비교 카드: 지금 입력 → 이 세팅 */
+.av-vs-card .dv.same { color: var(--mute); }
+.av-vs-ch { list-style: none; margin: 0 0 10px; padding: 0; font-size: 13px; line-height: 1.45; }
+.av-vs-ch li { display: grid; grid-template-columns: 76px 1fr; gap: 8px; padding: 5px 0; border-top: 1px solid var(--line); }
+.av-vs-ch li:first-child { border-top: 0; }
+.av-vs-ch .k { color: var(--sub); word-break: keep-all; }
+.av-vs-ch .v { min-width: 0; word-break: keep-all; overflow-wrap: anywhere; }
+.av-vs-ch .from { color: var(--mute); }
+.av-vs-ch .ar { margin: 0 4px; color: var(--mute); }
+.av-vs-ch .to { color: var(--text); font-weight: 600; }
+.av-vs-st { width: 100%; margin: 0 0 6px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.av-vs-st th, .av-vs-st td { padding: 3px 0; text-align: right; font-weight: 400; }
+.av-vs-st thead th { color: var(--mute); font-size: 12px; }
+.av-vs-st tbody th { text-align: left; color: var(--sub); }
+.av-vs-st td { width: 28%; color: var(--sub); }
+.av-vs-st td.same { color: var(--mute); }
+.av-vs-st td.up { color: var(--up); font-weight: 600; }
+.av-vs-st td.down { color: var(--down); font-weight: 600; }

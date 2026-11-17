@@ -496,16 +496,27 @@
       const SHORT_B = { '영혼의 족쇄': '족쇄', '글로잉 플라워': '글플' };
       const sorted = (md) => rv.modes[md].slice().sort((x, y) => y.cp - x.cp);
       const gap = (md) => { const l = sorted(md); return { top: l[0], d: (l[0].cp - l[1].cp) / l[1].cp * 100 }; };
+      // 지금(계산기에 넣은 값) → 이 세팅: 바꾸는 것마다 [이름, 지금, 바뀐 것]
       const changesOf = (x) => {
         const out = [];
-        if (x.n !== p.bottom) out.push(`하의 악세 → ${x.n}`);
+        if (x.n !== p.bottom) out.push(['하의 악세', p.bottom || '-', x.n]);
         if (x.cand) {
           const rec2 = Object.assign({ '아바타5셋': x.cand.fiveSetDisplay, '한벌': x.suit || '' }, x.cand.partToDisplay);
-          for (const part of PARTS) { const a0 = p.worn[part] || '', b0 = rec2[part] || ''; if (b0 && a0 !== b0) out.push(`${PART_LABEL[part] || part} → ${short(b0)}`); }
+          for (const part of PARTS) { const a0 = p.worn[part] || '', b0 = rec2[part] || ''; if (b0 && a0 !== b0) out.push([PART_LABEL[part] || part, short(a0) || '-', short(b0)]); }
         }
-        for (const [c, v] of buffs) if (String(APP.val(c) ?? '') !== String(v)) out.push(`${buffLabel(c)} → ${v}`);
-        if (x.sock) for (const m of x.sock.moves) out.push(m.n > 0 ? `힘트마 ${m.n}칸 → ${m.t} 마법석` : `${m.t} 마법석 ${-m.n}칸 → 힘트마`);
+        for (const [c, v] of buffs) { const now = String(APP.val(c) ?? ''); if (now !== String(v)) out.push([buffLabel(c), now || '-', v]); }
+        if (x.sock) for (const m of x.sock.moves) out.push(m.n > 0 ? ['마법석', `힘트마 ${m.n}칸`, `${m.t} 마법석 ${m.n}칸`] : ['마법석', `${m.t} 마법석 ${-m.n}칸`, `힘트마 ${-m.n}칸`]);
         return out;
+      };
+      // 스탯: 크리·극대화·적응력은 늘, 나머지는 달라진 것만
+      const STAT_ROWS = [['C17', '크리', 1], ['C19', '극대화', 1], ['C14', '적응력', 1], ['C15', '초적응력'], ['C18', '크리티컬 데미지'], ['C20', '양극화'], ['C21', '보스 데미지'], ['C22', '추가 지속 피해'],
+        ['C33', '모든 스킬 데미지'], ['C29', '강렬 스킬 데미지'], ['C30', '초월 스킬 데미지'], ['C24', '체력 50% 초과 적'], ['C25', '체력 50% 이하 적'], ['C26', '체력 100% 이하 적'], ['C31', '강렬 스킬 쿨감'], ['C32', '초월 스킬 쿨감']];
+      const statsOf = (x) => {
+        const fin = x.sock ? x.sock.over : (x.o || {}), at = (c) => Number(c in fin ? fin[c] : inpA[c]) || 0, rows = [];
+        for (const [c, t, always] of STAT_ROWS) { const a = Number(inpA[c]) || 0, b = at(c); if (always || Math.abs(b - a) >= 0.0005) rows.push([t, pc(a), pc(b), Math.abs(b - a) < 0.0005 ? 0 : b > a ? 1 : -1]); }
+        const a11 = Number(inpA.C11) || 0, b11 = at('C11');
+        if (a11 > 0 && Math.abs(b11 / a11 - 1) >= 0.0005) rows.push(['공격력', '', `${b11 > a11 ? '+' : '−'}${Math.abs((b11 / a11 - 1) * 100).toFixed(2)}%`, b11 > a11 ? 1 : -1]);
+        return rows;
       };
       const cmpBox = el('div', { class: 'av-rival' });
       const head = el('div'), cards = el('div', { class: 'av-vs' });
@@ -518,19 +529,22 @@
         head.textContent = '';
         head.append(el('p', { class: 'av-vs-verdict' }, d < 0.3 ? `거의 같아요. ${top.n}가 ${d.toFixed(2)}% 높아요` : `${top.n}가 ${d.toFixed(2)}% 더 높아요`));
         head.append(el('p', { class: 'av-rival-note', text: matched
-          ? `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 고르고, 극대화는 ${goalM}(${pc(rv.maxT)})까지, 크리는 ${MODE_TXT[cur]}(${pc(rv.critT)} 기준) 힘트마를 바꿔 맞췄어요`
+          ? `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 고르고, 크리는 ${MODE_TXT[cur]}(${pc(rv.critT)} 기준) 힘트마를 바꿔 맞췄어요. 극대화는 ${goalM}(${pc(rv.maxT)})까지 채우는 게 더 높을 때만 채워요`
           : `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 골랐어요` }));
-        if (matched && rv.modes[cur].every(x => x.cp < base0)) head.append(el('p', { class: 'av-rival-note', text: '두 쪽 다 지금보다 낮은 건 극대화를 만극까지 채우거나 크리를 맞추느라 힘트마를 뺐기 때문이에요' }));
+        if (matched && rv.modes[cur].every(x => x.cp < base0)) head.append(el('p', { class: 'av-rival-note', text: '두 쪽 다 지금보다 낮은 건 크리를 기준에 맞추느라 힘트마를 뺐기 때문이에요' }));
         cards.textContent = '';
         const order = rv.modes[cur].slice().sort((x, y) => (x.n === p.bottom ? -1 : 0) - (y.n === p.bottom ? -1 : 0));
         for (const x of order) {
-          const win = x === top, adapt = Number('C14' in (x.o || {}) ? x.o.C14 : inpA.C14) || 0, ch = changesOf(x);
+          const win = x === top, ch = changesOf(x), sk = x.sock && x.sock.skip, same = Math.abs(x.cp - base0) < 0.5;
+          const stT = el('table', { class: 'av-vs-st' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '스탯' })), el('th', { scope: 'col', text: '지금' }), el('th', { scope: 'col', text: '이 세팅' }))),
+            el('tbody', null, ...statsOf(x).map(([t, a, b, d]) => el('tr', { class: d ? 'chg' : '' }, el('th', { scope: 'row', text: t }), el('td', { text: a }), el('td', { class: d > 0 ? 'up' : d < 0 ? 'down' : 'same', text: d ? b : '그대로' })))));
           cards.append(el('div', { class: 'av-vs-card' + (win ? ' win' : '') },
-            el('p', { class: 'nm' }, el('b', { text: x.n }), x.n === p.bottom ? el('span', { class: 'tag', text: '지금' }) : '', win ? el('span', { class: 'tag win', text: '더 높음' }) : ''),
-            el('p', { class: 'cp' }, fmt(x.cp), el('span', { class: 'dv ' + (x.cp >= base0 ? 'up' : 'down'), text: `지금보다 ${vsNow(x.cp)}` })),
-            el('p', { class: 'st', text: `크리 ${pc(x.crit)} · 극대화 ${pc(x.max)} · 적응력 ${pc(adapt)}` }),
-            el('p', { class: 'ch-h', text: ch.length ? '이렇게 바꿔요' : '지금 그대로예요' }),
-            ch.length ? el('ul', { class: 'ch' }, ...ch.map(t => el('li', { text: t }))) : '',
+            el('p', { class: 'nm' }, el('b', { text: x.n }), x.n === p.bottom ? el('span', { class: 'tag', text: '지금 낀 것' }) : '', win ? el('span', { class: 'tag win', text: '더 높음' }) : ''),
+            el('p', { class: 'cp' }, fmt(x.cp), el('span', { class: 'dv ' + (same ? 'same' : x.cp > base0 ? 'up' : 'down'), text: same ? '지금과 같음' : `지금보다 ${vsNow(x.cp)}` })),
+            el('p', { class: 'ch-h', text: ch.length ? '지금 입력한 것에서 바꾸는 것' : '지금 입력한 그대로예요' }),
+            ch.length ? el('ul', { class: 'av-vs-ch' }, ...ch.map(([t, a, b]) => el('li', null, el('span', { class: 'k', text: t }), el('span', { class: 'v' }, el('span', { class: 'from', text: a }), el('span', { class: 'ar', 'aria-hidden': 'true', text: '→' }), el('span', { class: 'sr', text: '에서 ' }), el('span', { class: 'to', text: b }))))) : '',
+            el('p', { class: 'ch-h', text: '스탯 변화' }), stT,
+            sk ? el('p', { class: 'av-rival-note', text: `극대화는 만극(${pc(sk.T)})까지 힘트마 ${sk.need - sk.used}칸을 더 바꿔야 해요. 바꾸면 실투력이 ${((1 - sk.cpFill / sk.cpKeep) * 100).toFixed(2)}% 줄어서 안 채웠어요` }) : '',
             x.sock && x.sock.short ? el('p', { class: 'av-rival-note', text: '힘트마를 다 빼도 기준 크리·극대에 못 미쳐요' }) : '',
             x.adaptShort ? el('p', { class: 'av-rival-note', text: `적응력이 상한에 ${pc(x.adaptShort)} 모자라요. 다른 악세로 채울 수 있으면 최대 +${(x.adaptGain * 100).toFixed(2)}%(그 악세에서 잃는 것 빼기 전)` }) : ''));
         }
@@ -691,10 +705,10 @@
     const T = Number(inp0.C17) || 0, TM = capM || Number(inp0.C19) || 0;
     const canMatch = !!APP.sockMatch && (T > 0 || TM > 0);
     // ceil: 크리·극대를 지금 값 이상으로 맞춤 / near: 지금 값에 가장 가깝게(마법석을 덜 바꾸고, 조금 모자랄 수 있음)
-    // 극대화는 늘 만극 이상(ceil). 크리만 세 가지로: 만크 지킴(ceil) / 가장 가깝게(near) / 살짝 모자라게(floor, 마법석 한 칸 덜)
+    // 극대화는 만극까지 채우는 것과 덜 채우는 것 중 실투력이 높은 쪽(best: 조금 모자랄 때 힘트마를 빼면 손해일 수 있어서). 크리는 세 가지로: 지금 크리 이상(ceil) / 가장 가깝게(near) / 살짝 모자라게(floor, 마법석 한 칸 덜)
     const MODES = canMatch ? ['ceil', 'near', 'floor'] : ['plain'];
     const measure = (o, md) => {
-      if (md !== 'plain') { const sk = APP.sockMatch(o, { C17: T, C19: TM, modeC: md, modeM: 'ceil' }); if (sk && sk.cp > 0) return { cp: sk.cp, sock: sk, crit: Number(sk.over.C17) || 0, max: Number(sk.over.C19) || 0, o }; }
+      if (md !== 'plain') { const sk = APP.sockMatch(o, { C17: T, C19: TM, modeC: md, modeM: 'best' }); if (sk && sk.cp > 0) return { cp: sk.cp, sock: sk, crit: Number(sk.over.C17) || 0, max: Number(sk.over.C19) || 0, o }; }
       return { cp: APP.cpWith(o), crit: Number('C17' in o ? o.C17 : inp0.C17) || 0, max: Number('C19' in o ? o.C19 : inp0.C19) || 0, o };
     };
     const pickSuits = (bn) => {
@@ -709,6 +723,11 @@
     const toS = (c) => Object.assign({ '아바타5셋': c.fiveSetDisplay || '' }, c.partToDisplay);
     const W = {}; for (const pt of ['아바타5셋'].concat(R.ALL_PARTS)) if (worn[pt]) W[pt] = worn[pt];
     const out = {}; for (const md of MODES) out[md] = [];
+    // 지금 입은 아바타 그대로도 후보로 넣음(지금 세팅이 목표 쿨감을 채울 때만). 그래야 지금 낀 하의 악세 쪽이 지금보다 낮게 나오지 않음
+    const curCool = Number(curStats()['쿨감']) || 0, CT = Number(r.coolTarget) || 0;
+    const coolOkNow = !(CT > 0) || (st.o.coolAtLeast === false ? Math.abs(curCool - CT) <= 0.005 : curCool >= CT - 0.005);
+    const candW = { fiveSetDisplay: worn['아바타5셋'] || '', partToDisplay: {} };
+    for (const pt of R.ALL_PARTS) if (worn[pt]) candW.partToDisplay[pt] = worn[pt];
     for (const bn of Object.keys(BOTTOMS)) {
       const suits = pickSuits(bn);
       // 한 세팅(아바타 후보 c)에서 한벌마다 재고, 방식마다 가장 높은 것
@@ -723,6 +742,7 @@
         const pol = polish(r, worn, base, ctx, starts.concat([W]), best[MODES[0]].suit, bn);
         if (pol) { const pr = evalC(pol, MODES); for (const md of MODES) if (pr[md] && (!best[md] || pr[md].cp > best[md].cp + 0.5)) best[md] = pr[md]; }
       } catch (e) { console.error(e); }
+      if (coolOkNow) try { const xw = evalC(candW, MODES); for (const md of MODES) if (xw[md] && xw[md].cp > 0 && (!best[md] || xw[md].cp >= best[md].cp - 0.5)) best[md] = xw[md]; } catch (e) { console.error(e); }
       // 마법석으로 크리·극대를 맞춘 값으로 아바타 악세를 한 칸씩 더 바꿔 봄(모자란 적응력을 다른 악세로 채우는 경우 등)
       for (const md of MODES) if (best[md] && md !== 'plain') {
         try {

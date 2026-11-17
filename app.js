@@ -765,7 +765,9 @@
       $('.drop-sub').textContent = 'PC에서 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 찍은 사진이면 한 장으로 다 채워요';
       document.querySelector('label[for=fileIn]').textContent = '사진 고르기';
     }
-    $('#fileIn').onchange = async (e) => { const f = e.target.files[0]; if (f) showShot(await O.imageFromBlob(f)); e.target.value = ''; };
+    // 옵션 변환 창 사진이면 옵션 변환 탭으로(붙여넣기·파일 열기·끌어놓기 모두)
+    const takeShot = (img) => { const OC = window.SilOptChg; if (OC && OC.claim && OC.claim(img)) return; showShot(img); };
+    $('#fileIn').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) takeShot(await O.imageFromBlob(f)); };
     document.addEventListener('paste', async (e) => {
       if (document.body.classList.contains('view-avatar')) return; // 아바타 탭에서는 아바타 인식으로
       const it = [...(e.clipboardData ? e.clipboardData.items : [])].find(i => i.type.startsWith('image/'));
@@ -781,7 +783,7 @@
     const card = $('#ocrCard');
     card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('drop-on'); });
     card.addEventListener('dragleave', () => card.classList.remove('drop-on'));
-    card.addEventListener('drop', async (e) => { e.preventDefault(); card.classList.remove('drop-on'); const f = [...e.dataTransfer.files].find(f => f.type.startsWith('image/')); if (f) showShot(await O.imageFromBlob(f)); });
+    card.addEventListener('drop', async (e) => { e.preventDefault(); card.classList.remove('drop-on'); const f = [...e.dataTransfer.files].find(f => f.type.startsWith('image/')); if (f) takeShot(await O.imageFromBlob(f)); });
     $('#btnOcr').onclick = runOcr;
     $('#btnShotX').onclick = clearShot;
     $('#btnApply').onclick = applyOcr;
@@ -1432,7 +1434,7 @@
     // 옵션마다 맞추는 방식: ceil = 기준 이상 / near = 기준에 가장 가깝게 / floor = 기준보다 마법석 한 칸만큼 모자라게
     const r6 = (x) => Math.round(x * 1e6) / 1e6, bStep = val('boss') / 100;
     const modeOf = (c) => (tgt || {})[c === 'C17' ? 'modeC' : 'modeM'] || (tgt || {}).mode || 'ceil';
-    let boss = Number(src.C21) || 0, bossLeft = have('boss'), short = false;
+    let boss = Number(src.C21) || 0, bossLeft = have('boss'), short = false, skip = null;
     const moves = [];
     for (const [c, k, toRaw, toWin] of [['C17', 'crit', SOCK_CI, SOCK_CW], ['C19', 'max', SOCK_MI, SOCK_MW]]) {
       const T = Number((tgt || {})[c]) || 0, step = val(k) / 100;
@@ -1450,6 +1452,14 @@
         const alt = n - 1, dA = Math.abs(win(alt) - T), dN = Math.abs(win(n) - T);
         if (dA < dN - 1e-6 || (Math.abs(dA - dN) <= 1e-6 && Math.abs(alt) < Math.abs(n))) n = alt;
       }
+      // best: 기준까지 채우는 것(n칸)과 덜 채우는 것(0~n−1칸)을 다 재서 실투력이 가장 높은 쪽. 기준에 조금 모자랄 때 힘트마를 빼면 손해일 수 있어서
+      if (md === 'best' && n > 0) {
+        const at = (m) => { const t = Object.assign({}, o, { [c]: r6(win(m)), C21: r6(Math.max(0, boss - m * bStep)) }); return cpWith(t); };
+        let bn = n, bv = at(n);
+        for (let m = n - 1; m >= 0; m--) { const v = at(m); if (v > bv + 1e-6) { bv = v; bn = m; } }
+        if (bn < n) skip = { k, t: (SOCK.find(x => x.k === k) || {}).t || k, need: n, used: bn, T, at: win(bn), cpFill: at(n), cpKeep: bv };
+        n = bn;
+      }
       if (win(n) < T - 1e-4 && md === 'ceil') short = true;
       if (n > 0) bossLeft -= n;
       boss -= n * bStep;
@@ -1457,7 +1467,7 @@
       o[c] = r6(win(n));
     }
     o.C21 = r6(Math.max(0, boss));
-    return { over: o, cp: cpWith(o), moves, short, counted };
+    return { over: o, cp: cpWith(o), moves, short, counted, skip };
   }
   function renderSock() {
     const card = $('#sockCard'); if (!card) return;
