@@ -490,10 +490,10 @@
     if (rv && rv.length > 1) {
       // 하의 악세마다 아바타·한벌을 따로 골라 본 최고 세팅끼리 비교
       const srt = rv.slice().sort((x, y) => y.cp - x.cp), top = srt[0];
-      const withSock = srt.every(x => x.sock);
+      const withSock = srt.every(x => x.sock), pc = (v) => `${Math.round(v * 1000) / 10}%`;
       const cmpBox = el('div', { class: 'av-rival' }, el('p', { class: 'av-rival-h' }, el('b', { text: `하의 악세는 ${top.n}가 더 높아요` }),
-        el('span', { text: withSock ? ` 크리를 지금 크리(${Math.round(rv.critT * 1000) / 10}%)에 맞춰 놓고 비교했어요. 하의 악세마다 아바타·한벌을 맞추고, 크리는 소켓을 가장 적게 써서 맞춘 뒤 남는 소켓은 실투력이 가장 오르게 나눴어요` : ' 하의 악세마다 아바타·한벌을 따로 맞춰 본 최고 세팅이에요' })));
-      const sockTxt = (x) => { const k = x.sock; if (!k) return ''; const ch = k.names.map((nm, i) => k.best[i] !== k.cur[i] ? `${nm} ${k.cur[i]}→${k.best[i]}칸` : '').filter(Boolean); return (ch.length ? '소켓 ' + ch.join(', ') : '소켓 그대로') + (k.critOk === false ? ' (소켓을 다 크리에 넣어도 지금 크리에 못 미쳐요)' : ''); };
+        el('span', { text: withSock ? ` 크리·극대화를 지금 값(크리 ${pc(rv.critT)}, 극대화 ${pc(rv.maxT)})에 맞춰 놓고 비교했어요. 모자라면 힘트마(보스 데미지 마법석)를 빼고 크리·극대 마법석을 넣고, 넘치면 그만큼 힘트마로 바꿔서 쟀어요${srt[0].sock.counted ? '. 소켓 배분 최적화에 넣은 칸 수 안에서만 바꿨어요' : ''}` : ' 하의 악세마다 아바타·한벌을 따로 맞춰 본 최고 세팅이에요' })));
+      const sockTxt = (x) => { const k = x.sock; if (!k) return ''; const ch = k.moves.map(m => m.n > 0 ? `힘트마 ${m.n}칸 → ${m.t} 마법석` : `${m.t} 마법석 ${-m.n}칸 → 힘트마`); return `극대화 ${pc(x.max)} · ` + (ch.length ? ch.join(', ') : '마법석 그대로') + (k.short ? ' (힘트마를 다 빼도 지금 값에 못 미쳐요)' : ''); };
       for (const x of srt) {
         const lose = x !== top, pct = lose ? ` (−${((top.cp - x.cp) / top.cp * 100).toFixed(2)}%)` : '';
         const line = el('p', { class: 'av-rival-row' + (lose ? '' : ' win') }, el('span', { class: 'n' }, `${x.n} + ${x.suit || '한벌 없음'}`, x.crit > 0 ? el('small', { text: ` 크리 ${Math.round(x.crit * 1000) / 10}%` }) : ''), el('b', { text: fmt(x.cp) }), el('span', { class: 'p', text: pct }));
@@ -506,7 +506,6 @@
         for (const part of diff) tb2.append(el('tr', { class: 'chg' }, el('th', { scope: 'row', text: PART_LABEL[part] || part }), el('td', { class: 'to', text: short(rec2[part] || '') || '-' })));
         cmpBox.append(el('details', { class: 'av-rival-more' }, el('summary', null, line), sNote, el('p', { class: 'av-rival-note', text: `추천과 다른 부위 ${diff.length}곳` }), el('table', { class: 'av-table' }, tb2)));
       }
-      if (!withSock) cmpBox.append(el('p', { class: 'av-rival-note tip', text: '계산기 탭 \'소켓 배분 최적화\'에 바꿀 수 있는 소켓 칸 수를 넣으면, 세팅마다 소켓을 다시 나눠 크리를 맞춘 뒤 비교해요' }));
       box.append(cmpBox);
     } else if (p.bottom && BOTTOMS[p.bottom] && APP.cpWith) {
       const cmp = Object.keys(BOTTOMS).map(n => ({ n, cp: APP.cpWith(bottomOver({}, p.bottom, n)) }));
@@ -672,13 +671,13 @@
       out.push({ n: bn, cp: best.cp, suit: best.suit, cand: best.c, crit: best.crit, o: best.o });
     }
     if (out.length < 2) return null;
-    // 크리를 지금 크리에 맞춰 놓고 비교: 계산기 탭 소켓 배분 최적화에 넣은 소켓을 세팅마다 다시 나눔.
-    // 크리 칸은 지금 크리에 닿는 가장 적은 칸 수로 묶고, 남는 칸은 실투력이 가장 오르게 나눔
-    const T = Number(APP.inputs().C17) || 0;
-    if (APP.sockSolve && T > 0) for (const x of out) {
-      const sk = x.o ? APP.sockSolve(x.o, { critMin: T }) : null;
-      if (sk && sk.cp > 0) { x.sock = sk; x.cp0 = x.cp; x.cp = sk.cp; x.crit = Number(sk.over.C17) || x.crit; }
+    // 크리·극대화를 지금 값에 맞춰 놓고 비교: 모자라면 힘트마(보스 데미지 마법석)를 빼고 크리·극대 마법석을 넣고, 넘치면 힘트마로 되돌림
+    const inp0 = APP.inputs(), T = Number(inp0.C17) || 0, TM = Number(inp0.C19) || 0;
+    if (APP.sockMatch && (T > 0 || TM > 0)) for (const x of out) {
+      const sk = x.o ? APP.sockMatch(x.o, { C17: T, C19: TM }) : null;
+      if (sk && sk.cp > 0) { x.sock = sk; x.cp0 = x.cp; x.cp = sk.cp; x.crit = Number(sk.over.C17) || x.crit; x.max = Number(sk.over.C19) || 0; }
     }
+    out.maxT = TM;
     out.critT = T;
     return out;
   }

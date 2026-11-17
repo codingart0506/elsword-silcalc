@@ -1258,6 +1258,7 @@
     // 이벤트 버프(펀치킹·할로윈 등 기간 한정)도 '미적용'이 아니면 못 올림
     // 고급 설정의 추피 보정·가동률 DPS 전환도 랭킹에는 못 올림
     // 소켓 배분 최적화를 다른 세팅에서 돌림(계산기 탭에 바꿀 수 있는 소켓 칸을 넣었을 때만)
+    sockMatch: (extra, tgt) => sockMatch(extra || {}, tgt || {}),
     sockSolve: (extra, opt) => { const r = sockSolve(extra || {}, opt); return r && !r.err ? { cp: r.cp, now: r.now, best: r.best.slice(), cur: r.cur.slice(), N: r.N, over: Object.assign({}, extra || {}, r.over), names: SOCK.map(o => o.t), critOk: r.critOk } : null; },
     rankBuffs: () => Object.keys(EXTRA_BUFF).filter(a => inputs[a] === true).map(a => EXTRA_BUFF[a])
       .concat((inputs.J22 ?? '미적용') !== '미적용' ? [`이벤트 버프(${inputs.J22})`] : [])
@@ -1418,6 +1419,32 @@
     let [best, bestV] = polish(a);
     if (lock < 0) { const [b2, v2] = polish(cur); if (v2 > bestV) { best = b2; bestV = v2; } }
     return { cur, best, now, cp: bestV, N, evals: memo.size, over: over(best), critOk };
+  }
+  // 크리·극대화를 목표값에 맞추기: 모자라면 힘트마(보스 데미지 마법석)를 빼고 그 옵션 마법석을 넣고, 넘치면 그만큼 힘트마로 되돌림.
+  // 보통 크리·극대가 모자랄 때 힘트마를 빼서 맞추니 그 방식대로 잼. 소켓 배분 최적화에 칸 수를 넣었으면 그 칸 수 안에서만 바꿈
+  function sockMatch(extra, tgt) {
+    const cfg = sockCfg(), val = (k) => Number(cfg.v[k] ?? (SOCK.find(o => o.k === k) || {}).v) || 0;
+    const counted = SOCK.some(o => Number(cfg.n[o.k]) > 0), have = (k) => counted ? Math.max(0, Math.round(Number(cfg.n[k]) || 0)) : Infinity;
+    const src = Object.assign({}, inputs, extra || {}), o = Object.assign({}, extra || {});
+    const r6 = (x) => Math.round(x * 1e6) / 1e6, bStep = val('boss') / 100;
+    let boss = Number(src.C21) || 0, bossLeft = have('boss'), short = false;
+    const moves = [];
+    for (const [c, k, toRaw, toWin] of [['C17', 'crit', SOCK_CI, SOCK_CW], ['C19', 'max', SOCK_MI, SOCK_MW]]) {
+      const T = Number((tgt || {})[c]) || 0, step = val(k) / 100;
+      if (!(T > 0) || !(step > 0)) continue;
+      let raw = toRaw(Number(src[c]) || 0), n = 0;
+      if (toWin(raw) < T - 1e-4) {
+        while (toWin(raw) < T - 1e-4 && bossLeft > 0 && n < 30) { raw += step; boss -= bStep; bossLeft--; n++; }
+        if (toWin(raw) < T - 1e-4) short = true;
+      } else {
+        let left = have(k);
+        while (left > 0 && n > -30 && toWin(raw - step) >= T - 1e-4) { raw -= step; boss += bStep; left--; n--; }
+      }
+      if (n) moves.push({ k, t: (SOCK.find(x => x.k === k) || {}).t || k, n });
+      o[c] = r6(toWin(Math.max(0, raw)));
+    }
+    o.C21 = r6(Math.max(0, boss));
+    return { over: o, cp: cpWith(o), moves, short, counted };
   }
   function renderSock() {
     const card = $('#sockCard'); if (!card) return;
