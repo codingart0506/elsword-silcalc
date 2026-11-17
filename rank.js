@@ -546,6 +546,7 @@
     btnEl.setAttribute('aria-expanded', String(open));
     let box = li.querySelector('.rk-detail');
     if (!open) { if (box) box.hidden = true; return; }
+    logEgg('photo');
     if (box) { box.hidden = false; godPhotoFx(box.querySelector('.rk-shot'), r.focus); return; }
     const img = el('img', { alt: `${r.nickname} 스크린샷`, src: r.img });
     const shot = el('button', { type: 'button', class: 'rk-shot', 'aria-label': '사진 크게 보기' }, img);
@@ -620,31 +621,159 @@
     document.body.append(fx);
     setTimeout(() => { fx.remove(); shot.classList.remove('god-reveal'); }, 2200);
   }
-  // 강림 연출: 화면이 살짝 어두워지고, 위에서 빛기둥이 내려와 신 줄에 닿으면 빛가루가 피어오르고 후광이 내려앉음. 1~3위 왕관은 고개를 숙임
+  // 강림 연출(이스터에그라 화면 전체를 어둡게 깔고 크게). 누를 때마다 다섯 가지 중 하나가 랜덤(같은 건 연달아 안 나옴)
+  //  light: 빛기둥·빛살·충격파 / thunder: 번개 강타 / clouds: 구름이 갈라지고 깃털 / glitch: 차원 균열 / slam: 위에서 쿵 착지
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function shake(delay, hard) {
+    const card = $('#rankView'); card.style.setProperty('--sd', `${delay}s`);
+    card.classList.remove('god-shake', 'god-shake-hard'); void card.offsetWidth; card.classList.add(hard ? 'god-shake-hard' : 'god-shake');
+    setTimeout(() => card.classList.remove('god-shake', 'god-shake-hard'), (delay + 0.9) * 1000);
+  }
+  function ringAt(fx, x, y, cls, delay) {
+    const g = el('div', { class: 'god-ring' + (cls ? ' ' + cls : '') }); g.style.left = `${x}px`; g.style.top = `${y}px`;
+    if (delay != null) g.style.animationDelay = `${delay}s`;
+    fx.append(g);
+  }
+  function wordAt(fx, text, x, y, cls) { const w = el('div', { class: 'god-word' + (cls ? ' ' + cls : ''), text }); w.style.left = `${x}px`; w.style.top = `${y}px`; fx.append(w); }
+  const FX = {
+    light(fx, c) {
+      const bw = c.big ? 170 : 90;
+      const beam = el('div', { class: 'god-beam' }); beam.style.left = `${c.cx - bw / 2}px`; beam.style.width = `${bw}px`; beam.style.height = `${Math.max(40, c.cy)}px`;
+      rays(fx, c.cx, c.cy, c.big ? 1400 : 760);
+      fx.append(beam);
+      wordAt(fx, '강림', c.r.left + c.r.width / 2, Math.max(24, c.r.top - (c.big ? 80 : 44)));
+      rain(fx, c.big ? 50 : 22);
+      sparkles(fx, c.r, c.big ? 90 : 36, c.big);
+      shake(0.45, c.big);
+      return 2700;
+    },
+    thunder(fx, c) {
+      fx.append(el('div', { class: 'god-flash' }));
+      const W = innerWidth;
+      const bolt = (x0, delay, width) => {
+        const steps = Math.max(7, Math.round(c.cy / 38)), pts = [];
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps, jit = i && i < steps ? (Math.random() - 0.5) * (c.big ? 90 : 50) : 0;
+          pts.push(`${(x0 + (c.cx - x0) * t + jit).toFixed(1)},${(c.cy * t).toFixed(1)}`);
+        }
+        const svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('class', 'god-bolt'); svg.setAttribute('width', W); svg.setAttribute('height', Math.ceil(c.cy + 20));
+        svg.style.animationDelay = `${delay}s`;
+        const pl = document.createElementNS(SVGNS, 'polyline'); pl.setAttribute('points', pts.join(' ')); pl.setAttribute('stroke-width', width);
+        svg.append(pl);
+        // 갈래 하나
+        const k = 2 + Math.floor(Math.random() * (steps - 3)), [bx, by] = pts[k].split(',').map(Number), br = [`${bx},${by}`];
+        let x = bx, y = by; for (let i = 0; i < 4; i++) { x += (Math.random() < 0.5 ? -1 : 1) * (14 + Math.random() * 26); y += 18 + Math.random() * 22; br.push(`${x.toFixed(1)},${y.toFixed(1)}`); }
+        const pb = document.createElementNS(SVGNS, 'polyline'); pb.setAttribute('points', br.join(' ')); pb.setAttribute('stroke-width', width * 0.55);
+        svg.append(pb);
+        return svg;
+      };
+      fx.append(bolt(c.cx + (Math.random() - 0.5) * 220, 0.28, c.big ? 6 : 4), bolt(c.cx + (Math.random() - 0.5) * 320, 0.62, c.big ? 4 : 3));
+      if (c.big) fx.append(bolt(c.cx + (Math.random() - 0.5) * 500, 0.95, 3));
+      ringAt(fx, c.cx, c.cy, 'zap', 0.3); ringAt(fx, c.cx, c.cy, 'zap', 0.64);
+      sparkles(fx, c.r, c.big ? 70 : 30, c.big);
+      wordAt(fx, '천벌', c.r.left + c.r.width / 2, Math.max(24, c.r.top - (c.big ? 80 : 44)), 'zap');
+      shake(0.3, true);
+      return 2500;
+    },
+    clouds(fx, c) {
+      fx.append(el('div', { class: 'god-glow' }));
+      const h = c.r.height * (c.big ? 4.2 : 3.4), top = c.cy - h / 2, half = c.r.width / 2;
+      for (const side of ['l', 'r']) {
+        const d = el('div', { class: 'god-cloud ' + side });
+        d.style.top = `${top}px`; d.style.height = `${h}px`; d.style.width = `${half + (c.big ? 220 : 90)}px`;
+        d.style.left = side === 'l' ? `${c.r.left - (c.big ? 200 : 80)}px` : `${c.r.left + half - 20}px`;
+        fx.append(d);
+      }
+      rays(fx, c.r.left + half, c.cy, c.big ? 1300 : 700);
+      feathers(fx, c.big ? 34 : 16);
+      wordAt(fx, '강림', c.r.left + half, Math.max(24, c.r.top - (c.big ? 80 : 44)), 'soft');
+      return 4600;
+    },
+    glitch(fx, c) {
+      fx.append(el('div', { class: 'god-scan' }));
+      const W = innerWidth, pts = [];
+      for (let x = 0; x <= W + 30; x += 30) pts.push(`${x},${(c.cy + (Math.random() - 0.5) * (c.big ? 34 : 22)).toFixed(1)}`);
+      const svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('class', 'god-crack'); svg.setAttribute('width', W); svg.setAttribute('height', innerHeight);
+      const pl = document.createElementNS(SVGNS, 'polyline'); pl.setAttribute('points', pts.join(' ')); svg.append(pl); fx.append(svg);
+      const cols = ['#a78bfa', '#22d3ee', '#f472b6', '#fde68a', '#ffffff'];
+      for (let i = 0; i < (c.big ? 90 : 40); i++) {
+        const q = el('span', { class: 'god-px' }), sz = 4 + Math.floor(Math.random() * (c.big ? 12 : 8));
+        q.style.left = `${c.r.left - 30 + Math.random() * (c.r.width + 60)}px`; q.style.top = `${c.r.top - 40 + Math.random() * (c.r.height + 80)}px`;
+        q.style.width = q.style.height = `${sz}px`; q.style.background = cols[i % cols.length];
+        q.style.animationDelay = `${(Math.random() * 0.8).toFixed(2)}s`;
+        fx.append(q);
+      }
+      wordAt(fx, 'ERROR: 측정 불가', c.r.left + c.r.width / 2, Math.max(24, c.r.top - (c.big ? 70 : 40)), 'glitch');
+      const card = $('#rankView'); card.classList.add('god-jitter'); setTimeout(() => card.classList.remove('god-jitter'), 1200);
+      return 2200;
+    },
+    slam(fx, c) {
+      fx.append(el('div', { class: 'god-impact' }));
+      const n = c.big ? 18 : 10;
+      for (let i = 0; i < n; i++) {
+        const left = i % 2 === 0, d = el('span', { class: 'god-dust' }), sz = (c.big ? 40 : 26) + Math.random() * (c.big ? 50 : 26);
+        d.style.width = d.style.height = `${sz}px`;
+        d.style.left = `${(left ? c.r.left + 10 : c.r.right - 10) - sz / 2}px`; d.style.top = `${c.r.bottom - sz / 2}px`;
+        d.style.setProperty('--dx', `${(left ? -1 : 1) * (40 + Math.random() * (c.big ? 220 : 90))}px`); d.style.setProperty('--dy', `${-10 - Math.random() * 40}px`);
+        d.style.animationDelay = `${(0.5 + Math.random() * 0.12).toFixed(2)}s`;
+        fx.append(d);
+      }
+      for (let i = 0; i < (c.big ? 40 : 18); i++) {
+        const q = el('span', { class: 'god-rock' });
+        q.style.left = `${c.r.left + Math.random() * c.r.width}px`; q.style.top = `${c.r.bottom - 4}px`;
+        q.style.setProperty('--dx', `${Math.round((Math.random() - 0.5) * (c.big ? 400 : 180))}px`); q.style.setProperty('--up', `${-40 - Math.round(Math.random() * (c.big ? 160 : 80))}px`);
+        q.style.animationDelay = `${(0.5 + Math.random() * 0.08).toFixed(2)}s`;
+        fx.append(q);
+      }
+      ringAt(fx, c.r.left + c.r.width / 2, c.r.bottom, 'slam', 0.5);
+      wordAt(fx, '쿵', c.r.right - (c.big ? 90 : 46), Math.max(24, c.r.top - (c.big ? 64 : 34)), 'slam');
+      shake(0.5, true);
+      $('#rankList').classList.add('pushed');
+      return 2400;
+    },
+  };
+  // 떨어지는 깃털(좌우로 흔들리며)
+  function feathers(fx, n) {
+    const W = innerWidth, H = innerHeight;
+    for (let i = 0; i < n; i++) {
+      const f = el('span', { class: 'god-feather' });
+      f.style.left = `${Math.round(Math.random() * W)}px`;
+      f.style.setProperty('--fall', `${Math.round(H * (0.55 + Math.random() * 0.45))}px`); f.style.setProperty('--sx', `${Math.round(18 + Math.random() * 40)}px`);
+      f.style.animationDuration = `${(2.4 + Math.random() * 1.2).toFixed(2)}s`; f.style.animationDelay = `${(0.3 + Math.random() * 0.8).toFixed(2)}s`;
+      fx.append(f);
+    }
+  }
+  const FX_KINDS = Object.keys(FX);
+  let lastFx = null;
   function godFx(li) {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const pool = FX_KINDS.filter((k) => k !== lastFx), kind = FX[window.__godFx] ? window.__godFx : pool[Math.floor(Math.random() * pool.length)];
+    lastFx = kind;
     const r = li.getBoundingClientRect(), b = li.querySelector('.rk-god-no').getBoundingClientRect();
-    const cx = b.left + b.width / 2, cy = r.top + r.height / 2;
-    const big = bigFx(), bw = big ? 150 : 80;
-    const fx = el('div', { class: 'god-fx' + (big ? ' big' : ''), 'aria-hidden': 'true' });
-    fx.style.setProperty('--x', `${cx}px`); fx.style.setProperty('--y', `${cy}px`);
-    const beam = el('div', { class: 'god-beam' }); beam.style.left = `${cx - bw / 2}px`; beam.style.width = `${bw}px`; beam.style.height = `${Math.max(40, cy)}px`;
-    const word = el('div', { class: 'god-word', text: '강림' }); word.style.left = `${r.left + r.width / 2}px`; word.style.top = `${Math.max(24, r.top - (big ? 78 : 36))}px`;
-    if (big) rays(fx, cx, cy, 1200);
-    fx.append(beam, word);
-    if (big) rain(fx, 40);
-    sparkles(fx, r, big ? 80 : 28, big);
-    if (big) { const card = $('#rankView'); card.classList.add('god-shake'); setTimeout(() => card.classList.remove('god-shake'), 1100); }
+    const c = { r, cx: b.left + b.width / 2, cy: r.top + r.height / 2, big: bigFx() };
+    const fx = el('div', { class: `god-fx fx-${kind}` + (c.big ? ' big' : ''), 'aria-hidden': 'true' });
+    fx.style.setProperty('--x', `${c.cx}px`); fx.style.setProperty('--y', `${c.cy}px`);
+    // 화면은 어둡게, 신 줄만 타원 조명으로 밝게
+    fx.style.setProperty('--sx', `${r.left + r.width / 2}px`); fx.style.setProperty('--sy', `${c.cy}px`);
+    fx.style.setProperty('--sw', `${Math.round(r.width * 0.62)}px`); fx.style.setProperty('--sh', `${Math.round(r.height * 1.5)}px`);
+    const life = FX[kind](fx, c);
     document.body.append(fx);
-    li.classList.add('descend');
+    li.classList.add('fx-' + kind);
     const list = $('#rankList'); list.classList.add('bow');
-    setTimeout(() => { fx.remove(); li.classList.remove('descend'); list.classList.remove('bow'); }, 2600);
+    setTimeout(() => { fx.remove(); li.classList.remove('fx-' + kind); list.classList.remove('bow', 'pushed'); }, life);
+  }
+  // 이스터에그를 본 기록(관리자 열람 기록 탭에서 누가 몇 번 봤는지 보임). 실패해도 그만
+  const eggLogged = {};
+  function logEgg(what) {
+    if (eggLogged[what] && Date.now() - eggLogged[what] < 60000) return;
+    eggLogged[what] = Date.now();
+    sb().then((c) => c.rpc('log_egg', { p_what: what })).catch(() => {});
   }
   $('#rankTitle').addEventListener('click', () => {
     const rows = [...document.querySelectorAll('#rankList > li.rk-god')];
     if (!rows.length) return;
     godOn = !godOn;
-    if (godOn) { showGods(); godFx(rows[0]); return; }
+    if (godOn) { showGods(); godFx(rows[0]); logEgg('reveal'); return; }
     // 숨길 때는 위로 스르륵 사라짐
     $('#rankTitle').classList.remove('god-on');
     rows.forEach((li) => li.classList.add('leave'));
@@ -1690,7 +1819,33 @@
     const logPager = pager((d) => { logPg += d; drawLogs(); logs.scrollIntoView({ block: 'start' }); });
     logs.append(el('div', { class: 'adm-find' }, logQ), logInfo, logBox, logPager);
     panes.logs.append(logs);
-    const kindText = (l) => l.kind === 'detail' ? `${l.target_nick || '지워진 캐릭터'} 상세` : l.kind === 'list' ? '전체 랭킹' : `${l.kind.slice(5)} 랭킹`;
+    const kindText = (l) => l.kind === 'detail' ? `${l.target_nick || '지워진 캐릭터'} 상세` : l.kind === 'list' ? '전체 랭킹'
+      : l.kind === 'egg:reveal' ? '이스터에그: 신을 불러냄' : l.kind === 'egg:photo' ? '이스터에그: 신 사진 열어 봄' : `${l.kind.slice(5)} 랭킹`;
+    // 이스터에그(신): 찾은 사람 수·횟수, 사람별 횟수와 처음 찾은 때(찾은 순서)
+    const eggBox = el('div', { class: 'adm-egg' });
+    logs.querySelector('.rank-note').after(eggBox);
+    (async () => {
+      const { data: eg, error: ee } = await c.from('view_log').select('viewer,viewer_nick,kind,at').like('kind', 'egg:%').order('at', { ascending: true }).limit(3000);
+      if (ee) { eggBox.append(el('p', { class: 'rank-note', text: '이스터에그 기록을 불러오지 못했어요. ' + errMsg(ee) })); return; }
+      const by = new Map();
+      for (const l of eg || []) {
+        const k = l.viewer || l.viewer_nick || '?';
+        const o = by.get(k) || { nick: l.viewer_nick || '지워진 캐릭터', viewer: l.viewer, reveal: 0, photo: 0, first: l.at, last: l.at };
+        if (l.kind === 'egg:photo') o.photo++; else o.reveal++;
+        o.last = l.at; by.set(k, o);
+      }
+      const people = [...by.values()], total = (eg || []).filter((l) => l.kind === 'egg:reveal').length, ph = people.filter((o) => o.photo).length;
+      eggBox.append(el('p', { class: 'adm-egg-head', text: people.length ? `이스터에그(신) 찾은 사람 ${people.length}명 · 불러낸 횟수 ${total}번 · 사진까지 연 사람 ${ph}명` : '아직 이스터에그(신)를 찾은 사람이 없어요' }));
+      const when = (t) => new Date(t).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const list = el('ol', { class: 'adm-egg-list' });
+      for (const o of people.slice(0, 100)) {
+        list.append(el('li', {},
+          el('button', { type: 'button', class: 'txt sm nm', text: o.nick, onclick: () => { logQ.value = o.nick; loadLogs(); } }),
+          el('span', { text: `신 ${o.reveal}번${o.photo ? `, 사진 ${o.photo}번` : ''}` }),
+          el('small', { text: `처음 ${when(o.first)}${o.last !== o.first ? `, 마지막 ${ago(o.last)}` : ''}` })));
+      }
+      if (people.length) eggBox.append(list);
+    })();
     const drawLogs = () => {
       logBox.textContent = '';
       const rows = only ? lg.filter(l => l.viewer === only) : lg;

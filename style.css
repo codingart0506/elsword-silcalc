@@ -372,25 +372,25 @@ body.view-rank .who, body.view-admin .who { display: none; }
 #rankTitle.has-god:not(.god-on)::after { content: '✦'; position: absolute; top: -7px; right: -13px; font-size: 11px; line-height: 1; color: #b9a4ff; -webkit-text-fill-color: #b9a4ff; opacity: 0; animation: titleStar 7s ease-in-out infinite; }
 @keyframes titleStar { 0%, 84% { opacity: 0; transform: scale(.4) rotate(0); } 90% { opacity: 1; transform: scale(1.15) rotate(45deg); } 100% { opacity: 0; transform: scale(.4) rotate(90deg); } }
 /* 강림 연출 */
-.god-fx { position: fixed; inset: 0; z-index: 80; pointer-events: none; background: radial-gradient(circle at var(--x) var(--y), rgba(255, 238, 180, .18) 0, rgba(24, 14, 56, .42) 55%); animation: godDim 2.4s ease-out forwards; }
+.god-fx { position: fixed; inset: 0; z-index: 80; pointer-events: none; overflow: hidden; --lit: rgba(255, 236, 170, .16); --dark: rgba(6, 3, 20, .84); background: radial-gradient(ellipse var(--sw, 260px) var(--sh, 90px) at var(--sx, var(--x)) var(--sy, var(--y)), var(--lit) 0, var(--lit) 55%, var(--dark) 100%); animation: godDim 2.4s ease-out forwards; }
 @keyframes godDim { 0% { opacity: 0; } 12% { opacity: 1; } 55% { opacity: 1; } 100% { opacity: 0; } }
 .god-beam { position: absolute; top: 0; width: 80px; border-radius: 0 0 40px 40px; background: linear-gradient(180deg, rgba(255, 248, 214, 0), rgba(255, 232, 150, .8) 70%, rgba(255, 255, 255, .95)); filter: blur(6px); transform-origin: 50% 0; transform: scaleY(0); animation: godBeam 1.8s cubic-bezier(.2, .7, .2, 1) forwards; }
 @keyframes godBeam { 0% { transform: scaleY(0); opacity: 1; } 25% { transform: scaleY(1); opacity: 1; } 55% { transform: scale(2.4, 1); opacity: .7; } 100% { transform: scale(3.4, 1); opacity: 0; } }
-.god-word { position: absolute; transform: translateX(-50%); font-size: 30px; font-weight: 800; letter-spacing: .6em; padding-left: .6em; color: #fff4c8; text-shadow: 0 0 18px rgba(255, 214, 90, .9), 0 0 4px rgba(124, 92, 245, .8); opacity: 0; animation: godWord 2s .35s ease-out forwards; }
+.god-word { position: absolute; white-space: nowrap; transform: translateX(-50%); font-size: 30px; font-weight: 800; letter-spacing: .6em; padding-left: .6em; color: #fff4c8; text-shadow: 0 0 18px rgba(255, 214, 90, .9), 0 0 4px rgba(124, 92, 245, .8); opacity: 0; animation: godWord 2s .35s ease-out forwards; }
 @keyframes godWord { 0% { opacity: 0; transform: translate(-50%, 8px); letter-spacing: .2em; } 30% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -6px); letter-spacing: .8em; } }
 .god-p { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #ffe58a; box-shadow: 0 0 6px 2px rgba(255, 214, 90, .8); opacity: 0; animation-name: godP; animation-timing-function: ease-out; animation-fill-mode: forwards; }
 .god-p:nth-child(3n) { background: #fff; box-shadow: 0 0 6px 2px rgba(190, 166, 255, .9); }
 @keyframes godP { 0% { opacity: 0; transform: translate(0, 0) scale(.6); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.1); } }
-.rank-list li.rk-god.descend { animation: godIn .6s .35s ease-out backwards; }
-.rank-list li.rk-god.descend .rk-row { animation: godBg 3.2s ease-in-out infinite alternate, godGlow 2s .4s ease-out; }
+.rank-list li.rk-god.fx-light { animation: godIn .6s .35s ease-out backwards; }
+.rank-list li.rk-god.fx-light .rk-row, .rank-list li.rk-god.fx-clouds .rk-row { animation: godBg 3.2s ease-in-out infinite alternate, godGlow 2s .4s ease-out; }
 @keyframes godGlow { 0% { box-shadow: 0 0 0 0 rgba(255, 214, 90, 0); } 30% { box-shadow: 0 0 0 3px rgba(255, 214, 90, .75), 0 0 32px 8px rgba(167, 139, 250, .55); } 100% { box-shadow: 0 0 0 0 rgba(255, 214, 90, 0); } }
-.rank-list li.rk-god.descend .rk-god-no svg { animation: haloDrop .9s .5s cubic-bezier(.3, 1.5, .5, 1) backwards; }
+.rank-list li.rk-god.fx-light .rk-god-no svg, .rank-list li.rk-god.fx-clouds .rk-god-no svg { animation: haloDrop .9s .5s cubic-bezier(.3, 1.5, .5, 1) backwards; }
 @keyframes haloDrop { from { transform: translateY(-28px); opacity: 0; } to { transform: none; opacity: 1; } }
 .rank-list.bow .rk-no.crown svg { transform-origin: 50% 100%; animation: crownBow 1.1s 1.1s ease-in-out; }
 @keyframes crownBow { 0%, 100% { transform: none; } 35%, 65% { transform: rotate(-20deg) translateY(2px); } }
 .rank-list li.rk-god.leave { animation: godOut .28s ease-in forwards; }
 /* PC(넓은 화면) 강림·사진 효과: 더 어둡게, 빛살·충격파 고리·빛줄기 비·큰 금빛 글자·카드 흔들림 */
-.god-fx.big { background: radial-gradient(circle at var(--x) var(--y), rgba(255, 238, 180, .24) 0, rgba(18, 10, 50, .58) 48%); }
+.god-fx.big { --dark: rgba(4, 2, 16, .9); }
 .god-rays { position: absolute; border-radius: 50%; background: repeating-conic-gradient(from 0deg, rgba(255, 236, 170, .34) 0deg 5deg, rgba(255, 236, 170, 0) 5deg 15deg); -webkit-mask: radial-gradient(circle, #000 0, rgba(0, 0, 0, .55) 32%, transparent 66%); mask: radial-gradient(circle, #000 0, rgba(0, 0, 0, .55) 32%, transparent 66%); opacity: 0; animation: godRays 2.4s .35s ease-out forwards; }
 @keyframes godRays { 0% { opacity: 0; transform: rotate(0) scale(.55); } 25% { opacity: 1; } 70% { opacity: .85; } 100% { opacity: 0; transform: rotate(45deg) scale(1.1); } }
 .god-ring { position: absolute; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; border: 3px solid rgba(255, 226, 140, .95); box-shadow: 0 0 26px rgba(255, 214, 90, .85), inset 0 0 18px rgba(196, 170, 255, .75); opacity: 0; animation: godRing 1.2s .42s ease-out forwards; }
@@ -400,18 +400,84 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .god-fx.big .god-p { width: 7px; height: 7px; }
 .god-rain { position: absolute; top: -24px; width: 2px; height: 16px; border-radius: 2px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff3c4); box-shadow: 0 0 6px rgba(255, 214, 90, .85); opacity: 0; animation-name: godRain; animation-timing-function: ease-in; animation-fill-mode: forwards; }
 @keyframes godRain { 0% { opacity: 0; transform: translateY(0); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(var(--fall)); } }
-.rank-view.god-shake { animation: godShake .55s .45s ease-out; }
+.rank-view.god-shake { animation: godShake .55s var(--sd, .45s) ease-out; }
+.rank-view.god-shake-hard { animation: godShakeHard .7s var(--sd, .45s) ease-out; }
+@keyframes godShakeHard { 0%, 100% { transform: none; } 12% { transform: translate(-6px, 8px) rotate(-.4deg); } 26% { transform: translate(7px, -6px) rotate(.4deg); } 40% { transform: translate(-5px, 4px); } 55% { transform: translate(4px, -3px); } 70% { transform: translate(-2px, 2px); } 85% { transform: translate(1px, -1px); } }
 @keyframes godShake { 0%, 100% { transform: none; } 20% { transform: translateY(4px); } 40% { transform: translateY(-3px); } 60% { transform: translateY(2px); } 80% { transform: translateY(-1px); } }
-.god-fx.soft.big { background: radial-gradient(circle at var(--x) var(--y), rgba(255, 240, 190, .3) 0, rgba(18, 10, 50, .42) 55%); }
+.god-fx.soft.big { background: radial-gradient(circle at var(--x) var(--y), rgba(255, 240, 190, .3) 0, rgba(8, 4, 26, .7) 45%); }
+/* 연출 2: 번개 강타 */
+.god-fx.fx-thunder { --lit: rgba(200, 210, 255, .12); --dark: rgba(4, 4, 18, .9); animation-duration: 2.4s; }
+.god-flash { position: absolute; inset: 0; background: #fff; opacity: 0; animation: godFlash 1.1s .26s linear forwards; }
+@keyframes godFlash { 0% { opacity: 0; } 4% { opacity: .95; } 14% { opacity: 0; } 30% { opacity: .7; } 38% { opacity: 0; } 58% { opacity: .35; } 64%, 100% { opacity: 0; } }
+.god-bolt { position: absolute; left: 0; top: 0; overflow: visible; opacity: 0; animation: godBolt .6s linear forwards; }
+.god-bolt polyline { fill: none; stroke: #fff; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 5px #c7d2fe) drop-shadow(0 0 14px #818cf8) drop-shadow(0 0 28px #7c5cf5); }
+@keyframes godBolt { 0% { opacity: 0; } 6% { opacity: 1; } 22% { opacity: .25; } 34% { opacity: 1; } 100% { opacity: 0; } }
+.god-ring.zap { border-color: rgba(199, 210, 254, .95); box-shadow: 0 0 26px rgba(129, 140, 248, .95), inset 0 0 18px rgba(255, 255, 255, .8); }
+.rank-list li.rk-god.fx-thunder { animation: godIn .2s .3s ease-out backwards; }
+.rank-list li.rk-god.fx-thunder .rk-row { animation: godBg 3.2s ease-in-out infinite alternate, godZap 1.6s .3s ease-out; }
+@keyframes godZap { 0% { box-shadow: 0 0 0 4px #fff, 0 0 50px 14px rgba(165, 180, 252, .95); filter: brightness(1.6); } 100% { box-shadow: 0 0 0 0 rgba(165, 180, 252, 0); filter: none; } }
+.god-word.zap { color: #eef2ff; text-shadow: 0 0 18px #818cf8, 0 0 4px #fff; }
+.god-fx.big .god-word.zap { background: linear-gradient(180deg, #ffffff, #c7d2fe 60%, #818cf8); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 0 20px #818cf8) drop-shadow(0 0 4px #fff); }
+/* 연출 3: 구름이 갈라지고 깃털 */
+.god-fx.fx-clouds { --lit: rgba(255, 236, 170, .24); --dark: rgba(10, 8, 34, .8); animation-duration: 4.4s; }
+.god-glow { position: absolute; inset: 0; background: radial-gradient(ellipse 60% 40% at var(--x) var(--y), rgba(255, 222, 130, .75) 0, rgba(255, 222, 130, 0) 70%); opacity: 0; animation: godGlowIn 3.6s .5s ease-out forwards; }
+@keyframes godGlowIn { 0% { opacity: 0; } 25% { opacity: 1; } 70% { opacity: .8; } 100% { opacity: 0; } }
+.god-cloud { position: absolute; filter: blur(3px) drop-shadow(0 10px 24px rgba(40, 20, 90, .5)); opacity: 0;
+  background: radial-gradient(circle at 18% 58%, #fff 0 20%, transparent 21%), radial-gradient(circle at 38% 38%, #fff 0 24%, transparent 25%), radial-gradient(circle at 60% 56%, #fbf8ff 0 26%, rgba(255, 255, 255, 0) 33%),
+    radial-gradient(circle at 82% 42%, #f2ecff 0 21%, rgba(255, 255, 255, 0) 28%), radial-gradient(circle at 50% 74%, #ffffff 0 28%, rgba(255, 255, 255, 0) 35%), radial-gradient(circle at 30% 70%, #f7f3ff 0 22%, rgba(255, 255, 255, 0) 29%); }
+.god-cloud.l { animation: cloudL 2.6s ease-in-out forwards; }
+.god-cloud.r { animation: cloudR 2.6s ease-in-out forwards; }
+@keyframes cloudL { 0% { opacity: 0; transform: translateX(14%); } 14% { opacity: 1; transform: translateX(6%); } 40% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateX(-85%) scale(1.1); } }
+@keyframes cloudR { 0% { opacity: 0; transform: translateX(-14%); } 14% { opacity: 1; transform: translateX(-6%); } 40% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateX(85%) scale(1.1); } }
+.rank-list li.rk-god.fx-clouds { animation: godIn .9s .75s ease-out backwards; }
+.god-feather { position: absolute; top: -34px; width: 10px; height: 26px; border-radius: 50% 50% 50% 50% / 65% 65% 35% 35%; background: linear-gradient(90deg, #ffffff 0 46%, #d6ccfb 47% 53%, #f6f2ff 54%); box-shadow: 0 0 10px rgba(255, 255, 255, .9); opacity: 0; animation-name: godFeather; animation-timing-function: linear; animation-fill-mode: forwards; }
+.god-fx.big .god-feather { width: 13px; height: 34px; }
+@keyframes godFeather { 0% { opacity: 0; transform: translate(0, 0) rotate(-20deg); } 10% { opacity: 1; } 25% { transform: translate(var(--sx), calc(var(--fall) * .25)) rotate(28deg); } 50% { transform: translate(calc(var(--sx) * -1), calc(var(--fall) * .5)) rotate(-26deg); } 75% { transform: translate(var(--sx), calc(var(--fall) * .75)) rotate(22deg); } 88% { opacity: .9; } 100% { opacity: 0; transform: translate(0, var(--fall)) rotate(-8deg); } }
+.god-word.soft { color: #fff8dc; }
+/* 연출 4: 차원 균열(글리치) */
+.god-fx.fx-glitch { --lit: rgba(200, 150, 255, .1); --dark: rgba(14, 4, 34, .88); animation: godDim 2.2s ease-out forwards, glitchFlicker 1s steps(1) 2; }
+@keyframes glitchFlicker { 0%, 100% { filter: none; } 10% { filter: hue-rotate(80deg) contrast(1.4); } 20% { filter: none; } 46% { filter: invert(.15) hue-rotate(-60deg); } 52% { filter: none; } }
+.god-scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .06) 0 1px, transparent 1px 3px); animation: scanMove .4s linear infinite; }
+@keyframes scanMove { to { background-position: 0 6px; } }
+.god-crack { position: absolute; left: 0; top: 0; overflow: visible; }
+.god-crack polyline { fill: none; stroke: #e9d5ff; stroke-width: 3; stroke-linejoin: miter; filter: drop-shadow(0 0 6px #c084fc) drop-shadow(0 0 16px #7c3aed); stroke-dasharray: 4000; stroke-dashoffset: 4000; animation: crackDraw 1.6s .1s ease-out forwards; }
+@keyframes crackDraw { 0% { stroke-dashoffset: 4000; opacity: 1; } 30% { stroke-dashoffset: 0; stroke-width: 3; } 45% { stroke-width: 9; opacity: 1; } 100% { stroke-dashoffset: 0; stroke-width: 1; opacity: 0; } }
+.god-px { position: absolute; opacity: 0; animation: pxBlink .9s steps(3) forwards; box-shadow: 0 0 8px currentColor; }
+@keyframes pxBlink { 0% { opacity: 0; } 20% { opacity: 1; } 40% { opacity: .2; transform: translateX(6px); } 60% { opacity: 1; transform: translateX(-4px); } 100% { opacity: 0; } }
+.god-word.glitch { font-size: 22px; font-family: ui-monospace, monospace; letter-spacing: .15em; color: #f0abfc; text-shadow: -3px 0 #f43f5e, 3px 0 #22d3ee; animation: godWord 1.8s .3s steps(6) forwards; }
+.god-fx.big .god-word.glitch { font-size: 40px; background: none; -webkit-background-clip: initial; background-clip: initial; color: #f0abfc; filter: none; }
+.rank-list li.rk-god.fx-glitch { animation: glitchIn 1s .25s steps(1, end) backwards; }
+@keyframes glitchIn { 0% { opacity: 0; } 10% { opacity: 1; clip-path: inset(0 0 70% 0); transform: translateX(-16px); filter: hue-rotate(90deg); } 20% { clip-path: inset(40% 0 30% 0); transform: translateX(14px); } 30% { clip-path: inset(10% 0 55% 0); transform: translateX(-8px); filter: hue-rotate(-70deg); } 40% { opacity: 0; } 50% { opacity: 1; clip-path: inset(60% 0 0 0); transform: translateX(10px); } 62% { clip-path: inset(0); transform: translateX(-4px); filter: none; } 76% { transform: translateX(2px); } 100% { clip-path: inset(0); transform: none; opacity: 1; } }
+.rank-list li.rk-god.fx-glitch .rk-name, .rank-list li.rk-god.fx-glitch .rk-cp b { animation: rgbSplit 1.3s .25s steps(2) forwards; }
+@keyframes rgbSplit { 0%, 80% { text-shadow: -3px 0 #f43f5e, 3px 0 #22d3ee; } 100% { text-shadow: none; } }
+.rank-view.god-jitter { animation: jitter .9s .2s steps(1); }
+@keyframes jitter { 0%, 100% { transform: none; filter: none; } 12% { transform: translate(5px, -2px) skewX(2deg); filter: hue-rotate(40deg); } 24% { transform: translate(-6px, 1px); filter: none; } 38% { transform: translate(3px, 3px) skewX(-3deg); } 52% { transform: translate(-2px, -2px); filter: saturate(2); } 66% { transform: none; filter: none; } }
+/* 연출 5: 쿵 착지 */
+.god-fx.fx-slam { --lit: rgba(255, 255, 255, .08); --dark: rgba(6, 3, 18, .8); animation-duration: 2.4s; }
+.god-impact { position: absolute; inset: 0; background: radial-gradient(circle at var(--x) var(--y), rgba(255, 255, 255, .6), rgba(255, 255, 255, 0) 40%); opacity: 0; animation: impactFlash .5s .5s ease-out forwards; }
+@keyframes impactFlash { 0% { opacity: 1; } 100% { opacity: 0; } }
+.rank-list li.rk-god.fx-slam { transform-origin: 50% 100%; animation: slamDrop .8s .08s backwards; }
+@keyframes slamDrop { 0% { opacity: 0; transform: translateY(-260px) scale(1.08); animation-timing-function: cubic-bezier(.55, 0, 1, .45); } 52% { opacity: 1; transform: translateY(0) scale(1.08, .86); animation-timing-function: ease-out; } 70% { transform: translateY(-10px) scale(.98, 1.03); } 85% { transform: translateY(0) scale(1.01, .99); } 100% { transform: none; } }
+.god-dust { position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(225, 215, 200, .95), rgba(200, 188, 170, .5) 55%, rgba(200, 188, 170, 0) 72%); opacity: 0; animation: dustOut 1.2s ease-out forwards; }
+@keyframes dustOut { 0% { opacity: 0; transform: translate(0, 0) scale(.3); } 12% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.8); } }
+.god-rock { position: absolute; width: 6px; height: 6px; border-radius: 2px; background: #c9bba5; opacity: 0; animation: rockFly 1s cubic-bezier(.2, .6, .4, 1) forwards; }
+@keyframes rockFly { 0% { opacity: 1; transform: translate(0, 0) rotate(0); } 45% { transform: translate(calc(var(--dx) * .55), var(--up)) rotate(200deg); } 100% { opacity: 0; transform: translate(var(--dx), 30px) rotate(420deg); } }
+.god-ring.slam { border-color: rgba(230, 220, 200, .9); box-shadow: 0 0 22px rgba(255, 255, 255, .6); height: 18px; margin-top: -9px; border-radius: 50%; animation-name: slamRing; }
+@keyframes slamRing { 0% { opacity: 1; transform: scale(.4, .4); } 100% { opacity: 0; transform: scale(22, 3); } }
+.god-word.slam { font-size: 44px; font-weight: 900; letter-spacing: 0; padding: 0; color: #fff; -webkit-text-stroke: 2px #6d4ae8; text-shadow: 4px 4px 0 #6d4ae8; animation: slamWord 1.3s .5s cubic-bezier(.2, 1.6, .4, 1) forwards; }
+.god-fx.big .god-word.slam { font-size: 84px; background: none; -webkit-background-clip: initial; background-clip: initial; color: #fff; filter: none; }
+@keyframes slamWord { 0% { opacity: 0; transform: translateX(-50%) scale(.2) rotate(-12deg); } 25% { opacity: 1; transform: translateX(-50%) scale(1.15) rotate(-8deg); } 70% { opacity: 1; transform: translateX(-50%) scale(1) rotate(-8deg); } 100% { opacity: 0; transform: translateX(-50%) scale(1.05) rotate(-8deg) translateY(-10px); } }
+.rank-list.pushed > li:not(.rk-god) { animation: pushDown .7s .5s ease-out; }
+@keyframes pushDown { 0%, 100% { transform: none; } 25% { transform: translateY(14px) scale(.985); } 55% { transform: translateY(-3px); } }
 /* 신 카드 사진 열 때 */
-.god-fx.soft { background: radial-gradient(circle at var(--x) var(--y), rgba(255, 240, 190, .25) 0, rgba(24, 14, 56, .2) 60%); animation-duration: 2s; }
+.god-fx.soft { background: radial-gradient(circle at var(--x) var(--y), rgba(255, 240, 190, .28) 0, rgba(10, 6, 30, .6) 50%); animation-duration: 2s; }
 .rk-shot.god-reveal { animation: godGlow 1.8s .1s ease-out; }
 .rk-shot.god-reveal img { animation: godPhotoIn 1.2s ease-out; }
 @keyframes godPhotoIn { 0% { filter: brightness(2.6) blur(10px) saturate(.2); transform: scale(1.05); } 55% { filter: brightness(1.25) blur(0) saturate(1); } 100% { filter: none; transform: none; } }
 .rk-shot.god-reveal::after { content: ''; position: absolute; inset: 0; z-index: 6; pointer-events: none; background: linear-gradient(115deg, transparent 35%, rgba(255, 246, 210, .8) 47%, rgba(200, 180, 255, .55) 53%, transparent 65%); transform: translateX(-110%); animation: godSweep 1.1s .45s ease-in-out forwards; }
 @keyframes godSweep { to { transform: translateX(110%); } }
 @keyframes godOut { to { opacity: 0; transform: translateY(-8px); } }
-@media (prefers-reduced-motion: reduce) { .rank-list li.rk-god .rk-row, .rank-list li.rk-god .rk-row::after { animation: none; } .rk-shot.god-reveal, .rk-shot.god-reveal img, .rk-shot.god-reveal::after { animation: none; } #rankTitle.god-on, #rankTitle.has-god:not(.god-on), #rankTitle.has-god:not(.god-on)::after, .rank-list li.rk-god:not([hidden]), .rank-list li.rk-god.leave { animation: none; } #rankTitle.has-god:not(.god-on) { background: none; color: inherit; } }
+@media (prefers-reduced-motion: reduce) { .rank-view.god-jitter, .rank-view.god-shake-hard, .rank-list.pushed > li, .rank-list li.rk-god .rk-row, .rank-list li.rk-god .rk-row::after { animation: none; } .rk-shot.god-reveal, .rk-shot.god-reveal img, .rk-shot.god-reveal::after { animation: none; } #rankTitle.god-on, #rankTitle.has-god:not(.god-on), #rankTitle.has-god:not(.god-on)::after, .rank-list li.rk-god:not([hidden]), .rank-list li.rk-god.leave { animation: none; } #rankTitle.has-god:not(.god-on) { background: none; color: inherit; } }
 .rk-cp { text-align: right; display: flex; flex-direction: column; }
 .rk-cp b { font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .rk-cp small { font-size: 12px; color: var(--mute); }
@@ -795,3 +861,10 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .oc-price-sub { font-size: 13px; color: var(--mute); }
 .oc-goal-hint { margin-top: 14px; line-height: 1.6; }
 .rk-god .rk-shot img { width: auto; max-width: 100%; margin: 0 auto; }
+/* 관리자: 이스터에그(신) 찾은 사람 */
+.adm-egg { margin: 8px 0 14px; padding: 12px 14px; border-radius: 12px; background: linear-gradient(100deg, #f5efff, #eef4ff 60%, #fff7e2); }
+.adm-egg-head { margin: 0; font-size: 14px; font-weight: 700; color: #5b3fd6; }
+.adm-egg-list { margin: 8px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--text); }
+.adm-egg-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.adm-egg-list .nm { padding: 0; font-weight: 700; }
+.adm-egg-list small { color: var(--mute); }
