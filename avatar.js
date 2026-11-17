@@ -426,7 +426,7 @@
     const o = st.o, { cap, bare, list } = coolChoices();
     const s = el('select', { id: 'avCoolSel' });
     s.append(el('option', { value: '0', text: '조건 없음' }));
-    for (const t of list) s.append(el('option', { value: String(t), text: `${t}%${t === bare ? ' (기본)' : ''}${t === cap ? ' (상한)' : ''}` }));
+    for (const t of list) s.append(el('option', { value: String(t), text: `${t}%${t === bare ? ' (아바타 쿨감 없이)' : ''}` }));
     const want = Number(o.cool) || 0, eff = want > 0 ? (list.find((t) => t >= want - 1e-9) ?? list[list.length - 1]) : 0;
     s.value = String(eff ?? 0);
     s.onchange = () => { o.cool = Number(s.value) || 0; save(); result = null; renderResult(); };
@@ -436,7 +436,7 @@
     if (want > 0) box.append(el('label', { class: 'av-fix' }, atLeast, el('span', { text: '이상이면 됨' })));
     const hint = $('#avCoolHint');
     if (hint) hint.textContent = want > 0
-      ? `아바타 쿨감은 5%씩이라 기본 쿨감${bare != null ? `(아바타·악세 없이 ${bare}%)` : ''}에서 5%씩 오른 값만 고를 수 있어요.`
+      ? `아바타 쿨감은 5%씩이라, 아바타 쿨감이 하나도 없을 때${bare != null ? `(${bare}%)` : ''}에서 5%씩 오른 값만 고를 수 있어요. 끝은 이 전직의 쿨감 상한(${cap}%)이에요.`
       : '조건 없음이면 쿨감까지 실투력에 넣어 가장 높은 조합을 골라요. 쿨감을 꼭 맞춰야 할 때만 골라 주세요.';
   }
   function renderResult() {
