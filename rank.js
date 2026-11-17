@@ -2271,7 +2271,9 @@
     // 한 번 확인한 사진은 이 브라우저에 적어 둬서 다음에 다시 받지 않음
     const CK = 'silcalc.cropChecked';
     let cropSeen = {}; try { cropSeen = JSON.parse(localStorage.getItem(CK) || '{}') || {}; } catch (e) { cropSeen = {}; }
-    const todo = ps.filter(p => p.shot_path && isPubPath(p.shot_path) && !cropSeen[p.shot_path]);
+    // 올릴 때부터 둘레를 잘라 올리게 된 뒤에 바뀐 사진은 이미 잘려 있으니 세지 않음(새로 승인·갱신될 때마다 다시 뜨던 문제)
+    const CROP_SINCE = Date.parse('2026-11-17T12:00:00Z');
+    const todo = ps.filter(p => p.shot_path && isPubPath(p.shot_path) && !cropSeen[p.shot_path] && !(Date.parse(p.updated_at) >= CROP_SINCE));
     if (todo.length) {
       const cr = el('button', { type: 'button', class: 'btn', text: `랭킹 사진 ${todo.length}장 흐린 둘레 잘라 내기` });
       const crOut = el('p', { class: 'rank-note', text: '안 잘린 사진만 골라서 자르고, 이미 잘린 사진은 그대로 둬요.' });
@@ -2285,7 +2287,7 @@
             const b = await shotBlob(c, was); if (!b) throw new Error('사진 없음');
             const cv = await blobToCanvas(b);
             const box = sharpBox(cv);
-            if (!box) { miss.push(p.nickname); continue; }
+            if (!box) { miss.push(p.nickname); mark(was); continue; } // 또렷한 곳을 못 찾은 사진은 다음에도 못 찾으니 다시 묻지 않음
             const [x0, y0, x1, y1] = box;
             if (x1 - x0 < cv.width * 0.3 || y1 - y0 < cv.height * 0.3 || (x1 - x0) * (y1 - y0) > cv.width * cv.height * 0.85) { same++; mark(was); continue; }
             const nb = await toPub(cutBox(cv, box));
