@@ -539,19 +539,20 @@
   // 평소엔 숨겨 두고, 랭킹 제목 글자를 누르면 제목이 영롱해지면서 1위 위에 나타남(다시 누르면 숨김)
   let gods = [], godsAt = 0, godOn = false;
   // 서버 캐릭터가 아닌 고정 신(사진은 사이트 파일). 전체 랭킹에만 보임
-  const GOD_FIXED = [{ id: 'god-ganadarap', nickname: '가나다랍', img: 'god.jpg' }];
+  // focus: 사진 속 캐릭터 위치(가로·세로 비율). 사진을 열 때 강림 원이 여기서 터짐
+  const GOD_FIXED = [{ id: 'god-ganadarap', nickname: '가나다랍', img: 'god.jpg', focus: [0.215, 0.6] }];
   function fixedGodDetail(li, r, btnEl) {
     const open = li.classList.toggle('open');
     btnEl.setAttribute('aria-expanded', String(open));
     let box = li.querySelector('.rk-detail');
     if (!open) { if (box) box.hidden = true; return; }
-    if (box) { box.hidden = false; godPhotoFx(box.querySelector('.rk-shot')); return; }
+    if (box) { box.hidden = false; godPhotoFx(box.querySelector('.rk-shot'), r.focus); return; }
     const img = el('img', { alt: `${r.nickname} 스크린샷`, src: r.img });
     const shot = el('button', { type: 'button', class: 'rk-shot', 'aria-label': '사진 크게 보기' }, img);
     shot.onclick = () => lightbox(img.src, img.alt, true);
     box = el('div', { class: 'rk-detail' }, shot, el('div', { class: 'rk-side' }, el('p', { class: 'rk-cap', text: '실투력 측정 불가' })));
     li.append(box);
-    img.decode().catch(() => {}).then(() => godPhotoFx(shot));
+    img.decode().catch(() => {}).then(() => godPhotoFx(shot, r.focus));
   }
   async function loadGods(c) {
     if (Date.now() - godsAt < FRESH) return gods;
@@ -578,23 +579,44 @@
     rows.forEach((li) => { li.hidden = !godOn; li.classList.remove('leave'); });
   }
   // 빛가루: rect 안 아래쪽에서 피어올라 흩어짐
-  function sparkles(fx, r, n) {
+  // PC(넓은 화면)는 같은 크기면 밋밋해서 효과를 크게: 빛살·충격파 고리·위에서 쏟아지는 빛줄기·카드 흔들림을 더함
+  const bigFx = () => matchMedia('(min-width: 1024px)').matches;
+  function sparkles(fx, r, n, big) {
     for (let i = 0; i < n; i++) {
       const p = el('span', { class: 'god-p' });
       p.style.left = `${r.left + 8 + Math.random() * Math.max(0, r.width - 16)}px`; p.style.top = `${r.top + r.height * (0.25 + Math.random() * 0.65)}px`;
-      p.style.setProperty('--dx', `${Math.round((Math.random() - 0.5) * 70)}px`); p.style.setProperty('--dy', `${-40 - Math.round(Math.random() * 60)}px`);
+      p.style.setProperty('--dx', `${Math.round((Math.random() - 0.5) * (big ? 260 : 70))}px`); p.style.setProperty('--dy', `${-(big ? 70 : 40) - Math.round(Math.random() * (big ? 170 : 60))}px`);
       p.style.animationDuration = `${(0.9 + Math.random() * 1.1).toFixed(2)}s`; p.style.animationDelay = `${(0.3 + Math.random() * 0.6).toFixed(2)}s`;
       fx.append(p);
     }
   }
+  function rays(fx, x, y, size) {
+    const d = el('div', { class: 'god-rays' }); d.style.left = `${x}px`; d.style.top = `${y}px`;
+    d.style.width = d.style.height = `${size}px`; d.style.margin = `${-size / 2}px 0 0 ${-size / 2}px`;
+    const g = el('div', { class: 'god-ring' }); g.style.left = `${x}px`; g.style.top = `${y}px`;
+    fx.append(d, g);
+  }
+  function rain(fx, n) {
+    const W = innerWidth, H = innerHeight;
+    for (let i = 0; i < n; i++) {
+      const p = el('span', { class: 'god-rain' });
+      p.style.left = `${Math.round(Math.random() * W)}px`; p.style.setProperty('--fall', `${Math.round(H * (0.45 + Math.random() * 0.5))}px`);
+      p.style.animationDuration = `${(1.2 + Math.random() * 1.1).toFixed(2)}s`; p.style.animationDelay = `${(0.2 + Math.random() * 1.1).toFixed(2)}s`;
+      fx.append(p);
+    }
+  }
   // 신 카드에서 사진을 열 때: 사진이 하얀 빛 속에서 서서히 또렷해지고, 빛줄기가 한 번 훑고 지나가며 테두리가 빛나고 빛가루가 피어오름
-  function godPhotoFx(shot) {
+  function godPhotoFx(shot, focus) {
     if (!shot || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     shot.classList.remove('god-reveal'); void shot.offsetWidth; shot.classList.add('god-reveal');
-    const r = shot.getBoundingClientRect();
-    const fx = el('div', { class: 'god-fx soft', 'aria-hidden': 'true' });
-    fx.style.setProperty('--x', `${r.left + r.width / 2}px`); fx.style.setProperty('--y', `${r.top + r.height / 2}px`);
-    sparkles(fx, r, 26);
+    const r = shot.getBoundingClientRect(), img = shot.querySelector('img'), ir = img ? img.getBoundingClientRect() : r;
+    const fxX = ir.left + ir.width * (focus ? focus[0] : 0.5), fxY = ir.top + ir.height * (focus ? focus[1] : 0.5);
+    const big = bigFx();
+    const fx = el('div', { class: 'god-fx soft' + (big ? ' big' : ''), 'aria-hidden': 'true' });
+    fx.style.setProperty('--x', `${fxX}px`); fx.style.setProperty('--y', `${fxY}px`);
+    if (big) { rays(fx, fxX, fxY, Math.max(600, ir.width * 1.5)); rain(fx, 24); }
+    else { const g = el('div', { class: 'god-ring' }); g.style.left = `${fxX}px`; g.style.top = `${fxY}px`; fx.append(g); }
+    sparkles(fx, r, big ? 60 : 26, big);
     document.body.append(fx);
     setTimeout(() => { fx.remove(); shot.classList.remove('god-reveal'); }, 2200);
   }
@@ -603,12 +625,16 @@
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const r = li.getBoundingClientRect(), b = li.querySelector('.rk-god-no').getBoundingClientRect();
     const cx = b.left + b.width / 2, cy = r.top + r.height / 2;
-    const fx = el('div', { class: 'god-fx', 'aria-hidden': 'true' });
+    const big = bigFx(), bw = big ? 150 : 80;
+    const fx = el('div', { class: 'god-fx' + (big ? ' big' : ''), 'aria-hidden': 'true' });
     fx.style.setProperty('--x', `${cx}px`); fx.style.setProperty('--y', `${cy}px`);
-    const beam = el('div', { class: 'god-beam' }); beam.style.left = `${cx - 40}px`; beam.style.height = `${Math.max(40, cy)}px`;
-    const word = el('div', { class: 'god-word', text: '강림' }); word.style.left = `${r.left + r.width / 2}px`; word.style.top = `${Math.max(24, r.top - 36)}px`;
+    const beam = el('div', { class: 'god-beam' }); beam.style.left = `${cx - bw / 2}px`; beam.style.width = `${bw}px`; beam.style.height = `${Math.max(40, cy)}px`;
+    const word = el('div', { class: 'god-word', text: '강림' }); word.style.left = `${r.left + r.width / 2}px`; word.style.top = `${Math.max(24, r.top - (big ? 78 : 36))}px`;
+    if (big) rays(fx, cx, cy, 1200);
     fx.append(beam, word);
-    sparkles(fx, r, 28);
+    if (big) rain(fx, 40);
+    sparkles(fx, r, big ? 80 : 28, big);
+    if (big) { const card = $('#rankView'); card.classList.add('god-shake'); setTimeout(() => card.classList.remove('god-shake'), 1100); }
     document.body.append(fx);
     li.classList.add('descend');
     const list = $('#rankList'); list.classList.add('bow');
