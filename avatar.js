@@ -295,6 +295,7 @@
       fx.checked = !!p.fixed['하의악세'];
       fx.onchange = () => { p.fixed['하의악세'] = fx.checked; save(); result = null; renderResult(); };
       body.append(el('div', { class: 'av-row' }, el('span', { class: 'av-part', text: '일반 악세 하의' }), el('span', { class: 'av-tag' }), sel, el('label', { class: 'av-fix' }, fx, el('span', { text: '고정' }))));
+      body.append(el('p', { class: 'av-hint' }, '스탯 창을 찍을 때 끼고 있던 것을 골라 주세요. 영혼의 족쇄는 모든 스킬 데미지 5%에 사룡 세트 한 부위(2부위면 크리티컬 5%·보스 데미지 7%, 3부위면 양극화 5%·추가 지속 피해 5% 더), 글로잉 플라워는 크리티컬 10%·적응력 2%예요. 추천 받기를 누르면 둘 다 끼워 보고 실투력이 높은 쪽을 골라요'));
     }
     const allFixed = !!p.fiveFixed && PARTS.filter(x => x !== '아바타5셋').every(x => p.fixed[x]) && !!p.fixed['하의악세'];
     body.append(el('div', { class: 'av-fix-acts' },
@@ -484,6 +485,15 @@
     for (const [c, v] of buffs) { const now = String(APP.val(c) ?? ''); extraRow(buffLabel(c), now, keepNow ? now : v); }
     if (r.best.coolReal != null && curCool > 0) { const c2 = (x) => `${Math.round(x * 100) / 100}%`; extraRow('쿨감', c2(curCool), keepNow ? c2(curCool) : c2(r.best.coolReal)); }
     box.append(el('table', { class: 'av-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '부위' })), el('th', { scope: 'col', text: '지금' }), el('th', { scope: 'col', text: '추천' }))), tb));
+    // 하의 악세 비교: 지금 실투력은 스탯 창(지금 낀 하의 악세가 이미 들어 있음)으로 재서 칸만 바꿔선 안 변하니, 둘을 끼운 실투력을 나란히 보여 줌
+    if (p.bottom && BOTTOMS[p.bottom] && APP.cpWith) {
+      const cmp = !keepNow && r.best.bottomCmp ? r.best.bottomCmp : Object.keys(BOTTOMS).map(n => ({ n, cp: APP.cpWith(bottomOver({}, p.bottom, n)) }));
+      if (cmp.every(x => x.cp > 0)) {
+        const top = cmp.slice().sort((x, y) => y.cp - x.cp)[0];
+        const txt = cmp.map(x => x === top ? `${x.n} ${fmt(x.cp)}` : `${x.n} ${fmt(x.cp)} (−${((top.cp - x.cp) / top.cp * 100).toFixed(2)}%)`).join(' · ');
+        box.append(el('p', { class: 'av-hint' }, el('b', { text: `하의 악세는 ${top.n}가 더 높아요. ` }), `${keepNow ? '지금' : '추천'} 세팅에 하의 악세만 바꿔 끼우면 ${txt}`));
+      }
+    }
     if (keepNow) { box.append(el('p', { class: 'av-hint', text: '조건에 맞는 다른 조합은 모두 지금 세팅보다 낮았어요' })); return; }
     box.append(el('p', { class: 'av-hint', text: `${r.best.polished ? '세트' : '3세트'}: ${r.best.setLabels.join(' · ')} | ${r.mode}${changed && !r.best.polished ? ` | 시트(룰루) 점수로는 실뎀 ${g >= 0 ? '+' : ''}${g.toFixed(2)}%` : ''}` }));
     if (r.cands && r.cands.length > 1 && r.best.cp > 0) box.append(el('p', { class: 'av-hint', text: r.best.polished ? '3세트 조합 후보들과 지금 세팅에서 부위를 더 바꿔 가며 계산기 실투력이 가장 높아지는 조합을 찾았어요. 세트 효과는 3세트까지만 쳤어요' : `계산기 실투력 기준으로 모든 조합을 비교해서 고른 결과예요. 마지막에 후보 ${r.cands.length}개를 계산기로 정확히 다시 쟀어요` }));
@@ -549,7 +559,7 @@
     const val = (c) => (c in o ? Number(o[c]) : Number(inp[c])) || 0;
     for (const [k, c] of Object.entries(SUIT_CELL)) {
       const d = delta[k] || 0; if (!d) continue;
-      o[c] = APP.addRaw ? APP.addRaw(c, val(c), d / 100) : Math.round((val(c) + d / 100) * 1e6) / 1e6;
+      o[c] = Math.max(0, APP.addRaw ? APP.addRaw(c, val(c), d / 100) : Math.round((val(c) + d / 100) * 1e6) / 1e6) || 0;
     }
     const dmp = delta.mp || 0, datk = delta.atk || 0;
     if (dmp || datk) {
@@ -740,6 +750,11 @@
       } catch (e) { console.error(e); }
     }
     top.buffs = Object.assign({}, base);
+    // 하의 악세 비교: 추천 세팅(아바타·한벌·버프)은 그대로 두고 하의 악세만 바꾼 실투력
+    if (bNow) {
+      const ovTop = overridesFor(r, worn, top);
+      top.bottomCmp = Object.keys(BOTTOMS).map(n => { const o = Object.assign({}, base, ovTop); suitOver(o, now, top.suit); bottomOver(o, bNow, n); return { n, cp: APP.cpWith(o) }; });
+    }
     r.best = top; r.mode = top.mode || r.mode;
     r.gain = (100 + (top.rScore != null ? top.rScore : top.score)) / (100 + r.cur.score) - 1;
     return r;
