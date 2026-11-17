@@ -612,10 +612,21 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     if (x >= 0.01) return `${x.toFixed(2)}%`;
     return '0.01% 미만';
   };
+  // 현금 환산 시세(캐릭터와 상관없이 하나): 1억 ED당 원, 변환석 1개당 원(시트 '계산 기준·던전' M52 900캐시)
+  const PRICE0 = { ed: 2300, stone: 900 };
+  const price = () => { if (!store._price) store._price = Object.assign({}, PRICE0); return store._price; };
+  const fmtWon = (w) => {
+    if (!(w > 0)) return '0원';
+    if (w >= 1e8) return `${+(w / 1e8).toFixed(w >= 1e9 ? 0 : 1)}억 원`;
+    if (w >= 1e4) return `${+(w / 1e4).toFixed(w >= 1e5 ? 0 : 1)}만 원`;
+    return `${Math.round(w).toLocaleString('ko-KR')}원`;
+  };
   const costText = (kind, p) => {
     if (!(p > 0)) return '';
-    const n = 1 / p, c = COST[kind];
-    return kind === 'w' ? `약 ${fmtKor(n * c.n)} ED` : `변환석 약 ${n < 1e4 ? Math.ceil(n * c.n).toLocaleString('ko-KR') : fmtKor(n * c.n)}개`;
+    const n = 1 / p, c = COST[kind], pr = price();
+    if (kind === 'w') { const ed = n * c.n; return `약 ${fmtKor(ed)} ED (약 ${fmtWon(ed / 1e8 * pr.ed)})`; }
+    const st = n * c.n;
+    return `변환석 약 ${st < 1e4 ? Math.ceil(st).toLocaleString('ko-KR') : fmtKor(st)}개 (약 ${fmtWon(Math.ceil(st) * pr.stone)})`;
   };
   async function compute() {
     const my = ++seq, e = EQ(prof().eq), s = slot(e.k);
@@ -677,14 +688,20 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     tIn.onchange = () => { let v = Number(tIn.value); if (!Number.isFinite(v)) v = 90; v = Math.max(0, Math.min(100, Math.round(v * 10) / 10)); prof().target = v; persist(); paintResult(); };
     const T = prof().target, pT = an.atLeast[Math.min(10000, Math.ceil(T * 100 - 1e-7))], pTop = an.atLeastTop[Math.min(10000, Math.ceil(T * 100 - 1e-7))];
     const line = (lead, p) => h('p', { class: 'oc-p' }, lead, h('b', { text: fmtP(p) }),
-      p > 0 ? h('span', { text: ` · 평균 ${fmtTries(p)} · ${costText(kind, p)}` }) : h('span', { text: ' · 나올 수 없어요' }));
+      p > 0 ? h('span', {}, ` · 평균 ${fmtTries(p)} · `, h('span', { class: 'nw', text: costText(kind, p) })) : h('span', { text: ' · 나올 수 없어요' }));
     if (!side) goal.append(h('h3', { text: '한 번 돌릴 때' }));
     if (linesOk(s.cur)) {
       const sCur = score(1), pB = an.atLeast[Math.min(10000, Math.floor(sCur * 100 + 1e-7) + 1)];
       goal.append(line('지금보다 좋은 옵션 ', pB));
     }
     goal.append(h('p', { class: 'oc-p' }, h('span', { class: 'oc-t' }, tIn, h('span', { text: '점 이상' })), ' ', h('b', { text: fmtP(pT) }),
-      pT > 0 ? h('span', { text: ` · 평균 ${fmtTries(pT)} · ${costText(kind, pT)}` }) : h('span', { text: ' · 나올 수 없어요' })));
+      pT > 0 ? h('span', {}, ` · 평균 ${fmtTries(pT)} · `, h('span', { class: 'nw', text: costText(kind, pT) })) : h('span', { text: ' · 나올 수 없어요' })));
+    // 현금 환산 시세(바꿀 수 있음)
+    const pr = price(), key = kind === 'w' ? 'ed' : 'stone';
+    const pIn = h('input', { type: 'text', inputmode: 'numeric', class: 'num oc-price-in', value: pr[key].toLocaleString('ko-KR'), 'aria-label': kind === 'w' ? '1억 ED 시세(원)' : '변환석 1개 값(원)' });
+    pIn.onchange = () => { let v = Number(String(pIn.value).replace(/[^0-9.]/g, '')); if (!(v >= 0)) v = PRICE0[key]; pr[key] = Math.round(v); persist(); paintResult(); };
+    goal.append(h('p', { class: 'oc-p oc-price' }, h('span', { class: 'oc-t' }, h('span', { text: kind === 'w' ? '1억 ED 시세' : '변환석 1개' }), pIn, h('span', { text: '원' })),
+      h('span', { class: 'oc-price-sub', text: kind === 'w' ? ' 현금 환산에 써요' : ' 캐시 기준' })));
     goal.append(h('p', { class: 'oc-hint', text: `옵션 종류만 맞으면(수치가 모두 최대라면) ${T}점 이상: ${fmtP(pTop)}${pTop > 0 ? ` · 평균 ${fmtTries(pTop)}` : ''}. 100점은 ${an.bestIds.map((i) => CAT[i - 1].n).join(' + ')} 모두 최대예요. 수치 단계는 고르게, 옵션은 넥슨 공개 확률대로 뽑아요` }));
   }
   function applyNew() {

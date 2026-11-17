@@ -660,7 +660,8 @@ body.view-rank .who, body.view-admin .who { display: none; }
 
 /* 옵션 변환 점수 */
 .oc-view { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-@media (min-width: 1024px) { .oc-view { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: 20px 24px; align-items: start; } .oc-view .card { padding: 28px 32px; } .oc-side { position: sticky; top: 16px; } }
+/* PC: 옵션 칸이 너무 늘어나지 않게 왼쪽 카드 폭을 줄이고 오른쪽 확률 카드는 바로 옆에 */
+@media (min-width: 1024px) { .oc-view { display: grid; grid-template-columns: minmax(0, 560px) minmax(0, 400px); gap: 20px 24px; align-items: start; } .oc-view .card { padding: 28px 32px; } .oc-side { position: sticky; top: 16px; } }
 .oc-view.drop-on .oc-drop { border-color: var(--blue); background: var(--blue-weak); }
 .oc-drop { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; margin: 12px 0 6px; padding: 14px 16px; border: 1.5px dashed var(--line); border-radius: 14px; }
 .oc-drop p { margin: 0; font-size: 14px; color: var(--sub); }
@@ -707,3 +708,6 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .oc-t input { width: 56px; text-align: right; padding: 4px 8px; }
 .oc-msg { margin: 12px 0 0; font-size: 14px; color: var(--blue); font-weight: 600; }
 @media (max-width: 480px) { .oc-row { grid-template-columns: 18px minmax(0, 1fr) 112px; } }
+.oc-price { margin-top: 10px; }
+.oc-price .oc-t input { width: 78px; }
+.oc-price-sub { font-size: 13px; color: var(--mute); }
