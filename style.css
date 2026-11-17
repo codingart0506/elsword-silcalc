@@ -331,6 +331,22 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .rk-no.gold { color: #e6a700; }
 .rk-no.silver { color: #98a2ae; }
 .rk-no.bronze { color: #c27a3e; }
+/* 1~3위: 메달 색 은은한 물듦 + 위에서부터 차례로 지나가는 빛 + 왕관 반짝임 */
+.rank-list li.top .rk-row { position: relative; overflow: hidden; isolation: isolate; }
+.rank-list li.top .rk-row::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(90deg, var(--tw) 0%, transparent 72%); }
+.rank-list li.top .rk-row::after { content: ''; position: absolute; z-index: -1; top: 0; bottom: 0; left: 0; width: 34%; pointer-events: none; background: linear-gradient(105deg, transparent 10%, var(--ts) 38%, rgba(255, 255, 255, .95) 50%, var(--ts) 62%, transparent 90%); transform: translateX(-110%); animation: topShine 6s var(--td) cubic-bezier(.45, .05, .35, 1) infinite; }
+.rank-list li.top1 { --tw: rgba(255, 200, 40, .22); --ts: rgba(255, 205, 70, .5); --td: 0s; --tc: #a87400; --tc2: #e6a700; }
+.rank-list li.top2 { --tw: rgba(150, 165, 182, .22); --ts: rgba(175, 190, 210, .5); --td: .3s; --tc: #6b7785; --tc2: #a3adb8; }
+.rank-list li.top3 { --tw: rgba(205, 125, 60, .18); --ts: rgba(225, 150, 90, .45); --td: .6s; --tc: #8f5222; --tc2: #c98446; }
+@keyframes topShine { 0% { transform: translateX(-110%); } 24%, 100% { transform: translateX(310%); } }
+.rank-list li.top .rk-no.crown { position: relative; }
+.rank-list li.top .rk-no.crown svg { filter: drop-shadow(0 1px 3px color-mix(in srgb, var(--tc2) 55%, transparent)); }
+.rank-list li.top .rk-no.crown::after { content: ''; position: absolute; top: -3px; right: 3px; width: 11px; height: 11px; background: #fff8dc; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); filter: drop-shadow(0 0 3px rgba(255, 220, 120, .95)); opacity: 0; animation: topTwinkle 6s var(--td) ease-out infinite; }
+.rank-list li.top2 .rk-no.crown::after { background: #fff; filter: drop-shadow(0 0 3px rgba(220, 230, 245, .95)); }
+@keyframes topTwinkle { 0%, 2% { opacity: 0; transform: scale(.3) rotate(0); } 7% { opacity: 1; transform: scale(1.15) rotate(45deg); } 16%, 100% { opacity: 0; transform: scale(.4) rotate(90deg); } }
+.rank-list li.top .rk-cp b { background: linear-gradient(100deg, var(--tc) 0%, var(--tc2) 45%, var(--tc) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.rank-list li.top1 .rk-name { color: #8a5d00; }
+@media (prefers-reduced-motion: reduce) { .rank-list li.top .rk-row::after, .rank-list li.top .rk-no.crown::after { animation: none; display: none; } }
 .rank-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 4px; padding: 14px 0 4px; }
 .rk-arrow { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--text); cursor: pointer; }
 .rk-arrow svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }

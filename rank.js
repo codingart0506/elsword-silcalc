@@ -1087,10 +1087,11 @@
     const myIds = new Set(mine.map(m => m.id));
     const list = $('#rankList');
     rows.forEach((r, i) => {
-      const li = el('li', { class: myIds.has(r.id) || me.has(r.nickname.toLowerCase()) ? 'me' : '', 'data-id': r.id });
+      const n = start + i + 1, mine1 = myIds.has(r.id) || me.has(r.nickname.toLowerCase());
+      const li = el('li', { class: [mine1 ? 'me' : '', n <= 3 ? `top top${n}` : ''].join(' ').trim(), 'data-id': r.id });
       li.append(
         el('button', { type: 'button', class: 'rk-row', 'aria-expanded': 'false', onclick: (e) => toggleDetail(li, r, e.currentTarget) },
-          rankNo(start + i + 1),
+          rankNo(n),
           el('span', { class: 'rk-who' },
             el('span', { class: 'rk-name', text: r.nickname }),
             el('span', { class: 'rk-meta' }, el('span', { text: r.cls }), el('span', { text: ago(r.updated_at) }), oldCalc(r) ? el('span', { class: 'rk-old', text: '실투력 업데이트 전 지표' }) : null)),
@@ -1622,12 +1623,16 @@
   const line = $('#rankLine');
   const checked = {};
   const btn = (text, onclick, mute) => el('button', { type: 'button', class: 'txt sm' + (mute ? ' mute' : ''), text, onclick });
+  // 랭킹에는 실투력 1억 이상만 올림(서버에서도 막음)
+  const RANK_MIN = 100000000;
+  const underMin = (cp) => { if (cp >= RANK_MIN) return false; toast(`실투력 1억부터 랭킹에 올릴 수 있어요. 지금 ${fmtInt(cp)}`); return true; };
   function renderLine() {
     const r = A.rank();
     if (A.isShared() || (!r && A.missing().includes('세팅'))) { line.hidden = true; return; }
     line.hidden = false; line.innerHTML = '';
     if (!r) {
-      line.append(el('span', { class: 'rk-state', text: '랭킹에 아직 안 올렸어요' }), el('span', { class: 'acts' }, btn('랭킹에 올리기', openApply)));
+      const cp = A.rankCp();
+      line.append(el('span', { class: 'rk-state' }, '랭킹에 아직 안 올렸어요', cp > 0 && cp < RANK_MIN ? el('small', { text: '실투력 1억부터 올릴 수 있어요' }) : null), el('span', { class: 'acts' }, btn('랭킹에 올리기', openApply)));
       return;
     }
     if (!checked[A.key()]) { checked[A.key()] = true; checkStatus(A.key()); }
@@ -1753,6 +1758,7 @@
     if (buffBlocked()) return;
     const cp = A.rankCp();
     if (!(cp > 0)) { toast('실투력이 계산되지 않았어요'); return; }
+    if (underMin(cp)) return;
     const old = $('#applyDlg'); if (old) old.remove();
     const code = genCode();
     const pick = shotPicker();
@@ -1821,6 +1827,7 @@
     if (buffBlocked()) return;
     const cp = A.rankCp();
     if (!(cp > 0)) { toast('실투력이 계산되지 않았어요'); return; }
+    if (underMin(cp)) return;
     const old = $('#applyDlg'); if (old) old.remove();
     const code = updCode(r), pick = shotPicker(), shot = A.shot();
     if (shot) pick.set(shot, '계산기에 읽힌 스크린샷이에요. 채팅에 위 코드가 안 보이면 코드를 적고 다시 찍어 넣어 주세요');
@@ -2314,17 +2321,6 @@
       const seeLog = el('button', { type: 'button', class: 'btn', text: '열람 기록' });
       seeLog.onclick = () => { logQ.value = p.nickname; show('logs'); loadLogs(); };
       // 랭킹에 보이는 사진의 가린 곳을 다시 정함(원본은 갱신 기록에 남아 있음)
-      // 신으로 정하면 숫자 순위에서 빠지고, 랭킹 제목을 눌렀을 때만 1위 위에 '[신] 닉네임'으로 보임
-      const godB = el('button', { type: 'button', class: 'btn', text: p.god ? '신 해제' : '신으로' });
-      godB.onclick = async () => {
-        const nv = !p.god; godB.disabled = true;
-        const { error } = await c.rpc('admin_set_god', { p_id: p.id, p_on: nv });
-        godB.disabled = false;
-        if (error) { toast('바꾸지 못했어요. ' + errMsg(error)); return; }
-        p.god = nv; godB.textContent = nv ? '신 해제' : '신으로'; nm.textContent = `${p.rank}. ${p.nickname}${tag()}`;
-        godsAt = 0; canAt = 0; for (const k of Object.keys(totals)) delete totals[k];
-        toast(nv ? `${p.nickname}: 신으로 정했어요` : `${p.nickname}: 신에서 내렸어요`);
-      };
       const fixShot = el('button', { type: 'button', class: 'btn', text: '사진 가릴 곳 고치기' });
       fixShot.hidden = !p.shot_path;
       fixShot.onclick = async () => {
@@ -2350,7 +2346,7 @@
       const item = el('div', { class: 'adm-item adm-plain' }, el('div', { class: 'adm-info' }, nm,
         el('span', { text: `${p.cls}, 실투력 ${fmtInt(p.cp)}` }),
         el('small', { text: `${ago(p.updated_at)} 갱신` }),
-        el('div', { class: 'adm-acts' }, hide, seeLog, fixShot, godB, del)));
+        el('div', { class: 'adm-acts' }, hide, seeLog, fixShot, del)));
       hide.onclick = async () => {
         const nv = !p.hidden;
         const why = await setHidden(c, p.id, nv); if (why === null) return;
