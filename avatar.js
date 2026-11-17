@@ -504,6 +504,12 @@
       const cmpBox = el('div', { class: 'av-rival' });
       cmpBox.append(el('p', { class: 'av-rival-h' }, el('b', { text: '하의 악세 비교' }),
         el('span', { text: matched ? ` 하의 악세마다 아바타·한벌·아바타 악세를 따로 맞추고 비교했어요. 극대화는 ${goalM}(${pc(rv.maxT)}${rv.byCap ? ', 이 전직은 여기서부터 더 올려도 실투력이 그대로예요' : ''}) 이상으로 맞추고, 크리는 실투력에 넣은 지금 크리(${pc(rv.critT)})를 기준으로 세 가지로 맞춰 봤어요` : ' 하의 악세마다 아바타·한벌을 따로 맞춰 본 최고 세팅이에요' })));
+      // 단순 비교: 지금 세팅에서 하의 악세만 바꿔 끼운 실투력(마법석·아바타·크리 맞추기 없이)
+      if (p.bottom && BOTTOMS[p.bottom]) {
+        const cp0 = APP.cpWith({}), others = Object.keys(BOTTOMS).filter(n => n !== p.bottom);
+        const parts0 = others.map(n => { const v = APP.cpWith(bottomOver({}, p.bottom, n)); return v > 0 && cp0 > 0 ? `${n}로 바꿔 끼우면 ${fmt(v)} (${v >= cp0 ? '+' : '−'}${(Math.abs(v - cp0) / cp0 * 100).toFixed(2)}%)` : ''; }).filter(Boolean);
+        if (parts0.length) cmpBox.append(el('p', { class: 'av-rival-simple' }, el('b', { text: '단순 비교 ' }), `지금 세팅에서 하의 악세만 바꾸고 나머지는 그대로 두면: 지금(${p.bottom}) ${fmt(cp0)} → ${parts0.join(' · ')}`));
+      }
       const list = el('div');
       let cur = rv.order[0];
       const seg = matched ? el('div', { class: 'av-rival-seg', role: 'group', 'aria-label': '크리·극대 맞추는 방식' }) : null;
