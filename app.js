@@ -1257,6 +1257,8 @@
     // 랭킹에 못 올리는 버프(피시방·에너지드링크·지애)를 켰으면 그 이름들
     // 이벤트 버프(펀치킹·할로윈 등 기간 한정)도 '미적용'이 아니면 못 올림
     // 고급 설정의 추피 보정·가동률 DPS 전환도 랭킹에는 못 올림
+    // 소켓 배분 최적화를 다른 세팅에서 돌림(계산기 탭에 바꿀 수 있는 소켓 칸을 넣었을 때만)
+    sockSolve: (extra, opt) => { const r = sockSolve(extra || {}, opt); return r && !r.err ? { cp: r.cp, now: r.now, best: r.best.slice(), cur: r.cur.slice(), N: r.N, over: Object.assign({}, extra || {}, r.over), names: SOCK.map(o => o.t), critOk: r.critOk } : null; },
     rankBuffs: () => Object.keys(EXTRA_BUFF).filter(a => inputs[a] === true).map(a => EXTRA_BUFF[a])
       .concat((inputs.J22 ?? '미적용') !== '미적용' ? [`이벤트 버프(${inputs.J22})`] : [])
       .concat(inputs.A_E4 === true ? ['추피 보정'] : [], inputs.A_H4 === true ? ['가동률 DPS 전환'] : []),
@@ -1361,27 +1363,41 @@
       setTimeout(() => { try { sockRes = Object.assign(runSock(), { key: store.current }); } catch (e) { console.error(e); sockRes = { err: '계산하다 문제가 생겼어요' }; } b.disabled = false; b.textContent = '최적 배분 계산하기'; renderSock(); }, 30);
     };
   }
-  function runSock() {
+  function runSock() { return sockSolve(null); }
+  // extra: 다른 세팅(아바타 추천의 하의 악세 비교 등)을 계산기 칸에 덮어쓴 값. 그 세팅에서 소켓을 다시 나눔
+  // opt.critMin: 크리를 이 값(스탯창 크리)에 맞춰 놓고 비교할 때. 크리 칸은 거기 닿는 가장 적은 칸 수로 묶고 나머지 칸만 나눔
+  function sockSolve(extra, opt) {
     const cfg = sockCfg(), val = SOCK.map(o => Number(cfg.v[o.k] ?? o.v) || 0), cur = SOCK.map(o => Math.max(0, Math.round(Number(cfg.n[o.k]) || 0)));
+    const src = Object.assign({}, inputs, extra || {});
     const N = cur.reduce((a, b) => a + b, 0);
     if (!N) return { err: '바꿀 수 있는 소켓 칸 수를 먼저 넣어 주세요' };
     // 지금 소켓을 뺀 값에서 시작. 크리·극대는 스탯창 값이 감소 효율을 거친 값이라 원래 수치로 바꿔서 더하고 다시 스탯창 값으로 돌림(시트 Q38·V27과 같은 식)
     const RAW = { C17: [SOCK_CI, SOCK_CW], C19: [SOCK_MI, SOCK_MW] };
     const base = {};
-    SOCK.forEach((o, i) => { for (const c of o.cells) { const v0 = Number(inputs[c]) || 0; base[c] = (base[c] ?? (RAW[c] ? RAW[c][0](v0) : v0)) - cur[i] * val[i] / 100; } });
+    SOCK.forEach((o, i) => { for (const c of o.cells) { const v0 = Number(src[c]) || 0; base[c] = (base[c] ?? (RAW[c] ? RAW[c][0](v0) : v0)) - cur[i] * val[i] / 100; } });
     const over = (alloc) => {
       const o = Object.assign({}, base);
       SOCK.forEach((s, i) => { for (const c of s.cells) o[c] += alloc[i] * val[i] / 100; });
-      for (const c in o) o[c] = Math.round((RAW[c] ? RAW[c][1](Math.max(0, o[c])) : o[c]) * 1e6) / 1e6;
+      for (const c in o) o[c] = Math.round((RAW[c] ? RAW[c][1](Math.max(0, o[c])) : Math.max(0, o[c])) * 1e6) / 1e6;
       return o;
     };
-    const memo = new Map(), cpOf = (alloc) => { const k = alloc.join(','); if (!memo.has(k)) memo.set(k, cpWith(over(alloc))); return memo.get(k); };
+    const memo = new Map(), cpOf = (alloc) => { const k = alloc.join(','); if (!memo.has(k)) memo.set(k, cpWith(extra ? Object.assign({}, extra, over(alloc)) : over(alloc))); return memo.get(k); };
     const now = cpOf(cur);
+    const CI = SOCK.findIndex(o => o.k === 'crit');
+    let lock = -1, critOk = true;
+    if (opt && opt.critMin > 0 && CI >= 0 && val[CI] > 0) {
+      const critAt = (k) => SOCK_CW(Math.max(0, base.C17 + k * val[CI] / 100));
+      lock = 0; while (lock < N && critAt(lock) < opt.critMin - 1e-4) lock++;
+      critOk = critAt(lock) >= opt.critMin - 1e-4;
+    }
+    const free = (i) => i !== CI || lock < 0;
     // 한 칸씩 가장 많이 오르는 옵션에 넣고(탐욕), 한 칸 옮기기로 더 오르는 게 없을 때까지 다듬음
     let a = SOCK.map(() => 0);
-    for (let s = 0; s < N; s++) {
-      let bi = 0, bv = -Infinity;
-      SOCK.forEach((o, i) => { if (!val[i]) return; const t = a.slice(); t[i]++; const v = cpOf(t); if (v > bv) { bv = v; bi = i; } });
+    if (lock >= 0) a[CI] = lock;
+    for (let s = a.reduce((x, y) => x + y, 0); s < N; s++) {
+      let bi = -1, bv = -Infinity;
+      SOCK.forEach((o, i) => { if (!val[i] || !free(i)) return; const t = a.slice(); t[i]++; const v = cpOf(t); if (v > bv) { bv = v; bi = i; } });
+      if (bi < 0) break;
       a[bi]++;
     }
     const polish = (start) => {
@@ -1389,7 +1405,7 @@
       while (moved) {
         moved = false;
         for (let i = 0; i < SOCK.length; i++) for (let j = 0; j < SOCK.length; j++) {
-          if (i === j || !x[i] || !val[j]) continue;
+          if (i === j || !x[i] || !val[j] || !free(i) || !free(j)) continue;
           for (const d of [1, 2]) {
             if (x[i] < d) continue;
             const t = x.slice(); t[i] -= d; t[j] += d; const v = cpOf(t);
@@ -1400,8 +1416,8 @@
       return [x, xv];
     };
     let [best, bestV] = polish(a);
-    const [b2, v2] = polish(cur); if (v2 > bestV) { best = b2; bestV = v2; }
-    return { cur, best, now, cp: bestV, N, evals: memo.size };
+    if (lock < 0) { const [b2, v2] = polish(cur); if (v2 > bestV) { best = b2; bestV = v2; } }
+    return { cur, best, now, cp: bestV, N, evals: memo.size, over: over(best), critOk };
   }
   function renderSock() {
     const card = $('#sockCard'); if (!card) return;
