@@ -540,20 +540,19 @@
   let gods = [], godsAt = 0, godOn = false;
   // 서버 캐릭터가 아닌 고정 신(사진은 사이트 파일). 전체 랭킹에만 보임
   // focus: 사진 속 캐릭터 위치(가로·세로 비율). 사진을 열 때 강림 원이 여기서 터짐
-  const GOD_FIXED = [{ id: 'god-ganadarap', nickname: '가나다랍', img: 'god.jpg', focus: [0.215, 0.6] }];
+  const GOD_FIXED = [{ id: 'god-ganadarap', nickname: '가나다랍', img: 'god.jpg', focus: [0.215, 0.6], halo: [0.22, 0.33] }];
   function fixedGodDetail(li, r, btnEl) {
     const open = li.classList.toggle('open');
     btnEl.setAttribute('aria-expanded', String(open));
     let box = li.querySelector('.rk-detail');
     if (!open) { if (box) box.hidden = true; return; }
-    logEgg('photo');
-    if (box) { box.hidden = false; godPhotoFx(box.querySelector('.rk-shot'), r.focus); return; }
+    if (box) { box.hidden = false; godPhotoFx(box.querySelector('.rk-shot'), r.focus, r.halo); return; }
     const img = el('img', { alt: `${r.nickname} 스크린샷`, src: r.img });
     const shot = el('button', { type: 'button', class: 'rk-shot', 'aria-label': '사진 크게 보기' }, img);
     shot.onclick = () => lightbox(img.src, img.alt, true);
     box = el('div', { class: 'rk-detail' }, shot, el('div', { class: 'rk-side' }, el('p', { class: 'rk-cap', text: '실투력 측정 불가' })));
     li.append(box);
-    img.decode().catch(() => {}).then(() => godPhotoFx(shot, r.focus));
+    img.decode().catch(() => {}).then(() => godPhotoFx(shot, r.focus, r.halo));
   }
   async function loadGods(c) {
     if (Date.now() - godsAt < FRESH) return gods;
@@ -580,184 +579,485 @@
     rows.forEach((li) => { li.hidden = !godOn; li.classList.remove('leave'); });
   }
   // 빛가루: rect 안 아래쪽에서 피어올라 흩어짐
-  // PC(넓은 화면)는 같은 크기면 밋밋해서 효과를 크게: 빛살·충격파 고리·위에서 쏟아지는 빛줄기·카드 흔들림을 더함
+  // ---------- 신 연출(캔버스) ----------
+  // 빛 알갱이·빛줄기·번개를 캔버스에 직접 그림(더하기 합성으로 빛나게). PC(넓은 화면)와 모바일(세로 화면)은 구성 자체를 다르게 함
   const bigFx = () => matchMedia('(min-width: 1024px)').matches;
-  function sparkles(fx, r, n, big) {
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const ease = { out: (t) => 1 - Math.pow(1 - t, 3), inOut: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2) };
+  // 0→1→0 모양(시작 a, 다 차오름 b, 줄기 시작 c, 끝 d)
+  const env = (t, a, b, c, d) => (t <= a || t >= d ? 0 : t < b ? ease.out((t - a) / (b - a)) : t <= c ? 1 : 1 - ease.inOut((t - c) / (d - c)));
+  const SPR = new Map();
+  function sprite(rgb, soft) {
+    const key = rgb + (soft ? 's' : ''); if (SPR.has(key)) return SPR.get(key);
+    const n = 64, cv = document.createElement('canvas'); cv.width = cv.height = n;
+    const g = cv.getContext('2d'), gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+    if (soft) { gr.addColorStop(0, `rgba(${rgb},.9)`); gr.addColorStop(0.5, `rgba(${rgb},.35)`); gr.addColorStop(1, `rgba(${rgb},0)`); }
+    else { gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.12, `rgba(${rgb},1)`); gr.addColorStop(0.35, `rgba(${rgb},.32)`); gr.addColorStop(1, `rgba(${rgb},0)`); }
+    g.fillStyle = gr; g.fillRect(0, 0, n, n); SPR.set(key, cv); return cv;
+  }
+  const GOLD = '255,206,110', WHITE = '255,246,226', LILAC = '196,170,255', ICE = '170,190,255', CYAN = '110,231,255', PINK = '255,120,214', DUST = '214,200,180';
+  function stage(fx, life) {
+    const W = innerWidth, H = innerHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cv = el('canvas', { class: 'god-cv' }); cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    const g = cv.getContext('2d'); g.scale(dpr, dpr); fx.append(cv);
+    const S = { W, H, g, ps: [], draws: [], timers: [], t: 0 };
+    S.at = (t, f) => S.timers.push({ t, f });
+    S.draw = (f) => S.draws.push(f);
+    S.add = (p) => { p.age = 0; S.ps.push(p); };
+    const t0 = performance.now();
+    const loop = (now) => {
+      const t = (now - t0) / 1000, dt = Math.min(0.05, Math.max(0, t - S.t)); S.t = t;
+      for (const m of S.timers) if (!m.done && t >= m.t) { m.done = true; m.f(S); }
+      g.clearRect(0, 0, W, H);
+      for (const f of S.draws) { g.save(); f(g, t, dt); g.restore(); }
+      for (let i = S.ps.length - 1; i >= 0; i--) {
+        const p = S.ps[i]; p.age += dt;
+        if (p.age >= p.life) { S.ps.splice(i, 1); continue; }
+        if (p.to) { const k = ease.out(Math.min(1, p.age / p.life)); p.x = p.fx + (p.to[0] - p.fx) * k; p.y = p.fy + (p.to[1] - p.fy) * k; }
+        else {
+          const dr = Math.pow(p.drag ?? 0.985, dt * 60);
+          p.vx = p.vx * dr + (p.ax || 0) * dt; p.vy = p.vy * dr + (p.grav || 0) * dt;
+          if (p.sway) p.x += Math.sin(p.age * p.sway + p.ph) * p.swayA * dt;
+          p.x += p.vx * dt; p.y += p.vy * dt;
+        }
+        const k = p.age / p.life;
+        let a = (p.alpha ?? 1) * (k < (p.fin ?? 0.12) ? k / (p.fin ?? 0.12) : 1 - Math.pow((k - (p.fin ?? 0.12)) / (1 - (p.fin ?? 0.12)), 1.5));
+        if (p.tw) a *= 0.55 + 0.45 * Math.sin(p.age * p.tw + p.ph);
+        if (a <= 0.003) continue;
+        const sz = p.size * (1 + (p.grow || 0) * k);
+        g.globalAlpha = a; g.globalCompositeOperation = p.normal ? 'source-over' : 'lighter';
+        if (p.draw) { g.save(); g.translate(p.x, p.y); p.draw(g, p, sz); g.restore(); }
+        else g.drawImage(p.img, p.x - sz / 2, p.y - sz / 2, sz, sz);
+      }
+      g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+      if (t < life) requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+    return S;
+  }
+  // 빛 알갱이 터뜨리기
+  function burst(S, n, x, y, o) {
     for (let i = 0; i < n; i++) {
-      const p = el('span', { class: 'god-p' });
-      p.style.left = `${r.left + 8 + Math.random() * Math.max(0, r.width - 16)}px`; p.style.top = `${r.top + r.height * (0.25 + Math.random() * 0.65)}px`;
-      p.style.setProperty('--dx', `${Math.round((Math.random() - 0.5) * (big ? 260 : 70))}px`); p.style.setProperty('--dy', `${-(big ? 70 : 40) - Math.round(Math.random() * (big ? 170 : 60))}px`);
-      p.style.animationDuration = `${(0.9 + Math.random() * 1.1).toFixed(2)}s`; p.style.animationDelay = `${(0.3 + Math.random() * 0.6).toFixed(2)}s`;
-      fx.append(p);
+      const ang = o.ang != null ? o.ang + rnd(-o.spread, o.spread) : rnd(0, Math.PI * 2), sp = rnd(o.sp[0], o.sp[1]);
+      S.add({ x: x + rnd(-(o.jx || 0), o.jx || 0), y: y + rnd(-(o.jy || 0), o.jy || 0), vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+        size: rnd(o.size[0], o.size[1]), life: rnd(o.life[0], o.life[1]), img: sprite(o.colors[i % o.colors.length]), drag: o.drag ?? 0.95, grav: o.grav || 0,
+        tw: o.tw ? rnd(8, 18) : 0, ph: rnd(0, 6), alpha: o.alpha ?? 1, fin: o.fin });
     }
   }
-  function rays(fx, x, y, size) {
-    const d = el('div', { class: 'god-rays' }); d.style.left = `${x}px`; d.style.top = `${y}px`;
-    d.style.width = d.style.height = `${size}px`; d.style.margin = `${-size / 2}px 0 0 ${-size / 2}px`;
-    const g = el('div', { class: 'god-ring' }); g.style.left = `${x}px`; g.style.top = `${y}px`;
-    fx.append(d, g);
+  // 지그재그 번개(중간점 흔들기) + 갈래
+  function boltPath(x0, y0, x1, y1, disp, out) {
+    if (disp < 3) { out.push([x1, y1]); return; }
+    const mx = (x0 + x1) / 2 + rnd(-disp, disp), my = (y0 + y1) / 2 + rnd(-disp, disp) * 0.3;
+    boltPath(x0, y0, mx, my, disp / 2, out); boltPath(mx, my, x1, y1, disp / 2, out);
   }
-  function rain(fx, n) {
-    const W = innerWidth, H = innerHeight;
-    for (let i = 0; i < n; i++) {
-      const p = el('span', { class: 'god-rain' });
-      p.style.left = `${Math.round(Math.random() * W)}px`; p.style.setProperty('--fall', `${Math.round(H * (0.45 + Math.random() * 0.5))}px`);
-      p.style.animationDuration = `${(1.2 + Math.random() * 1.1).toFixed(2)}s`; p.style.animationDelay = `${(0.2 + Math.random() * 1.1).toFixed(2)}s`;
-      fx.append(p);
+  function makeBolt(x0, y0, x1, y1, disp, branches) {
+    const main = [[x0, y0]]; boltPath(x0, y0, x1, y1, disp, main);
+    const all = [main];
+    for (let i = 0; i < branches; i++) {
+      const p = main[Math.floor(rnd(0.15, 0.7) * main.length)], len = rnd(60, 160), ang = Math.PI / 2 + rnd(-1.1, 1.1);
+      const br = [[p[0], p[1]]]; boltPath(p[0], p[1], p[0] + Math.cos(ang) * len, p[1] + Math.sin(ang) * len, disp * 0.35, br); all.push(br);
+    }
+    return all;
+  }
+  function drawBolt(g, paths, a, w) {
+    g.globalCompositeOperation = 'lighter'; g.lineJoin = 'round'; g.lineCap = 'round';
+    for (const [lw, col, al] of [[w * 7, '120,130,255', 0.10], [w * 3, '160,175,255', 0.28], [w * 1.4, '210,220,255', 0.7], [w * 0.6, '255,255,255', 1]]) {
+      g.strokeStyle = `rgba(${col},${al * a})`;
+      paths.forEach((pts, i) => { g.lineWidth = i ? lw * 0.5 : lw; g.beginPath(); pts.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke(); });
     }
   }
-  // 신 카드에서 사진을 열 때: 사진이 하얀 빛 속에서 서서히 또렷해지고, 빛줄기가 한 번 훑고 지나가며 테두리가 빛나고 빛가루가 피어오름
-  function godPhotoFx(shot, focus) {
-    if (!shot || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    shot.classList.remove('god-reveal'); void shot.offsetWidth; shot.classList.add('god-reveal');
-    const r = shot.getBoundingClientRect(), img = shot.querySelector('img'), ir = img ? img.getBoundingClientRect() : r;
-    const fxX = ir.left + ir.width * (focus ? focus[0] : 0.5), fxY = ir.top + ir.height * (focus ? focus[1] : 0.5);
-    const big = bigFx();
-    const fx = el('div', { class: 'god-fx soft' + (big ? ' big' : ''), 'aria-hidden': 'true' });
-    fx.style.setProperty('--x', `${fxX}px`); fx.style.setProperty('--y', `${fxY}px`);
-    if (big) { rays(fx, fxX, fxY, Math.max(600, ir.width * 1.5)); rain(fx, 24); }
-    else { const g = el('div', { class: 'god-ring' }); g.style.left = `${fxX}px`; g.style.top = `${fxY}px`; fx.append(g); }
-    sparkles(fx, r, big ? 60 : 26, big);
-    document.body.append(fx);
-    setTimeout(() => { fx.remove(); shot.classList.remove('god-reveal'); }, 2200);
+  // 위에서 내려오는 빛줄기 다발(부드러운 쐐기 여러 겹)
+  function drawRays(g, ax, ay, tx, ty, n, spread, len, a, t, warm) {
+    g.globalCompositeOperation = 'lighter';
+    const base = Math.atan2(ty - ay, tx - ax);
+    for (let i = 0; i < n; i++) {
+      const f = n === 1 ? 0 : i / (n - 1) - 0.5, ang = base + f * spread + Math.sin(t * 0.9 + i * 1.7) * 0.02;
+      const w = (0.018 + 0.022 * Math.abs(Math.sin(i * 2.3))) * (0.85 + 0.15 * Math.sin(t * 2 + i));
+      const ex = ax + Math.cos(ang) * len, ey = ay + Math.sin(ang) * len;
+      const gr = g.createLinearGradient(ax, ay, ex, ey);
+      const al = a * (0.10 + 0.10 * Math.abs(Math.cos(i * 1.3)));
+      gr.addColorStop(0, `rgba(${warm ? '255,236,190' : '220,230,255'},0)`); gr.addColorStop(0.55, `rgba(${warm ? '255,226,160' : '200,215,255'},${al})`); gr.addColorStop(1, `rgba(${warm ? '255,214,130' : '190,205,255'},0)`);
+      g.fillStyle = gr; g.beginPath(); g.moveTo(ax, ay);
+      g.lineTo(ax + Math.cos(ang - w) * len, ay + Math.sin(ang - w) * len); g.lineTo(ax + Math.cos(ang + w) * len, ay + Math.sin(ang + w) * len); g.closePath(); g.fill();
+    }
   }
-  // 강림 연출(이스터에그라 화면 전체를 어둡게 깔고 크게). 누를 때마다 다섯 가지 중 하나가 랜덤(같은 건 연달아 안 나옴)
-  //  light: 빛기둥·빛살·충격파 / thunder: 번개 강타 / clouds: 구름이 갈라지고 깃털 / glitch: 차원 균열 / slam: 위에서 쿵 착지
-  const SVGNS = 'http://www.w3.org/2000/svg';
+  function bloom(g, x, y, rx, ry, rgb, a) {
+    if (a <= 0) return;
+    g.globalCompositeOperation = 'lighter'; g.save(); g.translate(x, y); g.scale(1, ry / rx);
+    const gr = g.createRadialGradient(0, 0, 0, 0, 0, rx); gr.addColorStop(0, `rgba(${rgb},${0.55 * a})`); gr.addColorStop(0.35, `rgba(${rgb},${0.18 * a})`); gr.addColorStop(1, `rgba(${rgb},0)`);
+    g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rx, 0, Math.PI * 2); g.fill(); g.restore();
+  }
+  function ringDraw(g, x, y, r, sq, a, rgb, lw) {
+    if (a <= 0) return;
+    g.globalCompositeOperation = 'lighter'; g.save(); g.translate(x, y); g.scale(1, sq);
+    for (const [k, al] of [[3, 0.12], [1.6, 0.3], [0.7, 0.9]]) { g.strokeStyle = `rgba(${rgb},${al * a})`; g.lineWidth = lw * k; g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.stroke(); }
+    g.restore();
+  }
+  // 아래 순서로 깔림: 어두운 막(CSS) → 캔버스. 신 줄·왕관·흔들림은 CSS 클래스로
   function shake(delay, hard) {
     const card = $('#rankView'); card.style.setProperty('--sd', `${delay}s`);
     card.classList.remove('god-shake', 'god-shake-hard'); void card.offsetWidth; card.classList.add(hard ? 'god-shake-hard' : 'god-shake');
     setTimeout(() => card.classList.remove('god-shake', 'god-shake-hard'), (delay + 0.9) * 1000);
   }
-  function ringAt(fx, x, y, cls, delay) {
-    const g = el('div', { class: 'god-ring' + (cls ? ' ' + cls : '') }); g.style.left = `${x}px`; g.style.top = `${y}px`;
-    if (delay != null) g.style.animationDelay = `${delay}s`;
-    fx.append(g);
-  }
-  function wordAt(fx, text, x, y, cls) { const w = el('div', { class: 'god-word' + (cls ? ' ' + cls : ''), text }); w.style.left = `${x}px`; w.style.top = `${y}px`; fx.append(w); }
   const FX = {
+    // 빛: PC는 높은 곳에서 넓게 퍼지는 빛줄기 다발과 가로 렌즈 빛, 모바일은 좁고 곧은 빛기둥
     light(fx, c) {
-      const bw = c.big ? 170 : 90;
-      const beam = el('div', { class: 'god-beam' }); beam.style.left = `${c.cx - bw / 2}px`; beam.style.width = `${bw}px`; beam.style.height = `${Math.max(40, c.cy)}px`;
-      rays(fx, c.cx, c.cy, c.big ? 1400 : 760);
-      fx.append(beam);
-      wordAt(fx, '강림', c.r.left + c.r.width / 2, Math.max(24, c.r.top - (c.big ? 80 : 44)));
-      rain(fx, c.big ? 50 : 22);
-      sparkles(fx, c.r, c.big ? 90 : 36, c.big);
-      shake(0.45, c.big);
-      return 2700;
-    },
-    thunder(fx, c) {
-      fx.append(el('div', { class: 'god-flash' }));
-      const W = innerWidth;
-      const bolt = (x0, delay, width) => {
-        const steps = Math.max(7, Math.round(c.cy / 38)), pts = [];
-        for (let i = 0; i <= steps; i++) {
-          const t = i / steps, jit = i && i < steps ? (Math.random() - 0.5) * (c.big ? 90 : 50) : 0;
-          pts.push(`${(x0 + (c.cx - x0) * t + jit).toFixed(1)},${(c.cy * t).toFixed(1)}`);
+      const S = stage(fx, 3.2), rx = c.r.left + c.r.width / 2;
+      S.draw((g, t) => {
+        const a = env(t, 0.05, 0.6, 1.7, 3.0);
+        if (c.big) drawRays(g, rx, -c.H * 0.35, rx, c.cy, 26, 0.95, c.cy + c.H * 0.75, a, t, true);
+        else drawRays(g, c.cx + 40, -60, c.cx + 40, c.cy, 9, 0.22, c.cy + 260, a * 1.2, t, true);
+        bloom(g, rx, c.cy, c.r.width * (c.big ? 0.75 : 0.9), c.r.height * 2.2, '255,214,140', env(t, 0.35, 0.6, 0.9, 2.4));
+        if (c.big) { // 가로 렌즈 빛(애너모픽)
+          const a2 = env(t, 0.4, 0.55, 0.8, 1.8); g.globalCompositeOperation = 'lighter';
+          const gr = g.createLinearGradient(0, 0, c.W, 0); gr.addColorStop(0, 'rgba(180,200,255,0)'); gr.addColorStop(0.5, `rgba(255,236,200,${0.5 * a2})`); gr.addColorStop(1, 'rgba(180,200,255,0)');
+          g.fillStyle = gr; g.fillRect(0, c.cy - 1.5, c.W, 3);
         }
-        const svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('class', 'god-bolt'); svg.setAttribute('width', W); svg.setAttribute('height', Math.ceil(c.cy + 20));
-        svg.style.animationDelay = `${delay}s`;
-        const pl = document.createElementNS(SVGNS, 'polyline'); pl.setAttribute('points', pts.join(' ')); pl.setAttribute('stroke-width', width);
-        svg.append(pl);
-        // 갈래 하나
-        const k = 2 + Math.floor(Math.random() * (steps - 3)), [bx, by] = pts[k].split(',').map(Number), br = [`${bx},${by}`];
-        let x = bx, y = by; for (let i = 0; i < 4; i++) { x += (Math.random() < 0.5 ? -1 : 1) * (14 + Math.random() * 26); y += 18 + Math.random() * 22; br.push(`${x.toFixed(1)},${y.toFixed(1)}`); }
-        const pb = document.createElementNS(SVGNS, 'polyline'); pb.setAttribute('points', br.join(' ')); pb.setAttribute('stroke-width', width * 0.55);
-        svg.append(pb);
-        return svg;
-      };
-      fx.append(bolt(c.cx + (Math.random() - 0.5) * 220, 0.28, c.big ? 6 : 4), bolt(c.cx + (Math.random() - 0.5) * 320, 0.62, c.big ? 4 : 3));
-      if (c.big) fx.append(bolt(c.cx + (Math.random() - 0.5) * 500, 0.95, 3));
-      ringAt(fx, c.cx, c.cy, 'zap', 0.3); ringAt(fx, c.cx, c.cy, 'zap', 0.64);
-      sparkles(fx, c.r, c.big ? 70 : 30, c.big);
-      wordAt(fx, '천벌', c.r.left + c.r.width / 2, Math.max(24, c.r.top - (c.big ? 80 : 44)), 'zap');
-      shake(0.3, true);
-      return 2500;
+        ringDraw(g, c.cx, c.cy, 20 + ease.out(Math.min(1, Math.max(0, (t - 0.45) / 1.1))) * (c.big ? 520 : 220), 0.32, env(t, 0.45, 0.5, 0.6, 1.6), '255,226,160', 1.6);
+      });
+      S.at(0.45, () => burst(S, c.big ? 150 : 60, rx, c.cy, { sp: [40, c.big ? 380 : 200], size: [6, 16], life: [0.9, 2.2], colors: [GOLD, WHITE, GOLD, LILAC], drag: 0.95, grav: -25, tw: true, jx: c.r.width * 0.4, jy: 8 }));
+      for (let i = 0; i < (c.big ? 26 : 12); i++) S.at(0.55 + i * 0.07, () => burst(S, c.big ? 4 : 3, rx, c.cy + 10, { ang: -Math.PI / 2, spread: 0.5, sp: [20, 70], size: [5, 11], life: [1.4, 2.4], colors: [GOLD, WHITE], drag: 0.99, grav: -12, tw: true, jx: c.r.width * 0.45, alpha: 0.85 }));
+      shake(0.45, false);
+      return 3200;
     },
-    clouds(fx, c) {
-      fx.append(el('div', { class: 'god-glow' }));
-      const h = c.r.height * (c.big ? 4.2 : 3.4), top = c.cy - h / 2, half = c.r.width / 2;
-      for (const side of ['l', 'r']) {
-        const d = el('div', { class: 'god-cloud ' + side });
-        d.style.top = `${top}px`; d.style.height = `${h}px`; d.style.width = `${half + (c.big ? 220 : 90)}px`;
-        d.style.left = side === 'l' ? `${c.r.left - (c.big ? 200 : 80)}px` : `${c.r.left + half - 20}px`;
-        fx.append(d);
-      }
-      rays(fx, c.r.left + half, c.cy, c.big ? 1300 : 700);
-      feathers(fx, c.big ? 34 : 16);
-      wordAt(fx, '강림', c.r.left + half, Math.max(24, c.r.top - (c.big ? 80 : 44)), 'soft');
-      return 4600;
+    // 번개: PC는 여러 각도에서 세 번 내리치고 카드 둘레에 전기가 기어 다님, 모바일은 위에서 곧게 두 번
+    thunder(fx, c) {
+      const S = stage(fx, 2.6), strikes = c.big ? [0.22, 0.5, 0.86] : [0.25, 0.62];
+      const shapes = strikes.map((st, i) => makeBolt(c.big ? c.cx + rnd(-c.W * 0.25, c.W * 0.25) : c.cx + rnd(-40, 60), -20, c.cx + rnd(-6, 6), c.cy, c.big ? 140 : 70, c.big ? 3 : 2));
+      const arcs = [];
+      S.draw((g, t) => {
+        strikes.forEach((st, i) => {
+          const dtt = t - st; if (dtt < 0 || dtt > 0.32) return;
+          const a = (dtt < 0.05 ? 1 : 1 - (dtt - 0.05) / 0.27) * (Math.random() < 0.15 ? 0.4 : 1);
+          if (Math.random() < 0.08 && dtt < 0.15) shapes[i] = makeBolt(shapes[i][0][0][0], -20, c.cx + rnd(-6, 6), c.cy, c.big ? 140 : 70, c.big ? 3 : 2);
+          drawBolt(g, shapes[i], a, c.big ? 2.4 : 1.8);
+          g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(200,210,255,${0.32 * a * (i ? 0.6 : 1)})`; g.fillRect(0, 0, c.W, c.H);
+          bloom(g, c.cx, c.cy, 160, 90, '170,190,255', a);
+        });
+        // 카드 둘레를 기어 다니는 전기
+        if (t > strikes[0] && t < strikes[0] + 1.6) {
+          if (Math.random() < (c.big ? 0.55 : 0.35)) {
+            const r = c.r, side = Math.floor(rnd(0, 4)), u = rnd(0, 1), v = Math.min(1, u + rnd(0.06, 0.18));
+            const P = (q) => side === 0 ? [r.left + q * r.width, r.top] : side === 1 ? [r.right, r.top + q * r.height] : side === 2 ? [r.left + q * r.width, r.bottom] : [r.left, r.top + q * r.height];
+            const [x0, y0] = P(u), [x1, y1] = P(v), pts = [[x0, y0]]; boltPath(x0, y0, x1, y1, 14, pts); arcs.push({ pts, t });
+          }
+          for (let i = arcs.length - 1; i >= 0; i--) { const age = t - arcs[i].t; if (age > 0.12) { arcs.splice(i, 1); continue; } drawBolt(g, [arcs[i].pts], 1 - age / 0.12, 0.9); }
+        }
+      });
+      strikes.forEach((st) => S.at(st + 0.02, () => burst(S, c.big ? 70 : 34, c.cx, c.cy, { sp: [180, c.big ? 620 : 380], size: [4, 9], life: [0.25, 0.7], colors: [ICE, WHITE, CYAN], drag: 0.93, grav: 700, fin: 0.02 })));
+      shake(strikes[0], true);
+      return 2600;
     },
-    glitch(fx, c) {
-      fx.append(el('div', { class: 'god-scan' }));
-      const W = innerWidth, pts = [];
-      for (let x = 0; x <= W + 30; x += 30) pts.push(`${x},${(c.cy + (Math.random() - 0.5) * (c.big ? 34 : 22)).toFixed(1)}`);
-      const svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('class', 'god-crack'); svg.setAttribute('width', W); svg.setAttribute('height', innerHeight);
-      const pl = document.createElementNS(SVGNS, 'polyline'); pl.setAttribute('points', pts.join(' ')); svg.append(pl); fx.append(svg);
-      const cols = ['#a78bfa', '#22d3ee', '#f472b6', '#fde68a', '#ffffff'];
-      for (let i = 0; i < (c.big ? 90 : 40); i++) {
-        const q = el('span', { class: 'god-px' }), sz = 4 + Math.floor(Math.random() * (c.big ? 12 : 8));
-        q.style.left = `${c.r.left - 30 + Math.random() * (c.r.width + 60)}px`; q.style.top = `${c.r.top - 40 + Math.random() * (c.r.height + 80)}px`;
-        q.style.width = q.style.height = `${sz}px`; q.style.background = cols[i % cols.length];
-        q.style.animationDelay = `${(Math.random() * 0.8).toFixed(2)}s`;
-        fx.append(q);
-      }
-      wordAt(fx, 'ERROR: 측정 불가', c.r.left + c.r.width / 2, Math.max(24, c.r.top - (c.big ? 70 : 40)), 'glitch');
-      const card = $('#rankView'); card.classList.add('god-jitter'); setTimeout(() => card.classList.remove('god-jitter'), 1200);
-      return 2200;
-    },
-    slam(fx, c) {
-      fx.append(el('div', { class: 'god-impact' }));
-      const n = c.big ? 18 : 10;
+    // 하늘: 안개가 갈라지며 금빛이 새어 나오고 깃털이 내려옴. PC는 좌우로, 모바일은 위아래로 갈라짐
+    heaven(fx, c) {
+      const S = stage(fx, 4.4), rx = c.r.left + c.r.width / 2, n = c.big ? 46 : 24;
       for (let i = 0; i < n; i++) {
-        const left = i % 2 === 0, d = el('span', { class: 'god-dust' }), sz = (c.big ? 40 : 26) + Math.random() * (c.big ? 50 : 26);
-        d.style.width = d.style.height = `${sz}px`;
-        d.style.left = `${(left ? c.r.left + 10 : c.r.right - 10) - sz / 2}px`; d.style.top = `${c.r.bottom - sz / 2}px`;
-        d.style.setProperty('--dx', `${(left ? -1 : 1) * (40 + Math.random() * (c.big ? 220 : 90))}px`); d.style.setProperty('--dy', `${-10 - Math.random() * 40}px`);
-        d.style.animationDelay = `${(0.5 + Math.random() * 0.12).toFixed(2)}s`;
-        fx.append(d);
+        const left = i % 2 === 0, x = c.big ? rx + rnd(-c.r.width * 0.55, c.r.width * 0.55) : rx + rnd(-c.r.width * 0.6, c.r.width * 0.6), y = c.cy + rnd(-c.r.height * 1.3, c.r.height * 1.3);
+        const out = c.big ? (x < rx ? -1 : 1) : (y < c.cy ? -1 : 1);
+        S.add({ x, y, vx: c.big ? out * rnd(40, 70) : rnd(-10, 10), vy: c.big ? rnd(-8, 4) : out * rnd(30, 55), ax: c.big ? out * rnd(90, 160) : 0, grav: c.big ? 0 : out * rnd(70, 120), drag: 1,
+          size: rnd(c.big ? 180 : 120, c.big ? 360 : 230), life: rnd(2.4, 3.2), img: sprite(i % 3 ? '250,246,255' : '232,224,255', true), alpha: 0.9, normal: true, fin: 0.04, grow: 0.35 });
       }
-      for (let i = 0; i < (c.big ? 40 : 18); i++) {
-        const q = el('span', { class: 'god-rock' });
-        q.style.left = `${c.r.left + Math.random() * c.r.width}px`; q.style.top = `${c.r.bottom - 4}px`;
-        q.style.setProperty('--dx', `${Math.round((Math.random() - 0.5) * (c.big ? 400 : 180))}px`); q.style.setProperty('--up', `${-40 - Math.round(Math.random() * (c.big ? 160 : 80))}px`);
-        q.style.animationDelay = `${(0.5 + Math.random() * 0.08).toFixed(2)}s`;
-        fx.append(q);
+      S.draw((g, t) => {
+        const a = env(t, 0.5, 1.4, 2.6, 4.2);
+        drawRays(g, rx, c.cy - (c.big ? 340 : 220), rx, c.cy + 400, c.big ? 18 : 9, c.big ? 2.2 : 1.6, c.big ? 900 : 520, a * 0.9, t, true);
+        bloom(g, rx, c.cy, c.r.width * 0.7, c.r.height * 2.4, '255,220,140', a);
+      });
+      // 깃털: 좌우로 흔들리며 천천히 떨어짐
+      const feather = (g, p, sz) => {
+        g.rotate(Math.sin(p.age * 2.2 + p.ph) * 0.6 + p.rot);
+        const l = sz, w = sz * 0.26, gr = g.createLinearGradient(-w, 0, w, 0);
+        gr.addColorStop(0, 'rgba(255,255,255,.55)'); gr.addColorStop(0.5, 'rgba(255,255,255,.95)'); gr.addColorStop(1, 'rgba(236,230,255,.55)');
+        g.fillStyle = gr; g.beginPath(); g.moveTo(0, -l / 2); g.quadraticCurveTo(w, -l / 6, w * 0.25, l / 2); g.quadraticCurveTo(0, l / 2.3, -w * 0.25, l / 2); g.quadraticCurveTo(-w, -l / 6, 0, -l / 2); g.fill();
+        g.strokeStyle = 'rgba(210,200,240,.8)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(0, -l / 2.2); g.lineTo(0, l * 0.62); g.stroke();
+      };
+      for (let i = 0; i < (c.big ? 22 : 10); i++) S.at(rnd(0.6, 1.8), () => S.add({ x: rnd(c.big ? c.W * 0.15 : 10, c.big ? c.W * 0.85 : c.W - 10), y: -30, vx: 0, vy: rnd(45, 85), drag: 1, sway: rnd(1.6, 2.6), swayA: rnd(30, 60), ph: rnd(0, 6), rot: rnd(-0.4, 0.4),
+        size: rnd(c.big ? 26 : 20, c.big ? 38 : 28), life: rnd(2.6, 3.6), normal: true, alpha: 0.95, fin: 0.08, draw: feather }));
+      S.at(0.9, () => burst(S, c.big ? 80 : 36, rx, c.cy, { sp: [20, 150], size: [5, 12], life: [1.2, 2.4], colors: [GOLD, WHITE], drag: 0.97, grav: -20, tw: true, jx: c.r.width * 0.4 }));
+      return 4400;
+    },
+    // 차원 균열: 흩어진 빛 조각들이 날아와 신 줄로 모이며 나타남(글리치). PC는 화면 사방에서, 모바일은 위에서 쏟아짐
+    glitch(fx, c) {
+      const S = stage(fx, 2.6), r = c.r, cols = [CYAN, PINK, WHITE, LILAC], n = c.big ? 420 : 170;
+      for (let i = 0; i < n; i++) {
+        const tx = rnd(r.left + 6, r.right - 6), ty = rnd(r.top + 4, r.bottom - 4);
+        const fx0 = c.big ? (Math.random() < 0.5 ? rnd(-40, c.W + 40) : (Math.random() < 0.5 ? -40 : c.W + 40)) : tx + rnd(-120, 120);
+        const fy0 = c.big ? (Math.random() < 0.5 ? (Math.random() < 0.5 ? -40 : c.H + 40) : rnd(0, c.H)) : rnd(-80, r.top - 60);
+        S.at(rnd(0, 0.25), (S2) => S2.add({ x: fx0, y: fy0, fx: fx0, fy: fy0, to: [tx, ty], life: rnd(0.55, 0.85), size: rnd(4, 9), alpha: 0.95, fin: 0.05,
+          draw: (g, p, sz) => { g.fillStyle = `rgba(${cols[i % 4]},1)`; g.fillRect(-sz / 2, -sz / 2, sz, sz * 0.6); } }));
       }
-      ringAt(fx, c.r.left + c.r.width / 2, c.r.bottom, 'slam', 0.5);
-      wordAt(fx, '쿵', c.r.right - (c.big ? 90 : 46), Math.max(24, c.r.top - (c.big ? 64 : 34)), 'slam');
-      shake(0.5, true);
+      S.draw((g, t) => {
+        // 가로 지지직 띠
+        if (t < 1.3) {
+          g.globalCompositeOperation = 'lighter';
+          for (let i = 0; i < (c.big ? 7 : 4); i++) if (Math.random() < 0.5) { const y = rnd(0, c.H), h = rnd(2, c.big ? 26 : 14); g.fillStyle = `rgba(${Math.random() < 0.5 ? CYAN : PINK},${rnd(0.05, 0.16)})`; g.fillRect(rnd(-50, c.W * 0.3), y, rnd(c.W * 0.3, c.W), h); }
+        }
+        // 위에서 아래로 훑는 스캔 빛
+        const k = (t - 0.75) / 0.6; if (k > 0 && k < 1) { g.globalCompositeOperation = 'lighter'; const y = r.top - 20 + (r.height + 40) * k; const gr = g.createLinearGradient(0, y - 18, 0, y + 18); gr.addColorStop(0, 'rgba(110,231,255,0)'); gr.addColorStop(0.5, 'rgba(220,250,255,.55)'); gr.addColorStop(1, 'rgba(255,120,214,0)'); g.fillStyle = gr; g.fillRect(r.left - 40, y - 18, r.width + 80, 36); }
+        bloom(g, r.left + r.width / 2, c.cy, r.width * 0.6, r.height * 1.6, '160,140,255', env(t, 0.7, 0.85, 1.0, 2.0));
+      });
+      const card = $('#rankView'); card.classList.add('god-jitter'); setTimeout(() => card.classList.remove('god-jitter'), 1200);
+      return 2600;
+    },
+    // 쿵 착지: 신 줄이 떨어지며 먼지 구름과 파편이 튀고 충격파가 퍼짐. PC는 넓게, 모바일은 작고 위로
+    slam(fx, c) {
+      const S = stage(fx, 2.8), r = c.r, rx = r.left + r.width / 2, hit = 0.52;
+      S.at(hit, () => {
+        for (let i = 0; i < (c.big ? 40 : 18); i++) {
+          const side = i % 2 ? 1 : -1;
+          S.add({ x: side > 0 ? r.right - rnd(0, 40) : r.left + rnd(0, 40), y: r.bottom - rnd(0, 10), vx: side * rnd(c.big ? 120 : 50, c.big ? 520 : 220), vy: rnd(-70, -10), drag: 0.93, grav: -8,
+            size: rnd(c.big ? 70 : 44, c.big ? 150 : 90), grow: 1.4, life: rnd(1.1, 1.9), img: sprite(DUST, true), alpha: 0.55, normal: true, fin: 0.04 });
+        }
+        for (let i = 0; i < (c.big ? 50 : 22); i++) {
+          const rock = (g, p, sz) => { g.rotate(p.age * p.spin); g.fillStyle = 'rgba(120,108,96,1)'; g.fillRect(-sz / 2, -sz / 2, sz, sz * 0.7); };
+          S.add({ x: rnd(r.left, r.right), y: r.bottom - 2, vx: rnd(-1, 1) * (c.big ? 380 : 170), vy: -rnd(140, c.big ? 420 : 300), grav: 1100, drag: 0.995, spin: rnd(-12, 12),
+            size: rnd(3, 7), life: rnd(0.7, 1.2), alpha: 1, normal: true, fin: 0.02, draw: rock });
+        }
+        burst(S, c.big ? 50 : 22, rx, r.bottom, { ang: -Math.PI / 2, spread: 1.3, sp: [80, 300], size: [5, 10], life: [0.5, 1.1], colors: [WHITE, GOLD], drag: 0.94, grav: 300 });
+      });
+      S.draw((g, t) => {
+        const k = (t - hit) / 0.9;
+        if (k > 0 && k < 1) {
+          ringDraw(g, rx, r.bottom, 10 + ease.out(k) * (c.big ? c.W * 0.55 : r.width * 0.75), 0.16, 1 - k, '255,244,226', 2.2);
+          // 바닥에 닿는 순간 가로로 번쩍
+          const a = Math.max(0, 1 - k * 4); g.globalCompositeOperation = 'lighter';
+          const gr = g.createLinearGradient(r.left - 80, 0, r.right + 80, 0); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, `rgba(255,250,235,${0.8 * a})`); gr.addColorStop(1, 'rgba(255,255,255,0)');
+          g.fillStyle = gr; g.fillRect(r.left - 80, r.bottom - 2, r.width + 160, 4);
+        }
+      });
+      shake(hit, true);
       $('#rankList').classList.add('pushed');
-      return 2400;
+      return 2800;
+    },
+    // 유성: 꼬리를 길게 끄는 유성이 떨어져 신 줄에 꽂힘. PC는 화면 끝에서 비스듬히 + 잔별똥, 모바일은 위에서 거의 수직으로
+    meteor(fx, c) {
+      const S = stage(fx, 3), hit = 0.68, sx = c.big ? c.W * 0.96 : c.cx + 90, sy = c.big ? -120 : -80, trail = [];
+      S.draw((g, t) => {
+        if (c.big) for (let i = 0; i < 7; i++) { // 잔별똥
+          const t0 = 0.05 + i * 0.22, k = (t - t0) / 0.5; if (k <= 0 || k >= 1) continue;
+          const x0 = c.W * (0.3 + 0.1 * i), y0 = -20, x1 = x0 - 260, y1 = 200 + i * 30, x = x0 + (x1 - x0) * k, y = y0 + (y1 - y0) * k;
+          const gr = g.createLinearGradient(x, y, x + 90, y - 70); gr.addColorStop(0, `rgba(255,240,210,${0.7 * (1 - k)})`); gr.addColorStop(1, 'rgba(255,240,210,0)');
+          g.globalCompositeOperation = 'lighter'; g.strokeStyle = gr; g.lineWidth = 1.6; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 90, y - 70); g.stroke();
+        }
+        const k = Math.min(1, Math.max(0, (t - 0.08) / (hit - 0.08)));
+        if (t < hit + 0.02) {
+          const e = k * k, x = sx + (c.cx - sx) * e, y = sy + (c.cy - sy) * e;
+          trail.unshift([x, y]); if (trail.length > 26) trail.pop();
+          g.globalCompositeOperation = 'lighter';
+          trail.forEach(([tx, ty], i) => { const f = 1 - i / trail.length, sz = (c.big ? 90 : 60) * f; g.globalAlpha = 0.5 * f; g.drawImage(sprite(i < 4 ? WHITE : '255,170,90'), tx - sz / 2, ty - sz / 2, sz, sz); });
+          g.globalAlpha = 1; const hz = c.big ? 70 : 48; g.drawImage(sprite(WHITE), x - hz / 2, y - hz / 2, hz, hz);
+          if (Math.random() < 0.7) burst(S, 2, x, y, { sp: [20, 90], size: [3, 7], life: [0.3, 0.6], colors: ['255,170,90', GOLD], drag: 0.92, grav: 60 });
+        }
+        bloom(g, c.cx, c.cy, c.big ? 520 : 260, c.big ? 260 : 150, '255,210,150', env(t, hit, hit + 0.06, hit + 0.2, hit + 1.4));
+        ringDraw(g, c.cx, c.cy, 14 + ease.out(Math.min(1, Math.max(0, (t - hit) / 1))) * (c.big ? 640 : 260), 0.3, env(t, hit, hit + 0.04, hit + 0.1, hit + 1), '255,226,180', 2);
+      });
+      S.at(hit, () => burst(S, c.big ? 170 : 70, c.cx, c.cy, { sp: [120, c.big ? 700 : 380], size: [4, 11], life: [0.5, 1.4], colors: [WHITE, GOLD, '255,150,80'], drag: 0.94, grav: 260 }));
+      shake(hit, true);
+      return 3000;
+    },
+    // 별자리: 밤하늘에 별이 하나씩 켜지고, 신 줄 둘레에 별을 이은 왕관(PC는 넓은 타원, 모바일은 위쪽 반원)이 그려진 뒤 줄로 모여듦
+    stars(fx, c) {
+      const S = stage(fx, 3.6), rx = c.r.left + c.r.width / 2, n = c.big ? 240 : 100;
+      const field = Array.from({ length: n }, () => ({ x: rnd(0, c.W), y: rnd(0, c.H), s: rnd(2, c.big ? 7 : 5), at: rnd(0, 0.9), tw: rnd(2, 6), ph: rnd(0, 6) }));
+      const k = c.big ? 9 : 7, pts = Array.from({ length: k }, (_, i) => {
+        const a = c.big ? Math.PI * 2 * i / k - Math.PI / 2 : Math.PI + Math.PI * i / (k - 1);
+        const rxx = c.big ? c.r.width * 0.62 : c.r.width * 0.5, ryy = c.big ? c.r.height * 2.4 : c.r.height * 2.2;
+        return [rx + Math.cos(a) * rxx + rnd(-10, 10), c.cy + Math.sin(a) * ryy + rnd(-6, 6)];
+      });
+      S.draw((g, t) => {
+        g.globalCompositeOperation = 'lighter';
+        if (c.big) { bloom(g, c.W * 0.25, c.H * 0.3, 420, 260, '140,110,255', 0.35 * env(t, 0, 0.8, 2.6, 3.5)); bloom(g, c.W * 0.78, c.H * 0.62, 380, 240, '90,150,255', 0.3 * env(t, 0.2, 1, 2.6, 3.5)); }
+        const fade = env(t, 0, 0.3, 2.6, 3.5);
+        for (const st of field) { if (t < st.at) continue; const a = Math.min(1, (t - st.at) * 4) * fade * (0.5 + 0.5 * Math.sin(t * st.tw + st.ph)); g.globalAlpha = a; g.drawImage(sprite(st.s > 4 ? WHITE : ICE), st.x - st.s, st.y - st.s, st.s * 2, st.s * 2); }
+        g.globalAlpha = 1;
+        const gather = ease.inOut(Math.min(1, Math.max(0, (t - 1.65) / 0.35)));
+        const P = pts.map(([x, y]) => [x + (rx - x) * gather, y + (c.cy - y) * gather]);
+        const drawn = (t - 0.6) / 0.9 * (c.big ? k : k - 1);
+        g.lineCap = 'round';
+        for (let i = 0; i < (c.big ? k : k - 1); i++) {
+          const f = Math.min(1, Math.max(0, drawn - i)); if (f <= 0) break;
+          const [x0, y0] = P[i], [x1, y1] = P[(i + 1) % k], la = (1 - gather) * fade;
+          g.strokeStyle = `rgba(200,210,255,${0.22 * la})`; g.lineWidth = 6; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + (x1 - x0) * f, y0 + (y1 - y0) * f); g.stroke();
+          g.strokeStyle = `rgba(255,255,255,${0.85 * la})`; g.lineWidth = 1.2; g.stroke();
+        }
+        P.forEach(([x, y], i) => { const on = t > 0.6 + i * 0.1; if (!on) return; const z = (c.big ? 30 : 22) * (1 + 0.25 * Math.sin(t * 6 + i)); g.drawImage(sprite(i % 2 ? GOLD : WHITE), x - z / 2, y - z / 2, z, z); });
+        bloom(g, rx, c.cy, c.r.width * 0.6, c.r.height * 2, '220,210,255', env(t, 1.8, 1.9, 2.1, 3.2));
+      });
+      S.at(1.95, () => burst(S, c.big ? 120 : 50, rx, c.cy, { sp: [60, c.big ? 420 : 220], size: [4, 10], life: [0.8, 1.8], colors: [WHITE, ICE, GOLD], drag: 0.95, grav: -10, tw: true, jx: c.r.width * 0.3 }));
+      return 3600;
+    },
+    // 불꽃: 줄 아래에서 불길이 솟아 감싸고 불티가 날림. PC는 줄 너비 전체가 불벽, 모바일은 가운데에서 높이 치솟는 불기둥
+    flame(fx, c) {
+      const S = stage(fx, 3.2), r = c.r, rx = r.left + r.width / 2, FL = ['255,236,170', '255,170,70', '255,110,50', '255,70,40'];
+      const emit = (n, life) => { for (let i = 0; i < n; i++) {
+        const x = c.big ? rnd(r.left, r.right) : rx + rnd(-r.width * 0.22, r.width * 0.22) * (1 - Math.random() * 0.5);
+        S.add({ x, y: r.bottom + rnd(-4, 10), vx: rnd(-20, 20), vy: -rnd(c.big ? 140 : 200, c.big ? 300 : 420), drag: 0.97, grav: -60, sway: rnd(4, 9), swayA: rnd(20, 50), ph: rnd(0, 6),
+          size: rnd(c.big ? 34 : 30, c.big ? 70 : 60), grow: -0.7, life: rnd(life * 0.6, life), img: sprite(FL[Math.floor(Math.random() * 4)]), alpha: 0.75, fin: 0.06 }); } };
+      for (let i = 0; i < 26; i++) S.at(0.05 + i * 0.045, () => emit(c.big ? 18 : 10, 0.9));
+      for (let i = 0; i < 14; i++) S.at(1.2 + i * 0.1, () => burst(S, c.big ? 5 : 3, rx, r.bottom, { ang: -Math.PI / 2, spread: 0.7, sp: [30, 120], size: [3, 6], life: [1.2, 2], colors: ['255,180,90', GOLD], drag: 0.99, grav: -30, tw: true, jx: c.big ? r.width * 0.45 : r.width * 0.2 }));
+      S.draw((g, t) => { bloom(g, rx, r.bottom - 10, c.big ? r.width * 0.7 : r.width * 0.5, c.big ? 160 : 220, '255,120,50', env(t, 0.05, 0.4, 1.3, 2.6)); });
+      return 3200;
+    },
+    // 소용돌이: 빛 알갱이가 소용돌이치며 한 점으로 빨려 들어가 검은 핵이 생겼다가, 터지면서 신이 나타남
+    vortex(fx, c) {
+      const S = stage(fx, 2.9), rx = c.r.left + c.r.width / 2, pop = 1.05, n = c.big ? 320 : 140, R = c.big ? Math.max(c.W, c.H) * 0.55 : Math.max(c.W, c.H) * 0.5;
+      for (let i = 0; i < n; i++) {
+        const a0 = rnd(0, Math.PI * 2), r0 = rnd(R * 0.5, R), st = rnd(0, 0.35), col = [LILAC, CYAN, WHITE][i % 3];
+        S.at(st, (S2) => S2.add({ x: rx, y: c.cy, life: pop - st, size: rnd(4, 10), img: sprite(col), fin: 0.1, alpha: 0.95,
+          draw: (g, p, sz) => { const k = p.age / p.life, e = k * k, rr = r0 * (1 - e), ang = a0 + e * 7; g.drawImage(p.img, Math.cos(ang) * rr - sz / 2, Math.sin(ang) * rr * (c.big ? 0.55 : 0.9) - sz / 2, sz, sz); } }));
+      }
+      S.draw((g, t) => {
+        const core = env(t, 0.45, 1.0, 1.02, 1.12), cr = (c.big ? 70 : 46) * Math.min(1, (t - 0.45) / 0.55);
+        if (core > 0 && cr > 0) { g.globalCompositeOperation = 'source-over'; const gr = g.createRadialGradient(rx, c.cy, 0, rx, c.cy, cr); gr.addColorStop(0, `rgba(0,0,0,${core})`); gr.addColorStop(0.7, `rgba(10,0,30,${core})`); gr.addColorStop(0.86, `rgba(180,150,255,${0.9 * core})`); gr.addColorStop(1, 'rgba(180,150,255,0)'); g.fillStyle = gr; g.beginPath(); g.arc(rx, c.cy, cr, 0, Math.PI * 2); g.fill(); }
+        bloom(g, rx, c.cy, c.big ? 600 : 280, c.big ? 300 : 200, '230,220,255', env(t, pop, pop + 0.04, pop + 0.12, pop + 1.1));
+        ringDraw(g, rx, c.cy, 20 + ease.out(Math.min(1, Math.max(0, (t - pop) / 0.9))) * (c.big ? 760 : 300), c.big ? 0.4 : 0.6, env(t, pop, pop + 0.03, pop + 0.1, pop + 0.9), '220,210,255', 2.4);
+      });
+      S.at(pop, () => burst(S, c.big ? 200 : 80, rx, c.cy, { sp: [200, c.big ? 900 : 460], size: [4, 10], life: [0.5, 1.3], colors: [WHITE, LILAC, CYAN], drag: 0.93 }));
+      shake(pop, true);
+      return 2900;
+    },
+    // 오로라: 위쪽 하늘에 초록·청록·보랏빛 커튼이 일렁이며 내려오고, 빛 알갱이가 천천히 오름. PC는 가로로 넓게 세 겹, 모바일은 두 겹
+    aurora(fx, c) {
+      const S = stage(fx, 3.8), rx = c.r.left + c.r.width / 2;
+      const bands = (c.big ? [[0.18, '120,255,190', 0], [0.28, '110,220,255', 2], [0.36, '190,140,255', 4]] : [[0.12, '120,255,190', 0], [0.22, '170,140,255', 3]]);
+      S.draw((g, t) => {
+        const a = env(t, 0.1, 1.0, 2.6, 3.7); if (a <= 0) return;
+        g.globalCompositeOperation = 'lighter';
+        for (const [by, rgb, ph] of bands) {
+          const base = c.H * by, amp = c.big ? 46 : 26, hgt = c.big ? 220 : 160;
+          for (let x = 0; x < c.W; x += c.big ? 5 : 4) {
+            const y = base + Math.sin(x * 0.006 + t * 1.3 + ph) * amp + Math.sin(x * 0.017 - t * 0.9 + ph) * amp * 0.4;
+            const h = hgt * (0.6 + 0.4 * Math.sin(x * 0.011 + t * 1.7 + ph));
+            const gr = g.createLinearGradient(0, y, 0, y + h); gr.addColorStop(0, `rgba(${rgb},0)`); gr.addColorStop(0.25, `rgba(${rgb},${0.22 * a})`); gr.addColorStop(1, `rgba(${rgb},0)`);
+            g.fillStyle = gr; g.fillRect(x, y, c.big ? 5 : 4, h);
+          }
+        }
+        bloom(g, rx, c.cy, c.r.width * 0.6, c.r.height * 2, '150,240,220', env(t, 0.7, 1.1, 2, 3.4));
+      });
+      for (let i = 0; i < 20; i++) S.at(0.8 + i * 0.08, () => burst(S, c.big ? 5 : 3, rx, c.cy, { ang: -Math.PI / 2, spread: 0.9, sp: [20, 80], size: [4, 9], life: [1.4, 2.4], colors: ['150,255,210', WHITE, '190,160,255'], drag: 0.99, grav: -14, tw: true, jx: c.r.width * 0.45 }));
+      return 3800;
     },
   };
-  // 떨어지는 깃털(좌우로 흔들리며)
-  function feathers(fx, n) {
-    const W = innerWidth, H = innerHeight;
-    for (let i = 0; i < n; i++) {
-      const f = el('span', { class: 'god-feather' });
-      f.style.left = `${Math.round(Math.random() * W)}px`;
-      f.style.setProperty('--fall', `${Math.round(H * (0.55 + Math.random() * 0.45))}px`); f.style.setProperty('--sx', `${Math.round(18 + Math.random() * 40)}px`);
-      f.style.animationDuration = `${(2.4 + Math.random() * 1.2).toFixed(2)}s`; f.style.animationDelay = `${(0.3 + Math.random() * 0.8).toFixed(2)}s`;
-      fx.append(f);
-    }
+  // 신 카드에서 사진을 열 때(다섯 가지 중 확률로 하나). 어떤 연출이든 끝나면 사진 속 머리 위에 후광이 떠 있음
+  const PFX = {
+    // 빛 번짐: 캐릭터 자리에서 빛이 번지며 사진이 드러남. PC는 알갱이가 나선으로 돌며 오르고 가로 렌즈 빛
+    bloom(S, c) {
+      S.draw((g, t) => {
+        bloom(g, c.x, c.y, c.ir.width * (c.big ? 0.9 : 0.7), c.ir.height * (c.big ? 0.9 : 0.7), '255,222,150', env(t, 0.05, 0.45, 0.7, 2.0));
+        ringDraw(g, c.x, c.y, 12 + ease.out(Math.min(1, Math.max(0, (t - 0.25) / 1.2))) * c.ir.width * (c.big ? 0.9 : 0.6), 1, env(t, 0.25, 0.3, 0.5, 1.5), '255,230,170', 1.4);
+        if (c.big) { const a2 = env(t, 0.3, 0.45, 0.6, 1.4); g.globalCompositeOperation = 'lighter'; const gr = g.createLinearGradient(c.x - 500, 0, c.x + 500, 0); gr.addColorStop(0, 'rgba(180,200,255,0)'); gr.addColorStop(0.5, `rgba(255,240,210,${0.55 * a2})`); gr.addColorStop(1, 'rgba(180,200,255,0)'); g.fillStyle = gr; g.fillRect(c.x - 500, c.y - 1.5, 1000, 3); }
+      });
+      const n = c.big ? 70 : 28;
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2, rad = rnd(c.ir.width * 0.06, c.ir.width * (c.big ? 0.26 : 0.2)), spin = rnd(1.6, 2.6) * (i % 2 ? 1 : -1), rise = rnd(40, c.big ? 160 : 90);
+        S.at(rnd(0.2, 0.7), (S2) => S2.add({ x: c.x, y: c.y, life: rnd(1.3, 2.2), size: rnd(5, c.big ? 13 : 10), img: sprite(i % 3 ? GOLD : WHITE), tw: rnd(8, 16), ph: rnd(0, 6), fin: 0.1,
+          draw: (g, p, sz) => { const k = p.age / p.life, ang = a0 + spin * p.age * 2, rr = rad * (0.4 + k); g.drawImage(p.img, Math.cos(ang) * rr - sz / 2, Math.sin(ang) * rr * 0.45 - rise * ease.out(k) - sz / 2, sz, sz); } }));
+      }
+    },
+    // 플래시: 번쩍하고 사진이 즉석 사진처럼 하얗게 떴다가 색이 올라옴. 따뜻한 빛샘이 사진을 훑음
+    flash(S, c) {
+      S.draw((g, t) => {
+        const fl = env(t, 0, 0.04, 0.08, 0.5); if (fl > 0) { g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(255,255,255,${(c.big ? 0.75 : 0.6) * fl})`; g.fillRect(0, 0, c.W, c.H); }
+        const k = (t - 0.35) / 1.1; if (k > 0 && k < 1) {
+          g.save(); g.beginPath(); g.rect(c.ir.left, c.ir.top, c.ir.width, c.ir.height); g.clip(); g.globalCompositeOperation = 'lighter';
+          const x = c.ir.left - c.ir.width * 0.4 + c.ir.width * 1.8 * ease.inOut(k), gr = g.createLinearGradient(x - 120, 0, x + 120, 0);
+          gr.addColorStop(0, 'rgba(255,120,80,0)'); gr.addColorStop(0.45, 'rgba(255,170,90,.35)'); gr.addColorStop(0.55, 'rgba(255,220,170,.45)'); gr.addColorStop(1, 'rgba(255,120,200,0)');
+          g.fillStyle = gr; g.fillRect(c.ir.left, c.ir.top, c.ir.width, c.ir.height); g.restore();
+        }
+      });
+      if (c.big) S.at(0.05, () => burst(S, 40, c.ir.left + c.ir.width / 2, c.ir.top + c.ir.height / 2, { sp: [80, 300], size: [3, 7], life: [0.5, 1], colors: [WHITE, GOLD], drag: 0.92, jx: c.ir.width * 0.4, jy: c.ir.height * 0.4 }));
+    },
+    // 홀로그램 스캔: 위에서 아래로 청록 스캔선이 지나가며 사진이 그려짐. PC는 가로 잔상 띠도 함께
+    scan(S, c) {
+      S.draw((g, t) => {
+        const k = Math.min(1, Math.max(0, (t - 0.1) / 1.2)); if (k <= 0 || k >= 1) return;
+        const y = c.ir.top + c.ir.height * ease.inOut(k); g.globalCompositeOperation = 'lighter';
+        const gr = g.createLinearGradient(0, y - 30, 0, y + 6); gr.addColorStop(0, 'rgba(110,231,255,0)'); gr.addColorStop(0.8, 'rgba(110,231,255,.35)'); gr.addColorStop(1, 'rgba(230,255,255,.95)');
+        g.fillStyle = gr; g.fillRect(c.ir.left - 8, y - 30, c.ir.width + 16, 36);
+        g.fillStyle = 'rgba(230,255,255,.9)'; g.fillRect(c.ir.left - (c.big ? 60 : 10), y, c.ir.width + (c.big ? 120 : 20), 1.5);
+        if (c.big && Math.random() < 0.5) { g.fillStyle = `rgba(${Math.random() < 0.5 ? CYAN : PINK},.14)`; g.fillRect(c.ir.left, rnd(c.ir.top, y), c.ir.width, rnd(2, 8)); }
+      });
+      for (let i = 0; i < 12; i++) S.at(0.1 + i * 0.1, () => { const y = c.ir.top + c.ir.height * ease.inOut(Math.min(1, (S.t - 0.1) / 1.2)); burst(S, c.big ? 5 : 3, c.ir.left + rnd(0, c.ir.width), y, { sp: [20, 90], size: [3, 6], life: [0.4, 0.8], colors: [CYAN, WHITE], drag: 0.9 }); });
+    },
+    // 물결: 캐릭터 자리에서 물결 고리가 여러 겹 퍼지며 사진이 출렁이다 가라앉음
+    ripple(S, c) {
+      S.draw((g, t) => {
+        for (let i = 0; i < (c.big ? 5 : 3); i++) {
+          const k = (t - 0.1 - i * 0.22) / 1.3; if (k <= 0 || k >= 1) continue;
+          ringDraw(g, c.x, c.y, 8 + ease.out(k) * c.ir.width * (c.big ? 1.1 : 0.8), 0.55, (1 - k) * 0.9, i % 2 ? '170,220,255' : '255,240,210', 1.2);
+        }
+        bloom(g, c.x, c.y, c.ir.width * 0.5, c.ir.height * 0.4, '170,220,255', env(t, 0.05, 0.3, 0.6, 1.6));
+      });
+      S.at(0.2, () => burst(S, c.big ? 40 : 18, c.x, c.y, { ang: -Math.PI / 2, spread: 0.8, sp: [60, 200], size: [3, 7], life: [0.6, 1.2], colors: ['200,235,255', WHITE], drag: 0.95, grav: 220 }));
+    },
+    // 조각 맞춤(드묾): 사진이 조각조각 흩어진 채 날아와 제자리에 맞춰지고 이음새가 반짝임
+    shards(S, c) {
+      const img = c.img; if (!img || !img.naturalWidth) return;
+      const cols = c.big ? 9 : 6, rows = c.big ? 7 : 5, tw = c.ir.width / cols, th = c.ir.height / rows, sw = img.naturalWidth / cols, sh = img.naturalHeight / rows, tiles = [];
+      for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) tiles.push({ i, j, dx: rnd(-1, 1) * (c.big ? 420 : 160), dy: rnd(-1, 1) * (c.big ? 300 : 200), rot: rnd(-1.2, 1.2), d: rnd(0, 0.35) });
+      S.draw((g, t) => {
+        const hold = env(t, 0, 0.01, 1.5, 2.3); if (hold <= 0) return;
+        g.globalCompositeOperation = 'source-over';
+        for (const q of tiles) {
+          const k = ease.out(Math.min(1, Math.max(0, (t - q.d) / 0.85))), x = c.ir.left + q.i * tw, y = c.ir.top + q.j * th;
+          g.save(); g.globalAlpha = Math.min(1, k * 2) * hold; g.translate(x + tw / 2 + q.dx * (1 - k), y + th / 2 + q.dy * (1 - k)); g.rotate(q.rot * (1 - k));
+          g.drawImage(img, q.i * sw, q.j * sh, sw, sh, -tw / 2 - 0.5, -th / 2 - 0.5, tw + 1, th + 1); g.restore();
+        }
+        const seam = env(t, 1.05, 1.12, 1.2, 1.7); if (seam > 0) { g.globalCompositeOperation = 'lighter'; g.strokeStyle = `rgba(255,240,200,${0.8 * seam})`; g.lineWidth = 1;
+          for (let i = 1; i < cols; i++) { g.beginPath(); g.moveTo(c.ir.left + i * tw, c.ir.top); g.lineTo(c.ir.left + i * tw, c.ir.bottom); g.stroke(); }
+          for (let j = 1; j < rows; j++) { g.beginPath(); g.moveTo(c.ir.left, c.ir.top + j * th); g.lineTo(c.ir.right, c.ir.top + j * th); g.stroke(); } }
+      });
+      S.at(1.1, () => burst(S, c.big ? 60 : 24, c.ir.left + c.ir.width / 2, c.ir.top + c.ir.height / 2, { sp: [40, 220], size: [3, 8], life: [0.5, 1.1], colors: [GOLD, WHITE], drag: 0.94, jx: c.ir.width * 0.45, jy: c.ir.height * 0.45 }));
+    },
+  };
+  // 나오는 확률(가중치). 드문 연출일수록 작음
+  const FX_W = { light: 18, slam: 15, thunder: 13, glitch: 11, heaven: 10, flame: 9, meteor: 8, aurora: 7, vortex: 5, stars: 4 };
+  const PFX_W = { bloom: 34, flash: 26, scan: 18, ripple: 14, shards: 8 };
+  const FX_NAME = { light: '빛기둥', slam: '쿵 착지', thunder: '번개', glitch: '차원 균열', heaven: '하늘 문', flame: '불꽃', meteor: '유성', aurora: '오로라', vortex: '소용돌이', stars: '별자리' };
+  const PFX_NAME = { bloom: '빛 번짐', flash: '플래시', scan: '홀로그램 스캔', ripple: '물결', shards: '조각 맞춤' };
+  function pickW(w, last) {
+    const ks = Object.keys(w).filter((k) => k !== last), tot = ks.reduce((a, k) => a + w[k], 0);
+    let x = Math.random() * tot; for (const k of ks) { x -= w[k]; if (x <= 0) return k; } return ks[ks.length - 1];
   }
-  const FX_KINDS = Object.keys(FX);
-  let lastFx = null;
+  let lastPfx = null;
+  function godPhotoFx(shot, focus, halo) {
+    if (!shot) return;
+    const img = shot.querySelector('img'), f = focus || [0.5, 0.5];
+    shot.style.setProperty('--fx', `${(f[0] * 100).toFixed(1)}%`); shot.style.setProperty('--fy', `${(f[1] * 100).toFixed(1)}%`);
+    if (halo && img && !shot.querySelector('.god-halo')) {
+      const h = el('span', { class: 'god-halo', 'aria-hidden': 'true' }); shot.append(h);
+      const place = () => { const sr = shot.getBoundingClientRect(), ir = img.getBoundingClientRect(); h.style.left = `${ir.left - sr.left + ir.width * halo[0]}px`; h.style.top = `${ir.top - sr.top + ir.height * halo[1]}px`; h.style.setProperty('--hw', `${Math.max(26, ir.width * 0.09)}px`); };
+      place(); addEventListener('resize', place);
+    }
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { logEgg('photo'); return; }
+    const kind = PFX[window.__godPfx] ? window.__godPfx : pickW(PFX_W, lastPfx); lastPfx = kind;
+    logEgg('photo:' + kind);
+    for (const k of Object.keys(PFX)) shot.classList.remove('pfx-' + k);
+    void shot.offsetWidth; shot.classList.add('pfx-' + kind);
+    const big = bigFx(), ir = img ? img.getBoundingClientRect() : shot.getBoundingClientRect();
+    const c = { big, ir, img, x: ir.left + ir.width * f[0], y: ir.top + ir.height * f[1], W: innerWidth, H: innerHeight };
+    const fx = el('div', { class: 'god-fx soft' + (big ? ' big' : ''), 'aria-hidden': 'true' });
+    fx.style.setProperty('--x', `${c.x}px`); fx.style.setProperty('--y', `${c.y}px`);
+    document.body.append(fx);
+    PFX[kind](stage(fx, 2.6), c);
+    fx.style.animationDuration = '2.6s';
+    setTimeout(() => { fx.remove(); shot.classList.remove('pfx-' + kind); }, 2600);
+  }
+    let lastFx = null;
   function godFx(li) {
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const pool = FX_KINDS.filter((k) => k !== lastFx), kind = FX[window.__godFx] ? window.__godFx : pool[Math.floor(Math.random() * pool.length)];
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { logEgg('reveal'); return; }
+    const kind = FX[window.__godFx] ? window.__godFx : pickW(FX_W, lastFx);
     lastFx = kind;
+    logEgg('reveal:' + kind);
     const r = li.getBoundingClientRect(), b = li.querySelector('.rk-god-no').getBoundingClientRect();
-    const c = { r, cx: b.left + b.width / 2, cy: r.top + r.height / 2, big: bigFx() };
+    const c = { r, cx: b.left + b.width / 2, cy: r.top + r.height / 2, big: bigFx(), W: innerWidth, H: innerHeight };
     const fx = el('div', { class: `god-fx fx-${kind}` + (c.big ? ' big' : ''), 'aria-hidden': 'true' });
     fx.style.setProperty('--x', `${c.cx}px`); fx.style.setProperty('--y', `${c.cy}px`);
     // 화면은 어둡게, 신 줄만 타원 조명으로 밝게
     fx.style.setProperty('--sx', `${r.left + r.width / 2}px`); fx.style.setProperty('--sy', `${c.cy}px`);
-    fx.style.setProperty('--sw', `${Math.round(r.width * 0.62)}px`); fx.style.setProperty('--sh', `${Math.round(r.height * 1.5)}px`);
-    const life = FX[kind](fx, c);
+    fx.style.setProperty('--sw', `${Math.round(r.width * 0.62)}px`); fx.style.setProperty('--sh', `${Math.round(r.height * 1.6)}px`);
     document.body.append(fx);
+    const life = FX[kind](fx, c);
+    fx.style.animationDuration = `${life / 1000}s`; // 어두운 막도 연출 길이에 맞춰 걷힘
     li.classList.add('fx-' + kind);
     const list = $('#rankList'); list.classList.add('bow');
     setTimeout(() => { fx.remove(); li.classList.remove('fx-' + kind); list.classList.remove('bow', 'pushed'); }, life);
@@ -773,7 +1073,7 @@
     const rows = [...document.querySelectorAll('#rankList > li.rk-god')];
     if (!rows.length) return;
     godOn = !godOn;
-    if (godOn) { showGods(); godFx(rows[0]); logEgg('reveal'); return; }
+    if (godOn) { showGods(); godFx(rows[0]); return; }
     // 숨길 때는 위로 스르륵 사라짐
     $('#rankTitle').classList.remove('god-on');
     rows.forEach((li) => li.classList.add('leave'));
@@ -1819,30 +2119,46 @@
     const logPager = pager((d) => { logPg += d; drawLogs(); logs.scrollIntoView({ block: 'start' }); });
     logs.append(el('div', { class: 'adm-find' }, logQ), logInfo, logBox, logPager);
     panes.logs.append(logs);
+    const eggName = (k) => { const [, typ, fx] = k.split(':'); const nm = typ === 'photo' ? PFX_NAME[fx] : FX_NAME[fx]; return typ === 'photo' ? `이스터에그: 신 사진${nm ? `(${nm})` : ''}` : `이스터에그: 신을 불러냄${nm ? `(${nm})` : ''}`; };
     const kindText = (l) => l.kind === 'detail' ? `${l.target_nick || '지워진 캐릭터'} 상세` : l.kind === 'list' ? '전체 랭킹'
-      : l.kind === 'egg:reveal' ? '이스터에그: 신을 불러냄' : l.kind === 'egg:photo' ? '이스터에그: 신 사진 열어 봄' : `${l.kind.slice(5)} 랭킹`;
-    // 이스터에그(신): 찾은 사람 수·횟수, 사람별 횟수와 처음 찾은 때(찾은 순서)
+      : l.kind.startsWith('egg:') ? eggName(l.kind) : `${l.kind.slice(5)} 랭킹`;
+    // 이스터에그(신): 찾은 사람 수, 연출 10개·사진 연출 5개를 몇 개나 봤는지(다 본 사람 표시), 사람별로 본 연출 목록
     const eggBox = el('div', { class: 'adm-egg' });
     logs.querySelector('.rank-note').after(eggBox);
     (async () => {
-      const { data: eg, error: ee } = await c.from('view_log').select('viewer,viewer_nick,kind,at').like('kind', 'egg:%').order('at', { ascending: true }).limit(3000);
+      const { data: eg, error: ee } = await c.from('view_log').select('viewer,viewer_nick,kind,at').like('kind', 'egg:%').order('at', { ascending: true }).limit(5000);
       if (ee) { eggBox.append(el('p', { class: 'rank-note', text: '이스터에그 기록을 불러오지 못했어요. ' + errMsg(ee) })); return; }
-      const by = new Map();
+      const NR = Object.keys(FX_NAME).length, NP = Object.keys(PFX_NAME).length, by = new Map();
+      let reveals = 0;
       for (const l of eg || []) {
-        const k = l.viewer || l.viewer_nick || '?';
-        const o = by.get(k) || { nick: l.viewer_nick || '지워진 캐릭터', viewer: l.viewer, reveal: 0, photo: 0, first: l.at, last: l.at };
-        if (l.kind === 'egg:photo') o.photo++; else o.reveal++;
+        const k = l.viewer || l.viewer_nick || '?', [, typ, fx] = l.kind.split(':');
+        const o = by.get(k) || { nick: l.viewer_nick || '지워진 캐릭터', rv: new Set(), ph: new Set(), n: 0, first: l.at, last: l.at };
+        if (typ === 'photo') { if (PFX_NAME[fx]) o.ph.add(fx); } else { o.n++; reveals++; if (FX_NAME[fx]) o.rv.add(fx); }
         o.last = l.at; by.set(k, o);
       }
-      const people = [...by.values()], total = (eg || []).filter((l) => l.kind === 'egg:reveal').length, ph = people.filter((o) => o.photo).length;
-      eggBox.append(el('p', { class: 'adm-egg-head', text: people.length ? `이스터에그(신) 찾은 사람 ${people.length}명 · 불러낸 횟수 ${total}번 · 사진까지 연 사람 ${ph}명` : '아직 이스터에그(신)를 찾은 사람이 없어요' }));
+      const people = [...by.values()];
+      const allR = people.filter((o) => o.rv.size >= NR).length, allP = people.filter((o) => o.ph.size >= NP).length, all = people.filter((o) => o.rv.size >= NR && o.ph.size >= NP).length;
+      eggBox.append(el('p', { class: 'adm-egg-head', text: people.length ? `이스터에그(신) 찾은 사람 ${people.length}명 · 불러낸 횟수 ${reveals}번` : '아직 이스터에그(신)를 찾은 사람이 없어요' }));
+      if (people.length) eggBox.append(el('p', { class: 'adm-egg-sub', text: `강림 연출 ${NR}개 다 본 사람 ${allR}명 · 사진 연출 ${NP}개 다 본 사람 ${allP}명 · ${NR + NP}개 전부 본 사람 ${all}명` }));
+      const pct = (w) => { const t = Object.values(w).reduce((a, b) => a + b, 0); return (k) => Math.round(w[k] / t * 100) + '%'; };
+      const pr = pct(FX_W), pp = pct(PFX_W);
+      eggBox.append(el('p', { class: 'adm-egg-legend', text: `나올 확률 — 강림: ${Object.keys(FX_W).map((k) => `${FX_NAME[k]} ${pr(k)}`).join(', ')} / 사진: ${Object.keys(PFX_W).map((k) => `${PFX_NAME[k]} ${pp(k)}`).join(', ')}` }));
       const when = (t) => new Date(t).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      // 많이 모은 사람부터(같으면 먼저 찾은 사람)
+      people.sort((a, b) => (b.rv.size + b.ph.size) - (a.rv.size + a.ph.size) || new Date(a.first) - new Date(b.first));
       const list = el('ol', { class: 'adm-egg-list' });
-      for (const o of people.slice(0, 100)) {
-        list.append(el('li', {},
+      for (const o of people.slice(0, 150)) {
+        const done = o.rv.size >= NR && o.ph.size >= NP;
+        const seen = el('div', { class: 'adm-egg-seen', hidden: '' },
+          el('span', { text: '강림: ' + Object.keys(FX_NAME).map((k) => (o.rv.has(k) ? '✓' : '·') + FX_NAME[k]).join('  ') }),
+          el('span', { text: '사진: ' + Object.keys(PFX_NAME).map((k) => (o.ph.has(k) ? '✓' : '·') + PFX_NAME[k]).join('  ') }));
+        const more = el('button', { type: 'button', class: 'txt sm', text: '본 연출', onclick: () => { seen.hidden = !seen.hidden; } });
+        list.append(el('li', { class: done ? 'done' : '' },
           el('button', { type: 'button', class: 'txt sm nm', text: o.nick, onclick: () => { logQ.value = o.nick; loadLogs(); } }),
-          el('span', { text: `신 ${o.reveal}번${o.photo ? `, 사진 ${o.photo}번` : ''}` }),
-          el('small', { text: `처음 ${when(o.first)}${o.last !== o.first ? `, 마지막 ${ago(o.last)}` : ''}` })));
+          el('span', { class: 'adm-egg-cnt', text: `강림 ${o.rv.size}/${NR} · 사진 ${o.ph.size}/${NP}` }),
+          done ? el('span', { class: 'adm-egg-badge', text: '전부 봄' }) : null,
+          el('small', { text: `${o.n}번 불러냄 · 처음 ${when(o.first)}${o.last !== o.first ? `, 마지막 ${ago(o.last)}` : ''}` }),
+          more, seen));
       }
       if (people.length) eggBox.append(list);
     })();
