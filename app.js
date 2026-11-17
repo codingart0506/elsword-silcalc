@@ -1158,6 +1158,8 @@
   function toast(t) { const n = $('#toast'); n.textContent = t; n.hidden = false; clearTimeout(n._t); n._t = setTimeout(() => { n.hidden = true; }, 2200); }
   function enterShared(o) {
     shared = { n: String(o.n || '공유된 세팅').slice(0, 30), nk: String(o.k || '').slice(0, 20), i: migrateV2(Object.assign({}, o.i || {})) }; // 남의 세팅은 올린 비율 그대로
+    // 링크에는 기본값과 다른 칸만 담겨서, 빠진 칸은 기본값으로 채움(안 채우면 아바타 탭 등이 그 칸을 0으로 읽음)
+    for (const a of new Set([...STAT_CELLS, ...Object.keys(controls)])) if (!(a in shared.i)) { const d = defaultOf(a); if (d != null) shared.i[a] = d; }
     inputs = Object.assign({}, shared.i);
     applyInputs(); syncClassSkill();
     $('#sharedBar').hidden = false;
