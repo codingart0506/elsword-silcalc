@@ -397,12 +397,18 @@
   const PAGE = 10;
   let rkCls = '', rkPage = 0, rkBusy = false, rkTotal = null, rkTotalFor = null;
   // 전체 인원: 실투력 -1보다 높은 사람 수(= 모두)를 순위 조회로 셈
+  // 서버 요청 줄이기: 랭킹 볼 자격(10분)·내 순위·전체 인원(1분)은 잠깐 기억해 두고 다시 묻지 않음. 목록·상세는 서버가 매번 다시 확인함
+  const FRESH = 60000, CAN_FRESH = 600000, totals = {};
+  let canAt = 0, mineAt = 0;
   async function countRank(c) {
+    const hit = totals[rkCls];
+    if (hit && Date.now() - hit.at < FRESH) { rkTotal = hit.n; rkTotalFor = rkCls; return; }
     try {
       const { data, error } = await c.rpc('rank_pos', { p_cp: -1, p_cls: rkCls || null });
       if (error) throw error;
       const r = data && data[0]; if (!r) throw new Error('no');
       rkTotal = Math.max(0, (rkCls ? r.in_cls : r.overall) - 1); rkTotalFor = rkCls;
+      totals[rkCls] = { n: rkTotal, at: Date.now() };
     } catch (e) { rkTotal = null; rkTotalFor = null; }
   }
   function drawPages(more) {
@@ -429,10 +435,16 @@
     try {
       const c = await sb();
       if (reset) {
-        const { data: ok, error: ve } = await c.rpc('can_view');
-        if (ve) throw ve;
+        let ok = Date.now() - canAt < CAN_FRESH;
+        if (!ok) {
+          // 갱신 코드도 관리자 로그인도 없으면 서버가 어차피 못 보게 하므로 묻지 않음
+          let who = !!viewCodes();
+          if (!who) { try { who = !!(await c.auth.getSession()).data.session; } catch (e) { who = false; } }
+          if (who) { const { data, error: ve } = await c.rpc('can_view'); if (ve) throw ve; ok = !!data; }
+          if (ok) canAt = Date.now();
+        }
         $('#rankFilters').hidden = !ok;
-        if (ok) loadMine(c); else { mine = []; drawMine(); }
+        if (ok) { if (Date.now() - mineAt < FRESH) drawMine(); else loadMine(c); } else { mine = []; drawMine(); }
         if (!ok) {
           const wait = Object.values(A.ranks()).some(r => r && r.token && r.status === 'pending');
           const gone = Object.values(A.ranks()).find(r => r && (r.status === 'hidden' || r.status === 'removed'));
@@ -457,6 +469,7 @@
       empty.hidden = data.length > 0;
       if (!data.length) empty.textContent = rkCls ? `${rkCls} 랭킹에 아직 아무도 없어요` : '아직 올라온 캐릭터가 없어요. 계산기에서 "랭킹에 올리기"로 첫 번째가 되어 보세요';
     } catch (e) {
+      canAt = 0; // 그사이 숨겨졌을 수 있으니 다음에는 다시 물음
       empty.hidden = false; empty.textContent = '랭킹을 불러오지 못했어요. ' + errMsg(e);
     }
     const n = list.children.length;
@@ -962,7 +975,7 @@
   // ---------- 내 순위(이 브라우저에 있는 승인된 캐릭터) ----------
   let mine = [];
   async function loadMine(c) {
-    try { const { data, error } = await c.rpc('my_ranks'); if (error) throw error; mine = data || []; } catch (e) { mine = []; }
+    try { const { data, error } = await c.rpc('my_ranks'); if (error) throw error; mine = data || []; mineAt = Date.now(); } catch (e) { mine = []; }
     drawMine();
   }
   function drawMine() {
@@ -1250,7 +1263,7 @@
       if (!A.nick()) A.setNick(st.nickname);
       checked[A.key()] = false;
       toast(`${st.nickname} 캐릭터에 연결했어요`);
-      loadRank(true); renderLine();
+      canAt = 0; mineAt = 0; loadRank(true); renderLine();
     } catch (e) { toast(errMsg(e)); }
   };
 
