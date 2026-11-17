@@ -1442,9 +1442,11 @@
       if (win(0) < T - 1e-4) { while (win(n) < T - 1e-4 && ok(n + 1) && n < 30) n++; }
       else { while (ok(n - 1) && n > -30 && win(n - 1) >= T - 1e-4) n--; }
       const md = modeOf(c);
-      if (md !== 'ceil' && win(n) >= T - 1e-4 && ok(n - 1)) {
+      // floor는 모자라서 힘트마를 뺀 쪽(n > 0)만 한 칸 덜 뺌. 이미 기준인 쪽은 그대로 둠(일부러 크리를 깎지 않음)
+      if (md === 'floor' && n > 0) n--;
+      else if (md === 'near' && win(n) >= T - 1e-4 && ok(n - 1)) {
         const alt = n - 1, dA = Math.abs(win(alt) - T), dN = Math.abs(win(n) - T);
-        if (md === 'floor' || dA < dN - 1e-6 || (Math.abs(dA - dN) <= 1e-6 && Math.abs(alt) < Math.abs(n))) n = alt;
+        if (dA < dN - 1e-6 || (Math.abs(dA - dN) <= 1e-6 && Math.abs(alt) < Math.abs(n))) n = alt;
       }
       if (win(n) < T - 1e-4 && md === 'ceil') short = true;
       if (n > 0) bossLeft -= n;

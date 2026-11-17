@@ -495,7 +495,7 @@
       const MODE_SUB = {
         ceil: `극대화는 ${goalM}, 크리는 ${goalC} 밑으로 안 내려가게 힘트마를 빼서 채웠어요. 넘치는 크리·극대 마법석은 힘트마로 돌렸어요`,
         near: `극대화는 ${goalM}을 지키고, 크리는 ${goalC}에 가장 가깝게(조금 넘거나 모자라게) 맞췄어요`,
-        floor: `극대화는 ${goalM}을 지키고, 크리는 ${goalC}보다 마법석 한 칸만큼 모자라게 맞췄어요. 힘트마를 한 칸 덜 빼요`, plain: '' };
+        floor: `극대화는 ${goalM}을 지키고, 크리가 모자라 힘트마를 빼야 하는 쪽만 한 칸 덜 빼서 ${goalC}보다 살짝 모자라게 뒀어요. 이미 ${goalC}인 쪽은 그대로예요`, plain: '' };
       const goal = '지금 크리·극대';
       const sorted = (md) => rv.modes[md].slice().sort((x, y) => y.cp - x.cp);
       const SHORT_B = { '영혼의 족쇄': '족쇄', '글로잉 플라워': '글플' };
