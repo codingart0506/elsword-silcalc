@@ -485,13 +485,30 @@
     for (const [c, v] of buffs) { const now = String(APP.val(c) ?? ''); extraRow(buffLabel(c), now, keepNow ? now : v); }
     if (r.best.coolReal != null && curCool > 0) { const c2 = (x) => `${Math.round(x * 100) / 100}%`; extraRow('쿨감', c2(curCool), keepNow ? c2(curCool) : c2(r.best.coolReal)); }
     box.append(el('table', { class: 'av-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '부위' })), el('th', { scope: 'col', text: '지금' }), el('th', { scope: 'col', text: '추천' }))), tb));
-    // 하의 악세 비교: 지금 실투력은 스탯 창(지금 낀 하의 악세가 이미 들어 있음)으로 재서 칸만 바꿔선 안 변하니, 둘을 끼운 실투력을 나란히 보여 줌
-    if (p.bottom && BOTTOMS[p.bottom] && APP.cpWith) {
-      const cmp = !keepNow && r.best.bottomCmp ? r.best.bottomCmp : Object.keys(BOTTOMS).map(n => ({ n, cp: APP.cpWith(bottomOver({}, p.bottom, n)) }));
+    // 하의 악세 비교: 지금 실투력은 스탯 창(지금 낀 하의 악세가 이미 들어 있음)으로 재서 칸만 바꿔선 안 변하니, 따로 보여 줌
+    const rv = !keepNow && r.best.rivals;
+    if (rv && rv.length > 1) {
+      // 하의 악세마다 아바타·한벌을 따로 골라 본 최고 세팅끼리 비교
+      const srt = rv.slice().sort((x, y) => y.cp - x.cp), top = srt[0];
+      const cmpBox = el('div', { class: 'av-rival' }, el('p', { class: 'av-rival-h' }, el('b', { text: `하의 악세는 ${top.n}가 더 높아요` }), el('span', { text: ' 하의 악세마다 아바타·한벌을 따로 맞춰 본 최고 세팅이에요' })));
+      for (const x of srt) {
+        const lose = x !== top, pct = lose ? ` (−${((top.cp - x.cp) / top.cp * 100).toFixed(2)}%)` : '';
+        const line = el('p', { class: 'av-rival-row' + (lose ? '' : ' win') }, el('span', { class: 'n' }, `${x.n} + ${x.suit || '한벌 없음'}`, x.crit > 0 ? el('small', { text: ` 크리 ${Math.round(x.crit * 1000) / 10}%` }) : ''), el('b', { text: fmt(x.cp) }), el('span', { class: 'p', text: pct }));
+        if (!lose || !x.cand) { cmpBox.append(line); continue; }
+        const rec2 = Object.assign({ '아바타5셋': x.cand.fiveSetDisplay, '한벌': x.suit || '' }, x.cand.partToDisplay);
+        const diff = PARTS.filter(part => (rec[part] || '') !== (rec2[part] || ''));
+        if (!diff.length) { line.classList.add('alt'); cmpBox.append(line, el('p', { class: 'av-rival-note', text: '아바타·한벌은 위 추천과 같고 하의 악세만 달라요' })); continue; }
+        const tb2 = el('tbody');
+        for (const part of diff) tb2.append(el('tr', { class: 'chg' }, el('th', { scope: 'row', text: PART_LABEL[part] || part }), el('td', { class: 'to', text: short(rec2[part] || '') || '-' })));
+        cmpBox.append(el('details', { class: 'av-rival-more' }, el('summary', null, line), el('p', { class: 'av-rival-note', text: `추천과 다른 부위 ${diff.length}곳` }), el('table', { class: 'av-table' }, tb2)));
+      }
+      box.append(cmpBox);
+    } else if (p.bottom && BOTTOMS[p.bottom] && APP.cpWith) {
+      const cmp = Object.keys(BOTTOMS).map(n => ({ n, cp: APP.cpWith(bottomOver({}, p.bottom, n)) }));
       if (cmp.every(x => x.cp > 0)) {
         const top = cmp.slice().sort((x, y) => y.cp - x.cp)[0];
         const txt = cmp.map(x => x === top ? `${x.n} ${fmt(x.cp)}` : `${x.n} ${fmt(x.cp)} (−${((top.cp - x.cp) / top.cp * 100).toFixed(2)}%)`).join(' · ');
-        box.append(el('p', { class: 'av-hint' }, el('b', { text: `하의 악세는 ${top.n}가 더 높아요. ` }), `${keepNow ? '지금' : '추천'} 세팅에 하의 악세만 바꿔 끼우면 ${txt}`));
+        box.append(el('p', { class: 'av-hint' }, el('b', { text: `하의 악세는 ${top.n}가 더 높아요. ` }), `지금 세팅에 하의 악세만 바꿔 끼우면 ${txt}`));
       }
     }
     if (keepNow) { box.append(el('p', { class: 'av-hint', text: '조건에 맞는 다른 조합은 모두 지금 세팅보다 낮았어요' })); return; }
@@ -619,6 +636,38 @@
     return out.length ? out : [{}];
   }
   // 추천에 넣을 한벌 아바타: 고정이면 지금 것만, 보유 필터를 켜면 가진 것만. 기간제(성장 부스팅 투명 아바타)는 입고 있거나 보유로 고른 때만
+  // 하의 악세별 최고 세팅: 하의 악세를 하나로 정해 놓고 그에 맞는 아바타·한벌을 따로 골라 실투력을 비교함
+  // (족쇄 + 동방 같은 조합과 글로잉 플라워 + 다른 아바타 조합 중 어느 쪽이 높은지 보려는 것)
+  function bottomRivals(r, worn, base, ctx) {
+    const bNow = prof().bottom || '', now = worn['한벌'] || '';
+    if (!bNow || !BOTTOMS[bNow] || !r || !r.best || !r.cands || !APP.cpWith) return null;
+    const pickSuits = (bn) => {
+      let ss = suitChoices(worn);
+      if (ss.length > 3) {
+        const sc = ss.map(n => ({ n, v: APP.cpWith(bottomOver(suitOver(Object.assign({}, base), now, n), bNow, bn)) })).sort((a, b) => b.v - a.v);
+        ss = [...new Set(sc.slice(0, 3).map(x => x.n).concat(now))];
+      }
+      return ss;
+    };
+    const out = [];
+    for (const bn of Object.keys(BOTTOMS)) {
+      const critOf = (o) => Number('C17' in (o || {}) ? o.C17 : APP.inputs().C17) || 0;
+      if (bn === r.best.bottom) { out.push({ n: bn, cp: r.best.cp, suit: r.best.suit, cand: r.best, crit: critOf(r.best.over) }); continue; }
+      const suits = pickSuits(bn);
+      const bestFor = (c) => { let b = null; for (const sName of suits) { const o = Object.assign({}, base, overridesFor(r, worn, c)); suitOver(o, now, sName); bottomOver(o, bNow, bn); const v = APP.cpWith(o); if (!b || v > b.cp) b = { cp: v, suit: sName, crit: critOf(o) }; } return b; };
+      const sc = r.cands.map(c => Object.assign({ c }, bestFor(c))).filter(x => x.cp > 0).sort((a, b) => b.cp - a.cp);
+      if (!sc.length) continue;
+      let best = sc[0];
+      try {
+        const toS = (c) => Object.assign({ '아바타5셋': c.fiveSetDisplay || '' }, c.partToDisplay);
+        const W = {}; for (const pt of ['아바타5셋'].concat(R.ALL_PARTS)) if (worn[pt]) W[pt] = worn[pt];
+        const pol = polish(r, worn, base, ctx, sc.slice(0, 5).map(x => toS(x.c)).concat([W]), best.suit, bn);
+        if (pol) { const b2 = bestFor(pol); if (b2 && b2.cp > best.cp + 0.5) best = Object.assign({ c: pol }, b2); }
+      } catch (e) { console.error(e); }
+      out.push({ n: bn, cp: best.cp, suit: best.suit, cand: best.c, crit: best.crit });
+    }
+    return out.length > 1 ? out : null;
+  }
   function suitChoices(worn) {
     const p = prof(), now = worn['한벌'] || '';
     if (p.fixed['한벌']) return [now];
@@ -750,11 +799,6 @@
       } catch (e) { console.error(e); }
     }
     top.buffs = Object.assign({}, base);
-    // 하의 악세 비교: 추천 세팅(아바타·한벌·버프)은 그대로 두고 하의 악세만 바꾼 실투력
-    if (bNow) {
-      const ovTop = overridesFor(r, worn, top);
-      top.bottomCmp = Object.keys(BOTTOMS).map(n => { const o = Object.assign({}, base, ovTop); suitOver(o, now, top.suit); bottomOver(o, bNow, n); return { n, cp: APP.cpWith(o) }; });
-    }
     r.best = top; r.mode = top.mode || r.mode;
     r.gain = (100 + (top.rScore != null ? top.rScore : top.score)) / (100 + r.cur.score) - 1;
     return r;
@@ -781,6 +825,7 @@
           if (!r || (r1.best && (!r.best || (r1.best.cp || 0) > (r.best.cp || 0)))) { r = r1; keep = [b, scorer]; }
         }
         [base, scorer] = keep;
+        if (r.best) try { r.best.rivals = bottomRivals(r, p.worn, base, { fixed: fx, fiveFixed: f5, owned, scorer }); } catch (e) { console.error(e); }
         result = { r };
         if (!r.best) {
           // 어떤 조건 때문에 막혔는지 하나씩 풀어 보며 찾음
