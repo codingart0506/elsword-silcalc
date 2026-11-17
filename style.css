@@ -348,6 +348,17 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .rk-meta { font-size: 13px; color: var(--mute); display: flex; gap: 8px; flex-wrap: wrap; }
 .rk-old { font-size: 12px; font-weight: 600; color: #b25e09; background: #fff4e5; border-radius: 6px; padding: 0 6px; }
 .rk-old-note { color: #b25e09; }
+/* 장난 줄 '신.' (1위 위) */
+.rank-list li.rk-god .rk-row { background: linear-gradient(100deg, #f5efff 0%, #edf4ff 55%, #fff7e2 100%); }
+.rank-list li.rk-god .rk-row:hover { background: linear-gradient(100deg, #eee5ff 0%, #e4eeff 55%, #fff1cc 100%); }
+.rk-god-no { display: flex; flex-direction: column; align-items: center; line-height: 1; color: #7c5cf5; }
+.rk-god-no svg { width: 26px; height: 10px; fill: none; stroke: #f2b705; stroke-width: 1.8; }
+.rk-god-no .n { font-size: 17px; font-weight: 800; margin-top: 1px; }
+.rk-god .rk-name { color: #6d4ae8; }
+.rk-god .rk-cp b { font-size: 22px; line-height: 1; color: #6d4ae8; }
+.rk-god-tag { font-size: 12px; font-weight: 600; color: #6d4ae8; background: #ece5ff; border-radius: 6px; padding: 0 6px; }
+.rk-god-note { margin: 0; padding: 4px 6px 14px 62px; font-size: 13px; color: var(--sub); }
+@media (max-width: 600px) { .rk-god-note { padding-left: 44px; } }
 .rk-cp { text-align: right; display: flex; flex-direction: column; }
 .rk-cp b { font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .rk-cp small { font-size: 12px; color: var(--mute); }

@@ -508,6 +508,7 @@
       more = data.length > PAGE;
       list.innerHTML = '';
       renderRows(data.slice(0, PAGE), rkPage * PAGE);
+      if (!rkCls && rkPage === 0 && data.length) list.prepend(godRow());
       if (!reset) drawMine();
       empty.hidden = data.length > 0;
       if (!data.length) empty.textContent = rkCls ? `${rkCls} 랭킹에 아직 아무도 없어요` : '아직 올라온 캐릭터가 없어요. 계산기에서 "랭킹에 올리기"로 첫 번째가 되어 보세요';
@@ -515,7 +516,7 @@
       canAt = 0; // 그사이 숨겨졌을 수 있으니 다음에는 다시 물음
       empty.hidden = false; empty.textContent = '랭킹을 불러오지 못했어요. ' + errMsg(e);
     }
-    const n = list.children.length;
+    const n = list.querySelectorAll(':scope > li:not(.rk-god)').length;
     pager.hidden = !(rkPage > 0 || more);
     const pages = pager.hidden ? ($('#rankPages').textContent = '', 1) : drawPages(more);
     $('#btnRankPrev').disabled = rkPage === 0; $('#btnRankNext').disabled = !more;
@@ -529,6 +530,22 @@
     if (n <= 3) box.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.2 8.6 7.6 12 12 5.6l4.4 6.4 4.4-3.4-1.7 8.9H4.9z"/><circle cx="3.2" cy="7.4" r="1.7"/><circle cx="12" cy="4.2" r="1.7"/><circle cx="20.8" cy="7.4" r="1.7"/><rect x="4.9" y="18.6" width="14.2" height="2.2" rx="1.1"/></svg>';
     box.append(el('span', { class: 'n', text: String(n) }));
     return box;
+  }
+  // 장난: 전체 랭킹 첫 쪽 맨 위(1위 위)에 '신.' 한 줄. 진짜 캐릭터가 아니라 순위·인원 수에는 안 들어감
+  function godRow() {
+    const note = el('p', { class: 'rk-god-note', text: '엘리오스를 만든 분이라 실투력 계산기로는 못 재요. 장난으로 넣은 줄이고, 진짜 순위는 아래 1위부터예요.' });
+    note.hidden = true;
+    const badge = el('span', { class: 'rk-no rk-god-no', 'aria-label': '순위 밖' });
+    badge.innerHTML = '<svg viewBox="0 0 26 10" aria-hidden="true"><ellipse cx="13" cy="5" rx="10" ry="3.3"/></svg>';
+    badge.append(el('span', { class: 'n', text: '0' }));
+    const row = el('button', { type: 'button', class: 'rk-row', 'aria-expanded': 'false' },
+      badge,
+      el('span', { class: 'rk-who' },
+        el('span', { class: 'rk-name', text: '신.' }),
+        el('span', { class: 'rk-meta' }, el('span', { text: '모든 전직' }), el('span', { text: '태초에 갱신' }), el('span', { class: 'rk-god-tag', text: '장난 · 순위 밖' }))),
+      el('span', { class: 'rk-cp' }, el('b', { text: '∞' }), el('small', { text: '측정 불가' })));
+    row.onclick = () => { note.hidden = !note.hidden; row.setAttribute('aria-expanded', String(!note.hidden)); };
+    return el('li', { class: 'rk-god' }, row, note);
   }
   // 지금 계산 방식(A.calcVer) 전에 올린 기록: 다시 갱신하면 사라짐
   const oldCalc = (r) => !!A.calcVer && (r.calc ?? null) !== A.calcVer();
