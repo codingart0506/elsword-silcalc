@@ -278,7 +278,7 @@
     const k = kindOf(a, f);
     let node;
     if (k === 'select') {
-      node = el('select', { 'data-cell': a, onchange: () => setVal(a, parseOpt(a, node.value)) });
+      node = el('select', { 'data-cell': a, onchange: () => { const v = parseOpt(a, node.value); if (/^[JL]3[1-4]$/.test(a)) cartChange(a, v); else setVal(a, v); } });
     } else if (k === 'check') {
       node = el('input', { type: 'checkbox', 'data-cell': a, onchange: () => setVal(a, node.checked) });
     } else {
@@ -429,6 +429,52 @@
     }
     // 기본 강렬:초월 비율 안내(직업·스탯마다 다름)
     document.querySelectorAll('[data-notecell]').forEach(n => { const c = n.getAttribute('data-notecell'); const t = c === 'A_A9' && inputs.A_B4 === true ? '' : label(c); if (n.textContent !== t) n.textContent = t; n.hidden = !t; });
+  }
+
+  // ---------- 카트리지 → 상세 스탯 ----------
+  // 배틀·클래식·뮤테이션 카트리지는 게임 상세 스탯 창 숫자에 바로 들어감(단계마다 0.5%, 뮤테이션 초적응력은 0.5/1/1.5/2/3/4%와 양극화 -10%).
+  // 계산기 탭에서 카트리지를 바꾸거나 빼면 상세 스탯도 그만큼 바꿀지 물어봄. 스크린샷을 읽은 뒤 지금 낀 카트리지를 처음 맞출 때는
+  // 이미 스탯에 들어 있으니 '카트리지만 바꾸기'를 고르면 됨. 카트리지는 그 부위가 네블론일 때만 낄 수 있음
+  const CART_STAT = {
+    '배틀 카트리지 Type - 1': (lv) => ({ C22: 0.005 * lv }),
+    '배틀 카트리지 Type - 2': (lv) => ({ C33: 0.005 * lv }),
+    '배틀 카트리지 Type - 3': (lv) => ({ C29: 0.005 * lv, C30: 0.005 * lv }),
+    '배틀 카트리지 Type - 4': (lv) => ({ C18: 0.005 * lv }),
+    '배틀 카트리지 Type - 5': (lv) => ({ C21: 0.005 * lv }),
+    '클래식 카트리지 Type - 1': (lv) => ({ C20: 0.005 * lv }),
+    '클래식 카트리지 Type - 2': (lv) => ({ C31: 0.005 * lv, C32: 0.005 * lv }),
+    '하이퍼 카트리지 [뮤테이션]': (lv) => ({ C15: [0.005, 0.01, 0.015, 0.02, 0.03, 0.04][lv - 1], C20: -0.1 }),
+  };
+  const CART_ARM = { 31: 'J27', 32: 'J28', 33: 'J29', 34: 'J30' };
+  function cartStats(v) {
+    const sum = {};
+    for (const n of [31, 32, 33, 34]) {
+      const f = CART_STAT[String(v['J' + n] ?? '')], lv = Number(v['L' + n]);
+      if (!f || !(lv >= 1 && lv <= 6) || String(v[CART_ARM[n]] ?? '') !== '네블론') continue;
+      for (const [c, x] of Object.entries(f(lv))) sum[c] = (sum[c] || 0) + x;
+    }
+    return sum;
+  }
+  async function cartChange(a, v) {
+    const before = cartStats(inputs), after = cartStats(Object.assign({}, inputs, { [a]: v }));
+    setVal(a, v);
+    const ch = [];
+    for (const c of new Set([...Object.keys(before), ...Object.keys(after)])) {
+      const d = +((after[c] || 0) - (before[c] || 0)).toFixed(6); if (!d) continue;
+      const cur = inputs[c]; if (typeof cur !== 'number') continue; // 상세 스탯을 아직 안 넣었으면 물을 게 없음
+      let nv = Math.max(0, +(cur + d).toFixed(6)); if (c === 'C20') nv = Math.min(0.6, nv); // 양극화는 60%가 상한
+      if (nv !== cur) ch.push([c, cur, nv]);
+    }
+    if (!ch.length) return;
+    const name = (c) => LABEL_OF[c] || label('B' + c.slice(1));
+    const lines = ch.map(([c, cur, nv]) => `${name(c)}: ${fmtPct(cur)} → ${fmtPct(nv)}`).join('\n');
+    const capped = ch.some(([c, cur]) => c === 'C20' && cur >= 0.6) ? '\n양극화가 상한(60%)이라 실제로는 덜 빠질 수 있어요.' : '';
+    const ok = await dialog({ title: '상세 스탯도 같이 바꿀까요?',
+      text: `${lines}${capped}\n\n지금 낀 카트리지를 처음 맞추는 거라면 '카트리지만 바꾸기'를 눌러 주세요. 스크린샷으로 읽은 상세 스탯에 이미 들어 있어요.`,
+      ok: '상세 스탯도 바꾸기', cancel: '카트리지만 바꾸기' });
+    if (!ok) return;
+    for (const [c, , nv] of ch) setVal(c, nv);
+    toast('상세 스탯도 카트리지만큼 바꿨어요');
   }
 
   // ---------- 값 변경 / 재계산 ----------
@@ -617,7 +663,7 @@
     if (!store.bases[name]) store.bases[name] = Object.assign({}, inputs);
     persist(); applyInputs(); if (fixOptions()) scheduleAutosave(); applyBase(); renderProfiles(); refresh();
   }
-  function dialog({ title, text, input, area, code, ok = '확인', danger }) {
+  function dialog({ title, text, input, area, code, ok = '확인', cancel = '취소', danger }) {
     return new Promise((resolve) => {
       const d = $('#dialog'); d.hidden = false;
       $('#dlgTitle').textContent = title; $('#dlgText').textContent = text || '';
@@ -637,7 +683,7 @@
           catch (e) { const r = document.createRange(); r.selectNodeContents($('#dlgCodeText')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); cp.textContent = '선택했어요'; }
         };
       }
-      const okB = $('#dlgOk'); okB.textContent = ok; okB.classList.toggle('danger', !!danger);
+      const okB = $('#dlgOk'); okB.textContent = ok; okB.classList.toggle('danger', !!danger); $('#dlgCancel').textContent = cancel;
       $('#dlgCancel').hidden = code !== undefined; // 코드만 보여 주는 창은 닫기 하나만
       const done = (v) => { d.hidden = true; okB.onclick = null; $('#dlgCancel').onclick = null; $('#dlgCancel').hidden = false; resolve(v); };
       okB.onclick = () => done(input !== undefined ? inp.value : area !== undefined ? ar.value : true);
