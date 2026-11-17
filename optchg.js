@@ -189,28 +189,34 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     const d = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
     const wh = new Uint8Array(W * H);
     for (let i = 0, p = 0; i < wh.length; i++, p += 4) wh[i] = d[p] > 222 && d[p + 1] > 222 && d[p + 2] > 222 ? 1 : 0;
-    // 줄마다 가장 긴 흰 구간 → 같은 (시작, 끝)이 많이 나오는 폭이 상자 폭 후보
+    // 줄마다 긴 흰 구간 → 같은 (시작, 끝)이 많이 나오는 폭이 상자 폭 후보(변환 전·후 창은 같은 줄에 두 개)
     const minRun = Math.max(150, W * 0.1), votes = new Map();
     for (let y = 0; y < H; y++) {
-      let best = 0, bs = 0, run = 0, st = 0; const o = y * W;
-      for (let x = 0; x < W; x++) { if (wh[o + x]) { if (!run) st = x; run++; if (run > best) { best = run; bs = st; } } else run = 0; }
-      if (best >= minRun) { const key = (bs >> 2) * 100000 + ((bs + best) >> 2); votes.set(key, (votes.get(key) || 0) + 1); }
+      let run = 0, st = 0; const o = y * W;
+      for (let x = 0; x <= W; x++) {
+        if (x < W && wh[o + x]) { if (!run) st = x; run++; continue; }
+        if (run >= minRun) { const key = (st >> 2) * 100000 + ((st + run) >> 2); votes.set(key, (votes.get(key) || 0) + 1); }
+        run = 0;
+      }
     }
     const cands = [];
     for (const [key, n] of [...votes].sort((a, b) => b[1] - a[1])) {
       const x0 = Math.floor(key / 100000) * 4, x1 = (key % 100000) * 4;
       if (n < 6 || cands.some((c) => Math.abs(c.x0 - x0) < 10 && Math.abs(c.x1 - x1) < 10)) continue;
-      cands.push({ x0, x1 }); if (cands.length >= 8) break;
+      cands.push({ x0, x1 }); if (cands.length >= 10) break;
     }
-    // 장비 이름 띠: 상자 위쪽(높이의 1.5~2.2배 위)이 거의 검은색. 사진이 그 위에서 잘렸으면 검사 안 함
+    // 위쪽 검은 띠: 옵션 변환 창은 장비 이름 띠(높이의 1.5~2.1배 위), 변환 전·후 창은 '변환 전/후' 띠(바로 위). 사진이 그 위에서 잘렸으면 검사 안 함
+    const darkBand = (x0, x1, ya, yb) => {
+      let dark = 0, n = 0;
+      for (let y = Math.max(0, ya); y < yb; y += 2) for (let x = x0 + 4; x < x1 - 4; x += 3) { const p = (y * W + x) * 4; n++; if (Math.max(d[p], d[p + 1], d[p + 2]) < 70) dark++; }
+      return n > 0 && dark / n > 0.45;
+    };
     const titleOk = (x0, x1, top, h) => {
       const ya = Math.round(top - 2.1 * h), yb = Math.round(top - 1.55 * h);
       if (ya < 0) return true;
-      let dark = 0, n = 0;
-      for (let y = ya; y < yb; y += 2) for (let x = x0 + 4; x < x1 - 4; x += 3) { const p = (y * W + x) * 4; n++; if (Math.max(d[p], d[p + 1], d[p + 2]) < 70) dark++; }
-      return n > 0 && dark / n > 0.45;
+      return darkBand(x0, x1, ya, yb) || darkBand(x0, x1, Math.round(top - 0.6 * h), Math.round(top - 0.15 * h));
     };
-    let found = null;
+    const stacks = [];
     for (const { x0, x1 } of cands) {
       const w = x1 - x0, a = x0 + 3, b = x1 - 3, ivs = [];
       let y0 = -1;
@@ -253,15 +259,30 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
           if (Math.abs(h - h0) > h0 * 0.2 || q.y0 - p.y1 > h0 * 0.6) break;
           run.push(q);
         }
-        if (run.length >= 3 && (!found || run.length > found.boxes.length) && titleOk(x0, x1, run[0].y0, run[0].y1 - run[0].y0)) found = { x0, x1, boxes: run.map((r) => ({ x: x0, y: r.y0, w, h: r.y1 - r.y0 })) };
+        if (run.length < 3 || !titleOk(x0, x1, run[0].y0, h0)) continue;
+        if (stacks.some((t) => Math.abs(t.x0 - x0) < 12 && Math.abs(t.top - run[0].y0) < h0 * 0.5)) continue;
+        stacks.push({ x0, x1, top: run[0].y0, h: h0, boxes: run.map((r) => ({ x: x0, y: r.y0, w, h: r.y1 - r.y0 })) });
+        i += run.length - 1;
       }
-      if (found && found.boxes.length === 4) break;
     }
-    if (!found) return null;
+    if (!stacks.length) return null;
+    // 변환 전·후 창: 같은 높이·폭의 묶음 두 개가 나란히 → 왼쪽이 변환 전(지금), 오른쪽이 변환 후(새 옵션)
+    let pair = null;
+    for (let i = 0; i < stacks.length; i++) for (let j = i + 1; j < stacks.length; j++) {
+      const A = stacks[i], B = stacks[j], wA = A.x1 - A.x0, wB = B.x1 - B.x0;
+      if (A.boxes.length !== B.boxes.length || Math.abs(A.h - B.h) > A.h * 0.12 || Math.abs(A.top - B.top) > A.h * 0.5 || Math.abs(wA - wB) > wA * 0.1) continue;
+      if (!(A.x1 <= B.x0 || B.x1 <= A.x0)) continue;
+      const [L, R] = A.x0 < B.x0 ? [A, B] : [B, A];
+      if (!pair || L.boxes.length > pair.L.boxes.length) pair = { L, R };
+    }
+    const kindOf = (n) => (n === 4 ? 'w' : 'a');
+    if (pair) return { pair: true, x0: pair.L.x0, x1: pair.L.x1, boxes: pair.L.boxes, boxes2: pair.R.boxes, title: null, kind: kindOf(pair.L.boxes.length) };
+    stacks.sort((p, q) => q.boxes.length - p.boxes.length || q.h - p.h);
+    const found = stacks[0];
     const b0 = found.boxes[0], h = b0.h;
     const ty0 = Math.max(0, Math.round(b0.y - 2.3 * h)), ty1 = Math.max(0, Math.round(b0.y - 1.35 * h));
     found.title = ty1 - ty0 > 8 ? { x: found.x0, y: ty0, w: found.x1 - found.x0, h: ty1 - ty0 } : null;
-    found.kind = found.boxes.length === 4 ? 'w' : 'a';
+    found.kind = kindOf(found.boxes.length);
     return found;
   }
   // 줄 상자 → 글자 그림 1장 + 수치 그림 여러 장. 수치는 초록·노랑·보라 글씨, (던전)은 빨강.
@@ -407,9 +428,10 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
       await B.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '0123456789.+%Lv' });
       try {
         if (loc.title) { onProg && onProg({ status: '장비 이름 읽는 중' }); out.title = parseTitle((await A.recognize(titlePic(cv, loc.title))).data.text); }
-        for (let i = 0; i < loc.boxes.length; i++) {
-          onProg && onProg({ status: `옵션 ${i + 1}줄 읽는 중`, progress: (i + 1) / loc.boxes.length });
-          const p = linePics(cv, loc.boxes[i]);
+        const all = loc.boxes.concat(loc.boxes2 || []);
+        for (let i = 0; i < all.length; i++) {
+          onProg && onProg({ status: `옵션 ${i + 1}/${all.length}줄 읽는 중`, progress: (i + 1) / all.length });
+          const p = linePics(cv, all[i]);
           const lt = (await A.recognize(p.lab)).data.text;
           const vg = [];
           for (const c of p.vals) vg.push([(await B.recognize(c.bin)).data.text.trim(), (await B.recognize(c.gray)).data.text.trim()]);
@@ -428,7 +450,9 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
         kind = Math.abs(sw - sa) > 0.15 ? (sw > sa ? 'w' : 'a') : loc.kind;
       }
       out.kind = kind;
-      out.lines = raws.map(([lt, vg]) => matchLine(kind, lt, vg));
+      const lines = raws.map(([lt, vg]) => matchLine(kind, lt, vg)), n = loc.boxes.length;
+      out.lines = lines.slice(0, n);
+      if (loc.pair) { out.pair = true; out.lines2 = lines.slice(n); }
       return out;
     } finally { busy = false; }
   }
@@ -678,7 +702,7 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
       const rN = ratio(L.snap, L.cur, L.nxt, L.o), sN = score(rN), d = (rN - 1) * 100;
       const cls = Math.abs(d) < 0.005 ? 'same' : d > 0 ? 'up' : 'down';
       sn.append(h('p', { class: 'oc-big' }, h('b', { text: `${sN.toFixed(1)}점` }),
-        h('span', { class: 'oc-cmp ' + cls, text: cls === 'same' ? ' 지금과 같아요' : ` 지금보다 ${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(2)}%` })));
+        h('span', { class: 'oc-cmp ' + cls, text: cls === 'same' ? ' 지금과 같아요' : ` 지금보다 ${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(2)}% · ${d > 0 ? '바꾸는 게 나아요' : '유지하기가 나아요'}` })));
       if (Number.isFinite(L.cp)) sn.append(h('p', { class: 'oc-cp' }, h('span', { text: '바꾸면 실투력 ' }), h('b', { text: cpText(L.cp) }), ' → ', h('b', { class: cls, 'data-cp': String(Math.round(L.cp * rN)), text: cpText(L.cp * rN) })));
       sn.append(h('button', { type: 'button', class: 'btn ' + (d > 0 ? 'primary' : '') + ' wide oc-apply', text: d > 0 ? '새 옵션으로 바꾸기' : '그래도 새 옵션으로 바꾸기', onclick: applyNew }),
         h('p', { class: 'oc-hint', text: '누르면 계산기 스탯(공격력·크뎀 등)을 새 옵션 기준으로 고치고, 새 옵션을 지금 옵션으로 옮겨요' }));
@@ -739,8 +763,17 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
       p.eq = eqk;
       const e = EQ(eqk), s = slot(eqk);
       if (r.title && r.title.enh != null) s.enh = r.title.enh !== Number(inp(e.enh)) ? r.title.enh : null;
-      const lines = r.lines.map((l) => ({ i: l.i, v: l.v, chk: !l.ok, raw: l.raw }));
+      const conv = (ls) => ls.map((l) => ({ i: l.i, v: l.v, chk: !l.ok, raw: l.raw }));
+      const lines = conv(r.lines);
       if (lines.length < LINES[e.kind]) note += ` · 옵션 줄이 ${lines.length}개만 보여요. 나머지 줄은 직접 골라 주세요`;
+      // 옵션 변환 선택 창(변환 전·후가 나란히): 왼쪽은 지금 옵션, 오른쪽은 새로 뜬 옵션
+      if (r.pair) {
+        s.cur = lines; s.nxt = conv(r.lines2); persist();
+        renderAll(); schedule();
+        const nChk = s.cur.concat(s.nxt).filter((l) => l.chk).length;
+        toast(`${e.item} 변환 전은 지금 옵션, 변환 후는 새로 뜬 옵션에 넣었어요${nChk ? ` · ${nChk}줄은 확인해 주세요` : ''}${note}`);
+        return true;
+      }
       const same = (a, b) => a.length === b.length && a.every((x, k) => b[k] && x.i === b[k].i && x.v === b[k].v);
       let to = which === 'cur' || which === 'nxt' ? which : (!linesOk(s.cur) ? 'cur' : 'nxt');
       if (to === 'nxt' && same(lines, s.cur)) { toast('지금 옵션과 같아요'); to = 'cur'; }
