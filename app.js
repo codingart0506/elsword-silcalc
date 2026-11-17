@@ -175,7 +175,7 @@
   }
 
   // 실투력 계산 방식 버전: 계산이 바뀔 때 올림. 랭킹에 올린 세팅에 같이 적어서, 예전 방식으로 올린 기록은 랭킹에 '업데이트 전 지표'로 표시
-  const CALC_VER = '3.0.18';
+  const CALC_VER = '3.0.18'; // 시트 3.0.19는 사이트가 쓰는 계산 결과가 3.0.18과 같아서 그대로 둠(올리면 랭킹이 모두 '업데이트 전 지표'로 표시됨)
 
   // ---------- 상태 / 저장 ----------
   const LS = 'silcalc.v1';
@@ -1227,7 +1227,8 @@
     toast, el, fmtInt, korUnit, dialog,
   };
 
-  // ---------- 크극 최적화 (엑셀 "크극 최적화 계산") ----------
+  // ---------- 크극 최적화: 스탯창의 크리·극대·보뎀을 합계 그대로 다시 나눠 실투력이 가장 높은 배분을 한눈에 보여 줌 ----------
+  // 시트 3.0에는 이 계산 시트가 없어서(소켓 배분 계산으로 바뀜) 계산기 실투력을 직접 재 가며 찾음(opt.js)
   const OPT = window.SilOpt;
   function optCfg() { if (!store.opt) store.opt = { base: 'atma', min: 25 }; return store.opt; }
   function wireOpt() {
@@ -1242,41 +1243,40 @@
       v = Math.min(100, Math.round(v * 10) / 10); mn.value = v; cfg.min = v; persist(); renderOpt();
     };
   }
-  let optT = 0;
-  hooks.push(() => { clearTimeout(optT); optT = setTimeout(renderOpt, 120); });
+  // 값을 고칠 때마다 바로 돌리면 입력이 버벅이니, 잠깐 멈춘 뒤에 계산함(그동안은 앞 결과를 그대로 둠)
+  let optT = 0, optSeq = 0;
+  hooks.push(() => { optSeq++; clearTimeout(optT); optT = setTimeout(renderOpt, 450); });
   function optDelta(x) {
     const d = Math.round(x * 1000) / 10;
     if (Math.abs(d) < 0.05) return { t: '그대로', c: 'same' };
     return { t: (d > 0 ? '+' : '−') + Math.abs(d).toFixed(1) + '%', c: d > 0 ? 'up' : 'down' };
   }
-  function renderOpt() {
+  async function renderOpt() {
     const card = $('#optCard'); if (!card || !OPT) return;
+    const my = ++optSeq;
     const cp = cpOf(wb);
-    const bad = isEmptySetting(inputs) || $('#rCP').classList.contains('err') || typeof cp !== 'number' ||
-      !(Number(g('C11')) > 0) || !(Number(g('C12')) > 0) || !(Number(g('C13')) > 0);
+    const bad = isEmptySetting(inputs) || typeof cp !== 'number' || !(Number(g('C11')) > 0) || !(Number(g('C12')) > 0) || !(Number(g('C13')) > 0);
+    if (bad || shared) { card.hidden = true; return; }
+    const n = (a) => { const v = Number(inputs[a]); return isFinite(v) ? v : 0; };
     let r = null;
-    if (!bad) { try { const cfg = optCfg(); r = OPT.run(wb, { base: cfg.base, minCrit: (cfg.min ?? 25) / 100 }); } catch (e) { console.error(e); } }
-    if (!r || !isFinite(r.dps) || !isFinite(r.cpOpt)) { card.hidden = true; return; }
+    try {
+      const cfg = optCfg();
+      r = await OPT.run((x) => cpWith({ C17: x.crit, C19: x.max, C21: x.boss }), { crit: n('C17'), max: n('C19'), boss: n('C21') },
+        { base: cfg.base, minCrit: (cfg.min ?? 25) / 100, tick: () => new Promise(res => setTimeout(res, 0)), alive: () => my === optSeq });
+    } catch (e) { console.error(e); }
+    if (my !== optSeq) return; // 그사이 값이 바뀜: 새 계산이 그림
+    if (!r || !isFinite(r.cpOpt) || !isFinite(r.gain)) { card.hidden = true; return; }
     card.hidden = false;
     const body = $('#optBody'); body.textContent = '';
-    const rows = [['크리티컬 확률', 'crit'], ['극대화', 'max'], ['보스 데미지', 'boss']];
-    if (r.short) {
-      setText('#optGain', '바꿀 수 없는 크리·극대·보뎀만으로 지금 수치를 넘어서 계산할 수 없어요. 계산 기준의 크리 최소 수치를 낮춰 보세요');
-      $('#optGain').className = 'opt-gain warn';
-      for (const [t, k] of rows) body.append(el('tr', null, el('th', { scope: 'row', text: t }), el('td', { text: fmtPct(r.cur[k]) }), el('td', { text: '-' }), el('td', { class: 'same', text: '-' })));
-      return;
-    }
-    for (const [t, k] of rows) {
+    for (const [t, k] of [['크리티컬 확률', 'crit'], ['극대화', 'max'], ['보스 데미지', 'boss']]) {
       const d = optDelta(r.change[k]);
       body.append(el('tr', null, el('th', { scope: 'row', text: t }), el('td', { text: fmtPct(r.cur[k]) }),
         el('td', { class: 'opt-best', text: fmtPct(r.opt[k]) }), el('td', { class: d.c, text: d.t })));
     }
-    const gain = $('#optGain');
-    if (r.dps < 0.00005) { gain.className = 'opt-gain'; gain.textContent = '지금 배분이 이미 최적이에요'; return; }
-    gain.className = 'opt-gain';
-    gain.textContent = '';
-    gain.append('최적으로 바꾸면 DPS ', el('b', { class: 'up', text: '+' + (r.dps * 100).toFixed(2) + '%' }),
-      el('br'), '실질 전투력 ' + fmtInt(r.cpOpt) + ' ', el('span', { class: 'up', text: '(▲ ' + fmtInt(r.cpOpt - cp) + ')' }));
+    const gain = $('#optGain'); gain.className = 'opt-gain'; gain.textContent = '';
+    if (r.gain < 0.00005) { gain.textContent = '지금 배분이 이미 최적이에요'; return; }
+    gain.append('최적으로 바꾸면 실투력 ', el('b', { class: 'up', text: '+' + (r.gain * 100).toFixed(2) + '%' }),
+      el('br'), fmtInt(r.cp) + ' → ' + fmtInt(r.cpOpt) + ' ', el('span', { class: 'up', text: '(▲ ' + fmtInt(r.cpOpt - r.cp) + ')' }));
   }
 
   // ---------- 소켓 배분 최적화 (엑셀 "최적 소켓 배분 계산"): 바꿀 수 있는 소켓 칸을 옵션별로 다시 나눠 실투력이 가장 높은 배분을 찾음 ----------
