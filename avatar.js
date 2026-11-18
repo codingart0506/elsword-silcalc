@@ -87,7 +87,7 @@
     if (loaded2[k]) return loaded2[k];
     loaded2[k] = new Promise((res, rej) => {
       if (window.SIL_GEAR2 && window.SIL_GEAR2[k]) return res(window.SIL_GEAR2[k]);
-      const s = document.createElement('script'); s.src = `av/g${k}.js?v=${A.ver || 1}2`;
+      const s = document.createElement('script'); s.src = `av/g${k}.js?v=${A.ver || 1}3`;
       s.onload = () => (window.SIL_GEAR2 && window.SIL_GEAR2[k]) ? res(window.SIL_GEAR2[k]) : rej(new Error('아이콘 없음'));
       s.onerror = () => { loaded2[k] = null; rej(new Error('아이콘을 못 불러왔어요')); };
       document.head.appendChild(s);
@@ -97,6 +97,9 @@
   // 방어구 칸은 왼쪽 위 S·자물쇠 표시와 오른쪽 아래 회로 표시를 빼고 비교
   const MASK_ARM = new Uint8Array(F * F);
   for (let y = 0; y < F; y++) for (let x = 0; x < F; x++) MASK_ARM[y * F + x] = ((x < 6 && y < 6) || (x >= 10 && y >= 10)) ? 0 : 1;
+  // 잠근 아이템은 왼쪽 위에 큰 자물쇠 방패가 덮여 있어서, 보통 비교로 못 알아보면 그 자리까지 빼고 다시 비교
+  const MASK_LOCK = new Uint8Array(F * F);
+  for (let y = 0; y < F; y++) for (let x = 0; x < F; x++) MASK_LOCK[y * F + x] = ((x >= 11 && y < 10) || (x >= 9 && y >= 9) || (x < 8 && y < 9)) ? 0 : 1;
   function distM(a, b, M) { let s = 0, n = 0; for (let i = 0; i < F * F; i++) { if (!M[i]) continue; const k = i * 3; s += Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]); n += 3; } return s / n; }
   // 칸(x, y, 크기 s) 안의 아이콘을 크기·자리를 조금씩 바꿔 가며 견본들과 비교: 이름별 가장 가까운 거리
   function scan(canvas, x0, y0, s, scales, pool, M) {
@@ -128,9 +131,9 @@
     let suit = null;
     const sp = (lib.s || []).map(([n, f]) => ({ n, fb: b64(f) }));
     if (sp.length) {
-      const r = scan(canvas, avx, top, S, [0.94, 1.0, 1.06, 1.12], sp, MASK);
-      const best = r[0], gap = r[1] ? r[1].d - best.d : 99;
-      suit = { name: best.n, d: Math.round(best.d * 10) / 10, gap: Math.round(gap * 10) / 10, ok: (best.d <= 21 && gap >= 4) || (best.d <= 25 && gap >= 8) };
+      const judge = (r) => { const best = r[0], gap = r[1] ? r[1].d - best.d : 99; return { name: best.n, d: Math.round(best.d * 10) / 10, gap: Math.round(gap * 10) / 10, ok: (best.d <= 21 && gap >= 4) || (best.d <= 25 && gap >= 8) }; };
+      suit = judge(scan(canvas, avx, top, S, [0.94, 1.0, 1.06, 1.12], sp, MASK));
+      if (!suit.ok) { const sl = judge(scan(canvas, avx, top, S, [0.94, 1.0, 1.06, 1.12], sp, MASK_LOCK)); if (sl.ok) suit = Object.assign(sl, { locked: true }); }
     }
     return { armor, suit };
   }
@@ -195,20 +198,22 @@
       const ins = Math.max(1, Math.round(b.s * 0.05)), st = Math.max(1, Math.round(b.s / 40));
       // 아바타·무기 칸은 초록 격자에서 멀리 떨어져 있어서(1920x1080이 아닌 화면에선 몇 픽셀 어긋남) 더 넓게 찾음
       const R = b.kind === 'acc' ? Math.max(st, Math.round(b.s / 18)) : Math.max(2, Math.round(b.s / 16)), stp = 1;
-      let best = null, second = Infinity;
-      const byName = {};
+      const byName = {}, byNameL = {};
       for (let dy = -R; dy <= R; dy += stp) for (let dx = -R; dx <= R; dx += stp) {
         const x = b.x + ins + dx, y = b.y + ins + dy, s = b.s - 2 * ins;
         if (x < 0 || y < 0 || x + s > canvas.width || y + s > canvas.height) continue;
         const f = feat(canvas, x, y, s);
-        for (const e of pool) { const d = dist(f, e.fb); if (!(e.n in byName) || d < byName[e.n].d) byName[e.n] = { d, e }; }
+        for (const e of pool) {
+          const d = dist(f, e.fb); if (!(e.n in byName) || d < byName[e.n].d) byName[e.n] = { d, e };
+          const dl = distM(f, e.fb, MASK_LOCK); if (!(e.n in byNameL) || dl < byNameL[e.n].d) byNameL[e.n] = { d: dl, e };
+        }
       }
-      const ranked = Object.values(byName).sort((a, b2) => a.d - b2.d);
-      if (!ranked.length) continue;
-      best = ranked[0]; second = ranked[1] ? ranked[1].d : Infinity;
       // 충분히 가깝거나, 조금 멀어도 2등과 차이가 아주 크면 인정(염색·별 표시·화질 차이로 거리가 조금 커지는 경우)
-      const ok = (best.d <= MATCH && second - best.d >= 3) || (best.d <= 18 && second - best.d >= 8);
-      detail.push({ part: b.part, piece: b.piece, name: best.e.n, d: best.d, gap: second - best.d, ok });
+      const judge = (m) => { const r = Object.values(m).sort((a, b2) => a.d - b2.d); if (!r.length) return null; const best = r[0], second = r[1] ? r[1].d : Infinity; return { best, gap: second - best.d, ok: (best.d <= MATCH && second - best.d >= 3) || (best.d <= 18 && second - best.d >= 8) }; };
+      let jd = judge(byName); if (!jd) continue;
+      if (!jd.ok) { const jl = judge(byNameL); if (jl && jl.ok) jd = Object.assign(jl, { locked: true }); }
+      const best = jd.best, ok = jd.ok;
+      detail.push({ part: b.part, piece: b.piece, name: best.e.n, d: best.d, gap: jd.gap, ok, locked: !!jd.locked });
       if (!ok) continue;
       if (b.kind === 'av') { pieces[best.e.d] = (pieces[best.e.d] || 0) + 1; continue; }
       if (b.part === best.e.p || b.kind === 'wep') found[b.part] = { d: best.e.d, n: best.e.n, known: optionsOf(b.part).includes(best.e.d) };
@@ -272,29 +277,39 @@
       for (const d of optionsOf(part)) sel.append(el('option', { value: d, text: short(d) }));
       sel.value = p.worn[part] || '';
       sel.onchange = () => { p.worn[part] = sel.value; p.how[part] = 'hand'; save(); result = null; renderResult(); renderTag(); };
+      let row = null;
       const fx = el('input', { type: 'checkbox', 'aria-label': (PART_LABEL[part] || part) + ' 고정' });
       fx.checked = part === '아바타5셋' ? !!p.fiveFixed : !!p.fixed[part];
       fx.onchange = () => { if (part === '아바타5셋') p.fiveFixed = fx.checked; else p.fixed[part] = fx.checked; save(); result = null; renderResult(); };
       const tag = el('span', { class: 'av-tag' });
+      // 비어 있는 칸(인식 못 함·시트에 없는 것·아직 안 고름)은 연한 빨간 상자로. 직접 '없음'을 고르면 확인한 걸로 봄
       const renderTag = () => {
-        const h = p.how[part] || '';
-        tag.className = 'av-tag'; tag.textContent = '';
-        if (h === 'shot' && p.worn[part]) { tag.textContent = '인식'; tag.classList.add('ok'); }
-        else if (h.startsWith('other:')) { tag.textContent = '시트 밖'; tag.title = h.slice(6); }
+        const h = p.how[part] || '', empty = !p.worn[part];
+        tag.className = 'av-tag'; tag.textContent = ''; tag.title = '';
+        if (h === 'shot' && !empty) { tag.textContent = '인식'; tag.classList.add('ok'); }
+        else if (empty && h.startsWith('other:')) { tag.textContent = '시트에 없음'; tag.title = h.slice(6); tag.classList.add('bad'); }
+        else if (empty && h === 'none') { tag.textContent = '인식 못 함'; tag.classList.add('bad'); }
+        else if (empty && h !== 'hand') { tag.textContent = '골라 주세요'; tag.classList.add('bad'); }
+        if (row) row.classList.toggle('need', tag.classList.contains('bad'));
       };
+      row = el('div', { class: 'av-row' }, el('span', { class: 'av-part', text: PART_LABEL[part] || part }), tag, sel, el('label', { class: 'av-fix' }, fx, el('span', { text: '고정' })));
       renderTag();
-      body.append(el('div', { class: 'av-row' }, el('span', { class: 'av-part', text: PART_LABEL[part] || part }), tag, sel, el('label', { class: 'av-fix' }, fx, el('span', { text: '고정' }))));
+      body.append(row);
     }
     {
       const sel = el('select', { 'aria-label': '일반 악세 하의 지금 착용' });
       sel.append(el('option', { value: '', text: '모름·그 밖의 것 (추천 안 함)' }));
       for (const d of Object.keys(BOTTOMS)) sel.append(el('option', { value: d, text: d }));
       sel.value = p.bottom || '';
-      sel.onchange = () => { p.bottom = sel.value; save(); result = null; renderResult(); };
       const fx = el('input', { type: 'checkbox', 'aria-label': '일반 악세 하의 고정' });
       fx.checked = !!p.fixed['하의악세'];
       fx.onchange = () => { p.fixed['하의악세'] = fx.checked; save(); result = null; renderResult(); };
-      body.append(el('div', { class: 'av-row' }, el('span', { class: 'av-part', text: '일반 악세 하의' }), el('span', { class: 'av-tag' }), sel, el('label', { class: 'av-fix' }, fx, el('span', { text: '고정' }))));
+      const tagB = el('span', { class: 'av-tag' });
+      const rowB = el('div', { class: 'av-row' }, el('span', { class: 'av-part', text: '일반 악세 하의' }), tagB, sel, el('label', { class: 'av-fix' }, fx, el('span', { text: '고정' })));
+      const markB = () => { const bad = !p.bottom && !p.bottomSet; tagB.className = 'av-tag' + (bad ? ' bad' : ''); tagB.textContent = bad ? '골라 주세요' : ''; rowB.classList.toggle('need', bad); };
+      sel.onchange = () => { p.bottom = sel.value; p.bottomSet = true; save(); result = null; renderResult(); markB(); };
+      markB();
+      body.append(rowB);
       body.append(el('p', { class: 'av-hint' }, '스탯 창을 찍을 때 끼고 있던 것을 골라 주세요. 영혼의 족쇄는 모든 스킬 데미지 5%에 사룡 세트 한 부위(2부위면 크리티컬 5%·보스 데미지 7%, 3부위면 양극화 5%·추가 지속 피해 5% 더), 글로잉 플라워는 크리티컬 10%·적응력 2%예요. 추천 받기를 누르면 둘 다 끼워 보고 실투력이 높은 쪽을 골라요'));
     }
     const allFixed = !!p.fiveFixed && PARTS.filter(x => x !== '아바타5셋').every(x => p.fixed[x]) && !!p.fixed['하의악세'];
