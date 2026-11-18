@@ -361,21 +361,53 @@
   function cartLevelText(type, lv) {
     const t = String(type || ''), i = lv - 1;
     if (!(lv >= 1 && lv <= 6)) return null;
-    if (/오버플로우/.test(t)) return `모스뎀 ${fmtP(0.5 * lv)}`;
+    if (/오버플로우/.test(t)) return `투지 모스뎀 ${fmtP(0.5 * lv)}`;
     if (/엑셀레이션/.test(t)) return `쿨감 ${fmtP([1, 1.5, 2, 2.5, 3, 5][i])} · ${[10, 9, 8, 7, 5, 4][i]}초`;
-    if (/서플라이/.test(t)) return `${[40, 35, 30, 25, 20, 12][i]}초마다`;
+    if (/서플라이/.test(t)) return `${[40, 35, 30, 25, 20, 12][i]}초마다 · 피감 버프 ${fmtP(0.5 * lv)}`;
+    if (/앰플리파이어/.test(t)) return `MP ${[25, 40, 55, 70, 85, 100][i]}/초 · 자원 ${lv}초`;
+    if (/택티컬/.test(t)) return `일반 몹 ${fmtP([1.5, 2, 2.5, 3, 4, 5][i])} · 보뎀 ${[3, 6, 9, 12, 15, 20][i]}중첩`;
     if (/^서포트 (1형|카트리지 Type - 1)$/.test(t)) return `공용 물마공 ${fmtP(0.5 * lv)}`;
     if (/^서포트 (2형|카트리지 Type - 2)$/.test(t)) return `공용 모스뎀 ${fmtP(0.5 * lv)}`;
+    if (t === '서포트 카트리지 Type - 3') return `공용 모속 ${fmtP(0.5 * lv)}`;
+    if (t === '클래식 카트리지 Type - 3') return `동작속도 ${fmtP(0.5 * lv)}`;
+    if (t === '클래식 카트리지 Type - 4') return `경험치 ${fmtP([2, 4, 6, 8, 10, 15][i])}`;
+    if (t === '클래식 카트리지 Type - 5') return `드랍률 ${fmtP([2, 4, 6, 8, 10, 15][i])}`;
     // 스탯창에 바로 들어가는 카트리지(시트 '카트리지 표시 스탯')
-    const BC = { '배틀 카트리지 Type - 1': '추피', '배틀 카트리지 Type - 2': '모스뎀', '배틀 카트리지 Type - 3': '강렬·초월 스뎀', '배틀 카트리지 Type - 4': '크뎀', '배틀 카트리지 Type - 5': '보뎀',
+    const BC = { '배틀 카트리지 Type - 1': '추피', '배틀 카트리지 Type - 2': '모스뎀', '배틀 카트리지 Type - 3': '타입 스뎀', '배틀 카트리지 Type - 4': '크뎀', '배틀 카트리지 Type - 5': '보뎀',
       '클래식 카트리지 Type - 1': '양극화', '클래식 카트리지 Type - 2': '쿨감' };
     if (BC[t]) return `${BC[t]} ${fmtP(0.5 * lv)}`;
     if (/뮤테이션/.test(t)) return `초적응력 ${fmtP([0.5, 1, 1.5, 2, 3, 4][i])} · 양극화 -10%`;
     return null;
   }
+  // 카트리지 종류: 게임 이름(Type - 1 등) 대신 효과를 앞에 씀('카트리지' 줄 안이라 '카트리지'는 뺌. 좁은 칸에서도 효과가 먼저 보이게). 값은 시트 이름 그대로라 계산·저장·공유 링크는 안 바뀜.
+  // 효과는 넥슨 네블론슈트 가이드 기준. g: 목록 묶음(스탯 창에 바로 / 조건부·지원 / 실투력과 상관없음)
+  const CART_NAME = {
+    '배틀 카트리지 Type - 1': ['추피', '배틀 1', 0], '배틀 카트리지 Type - 2': ['모스뎀', '배틀 2', 0],
+    '배틀 카트리지 Type - 3': ['타입 스뎀', '배틀 3 · 유연·강인·강렬·초월', 0], '배틀 카트리지 Type - 4': ['크뎀', '배틀 4', 0],
+    '배틀 카트리지 Type - 5': ['보뎀', '배틀 5', 0], '클래식 카트리지 Type - 1': ['양극화', '클래식 1', 0],
+    '클래식 카트리지 Type - 2': ['쿨감', '클래식 2', 0], '하이퍼 카트리지 [뮤테이션]': ['초적응력', '하이퍼 뮤테이션 · 양극화 −10%', 0],
+    '하이퍼 [오버플로우]': ['투지 모스뎀', '하이퍼 오버플로우', 1], '하이퍼 [엑셀레이션]': ['스페셜 쿨감', '하이퍼 엑셀레이션', 1],
+    // 아래는 게임 이름이 잘 알려져 있어서 이름은 그대로(묶음만 나눔)
+    '하이퍼 카트리지 [택티컬]': [null, null, 1], '하이퍼 카트리지 [앰플리파이어]': [null, null, 1], '하이퍼 [서플라이]': [null, null, 1],
+    '서포트 1형': [null, null, 1], '서포트 2형': [null, null, 1], '서포트 카트리지 Type - 3': [null, null, 1],
+    '클래식 카트리지 Type - 3': [null, null, 2], '클래식 카트리지 Type - 4': [null, null, 2], '클래식 카트리지 Type - 5': [null, null, 2],
+  };
+  const CART_GROUP = ['상세 스탯에 바로 들어가요', '조건부·지원 효과', '실투력과 상관없어요'];
+  // 카트리지 종류 목록: 없음을 맨 위에, 나머지는 묶음별로
+  function fillCartOptions(node, opts, a) {
+    const groups = CART_GROUP.map(t => el('optgroup', { label: t })), rest = [], order = Object.keys(CART_NAME);
+    const rank = (o) => { const k = order.indexOf(String(o)); return k < 0 ? 1e9 : k; };
+    for (const o of [...opts].sort((x, y) => rank(x) - rank(y))) {
+      const op = el('option', { value: String(o), text: optText(a, o) }), m = CART_NAME[String(o)];
+      if (String(o) === NONE) node.prepend(op); else if (m) groups[m[2]].append(op); else rest.push(op);
+    }
+    for (const gr of groups) if (gr.childElementCount) node.append(gr);
+    for (const op of rest) node.append(op);
+  }
   // 보기 글자를 짧게(값은 시트 그대로): 금빛 각인석 '물리 공격력 (%)' → '물리 공격력'
   function optText(a, o, type) {
     const s = String(o);
+    if (/^J3[1-4]$/.test(a)) { if (s === NONE) return '없음'; const m = CART_NAME[s]; return m && m[0] ? `${m[0]} (${m[1]})` : s; }
     if (/^D2[0-2]$/.test(a)) return s.replace(/\s*\(%\)$/, '');
     if (a === 'J21') return s.replace(/\s*\(.*\)$/, '');          // 효과는 ? 도움말에
     // 강렬:초월 비율 기준: 시트 용어(강초뎀 적용 이전/이후) 대신 무엇을 넣는지로
@@ -398,7 +430,8 @@
     const key = opts.join('\u0001') + (/^L3[1-4]$/.test(a) ? '\u0002' + g('J' + a.slice(1)) : ''); // 카트리지 단계 글자는 종류에 따라 다름
     if (node._key !== key) {
       node.innerHTML = '';
-      for (const o of opts) node.append(el('option', { value: String(o), text: typeof o === 'number' && PCT.has(a) ? +(o * 100).toFixed(2) + '%' : optText(a, o) }));
+      if (/^J3[1-4]$/.test(a)) fillCartOptions(node, opts, a);
+      else for (const o of opts) node.append(el('option', { value: String(o), text: typeof o === 'number' && PCT.has(a) ? +(o * 100).toFixed(2) + '%' : optText(a, o) }));
       node._key = key;
     }
     if (!opts.some(o => String(o) === String(cur))) {
@@ -936,7 +969,8 @@
       if (String(inputs[arm] ?? '') !== '네블론') continue;
       const sel = (c) => {
         const s = el('select', { 'data-cell': c, 'aria-label': `카트리지(${part}) ${c === jc ? '종류' : '수치'}` });
-        for (const o of optionsOf(c) || []) s.append(el('option', { value: String(o), text: optText(c, o) }));
+        if (c === jc) fillCartOptions(s, optionsOf(c) || [], c);
+        else for (const o of optionsOf(c) || []) s.append(el('option', { value: String(o), text: optText(c, o) }));
         s.value = String(inputs[c] ?? defaultOf(c) ?? '');
         return s;
       };
