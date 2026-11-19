@@ -1736,7 +1736,7 @@
       el('p', { class: 'apply-sum' }, `${A.cls()} 실투력 `, el('b', { text: fmtInt(cp) }), '을(를) 올려요. 관리자가 본인 캐릭터인지 확인한 뒤 랭킹에 보여요.'),
       el('label', { class: 'ex-row' }, el('span', {}, '닉네임', el('small', { text: '게임 닉네임 그대로' })), nick),
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
-      el('p', { text: '게임 채팅창에 이 코드를 입력한 다음, 채팅이 보이게 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요. PC방 혜택과 지애 버프는 끄고 찍어 주세요.' }),
+      el('p', { text: '게임 채팅창에 이 코드를 입력한 다음, 채팅이 보이게 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요. 채팅 글자가 캐릭터 창이나 상세 스탯 창을 덮지 않게 해 주세요.' }),
       exampleFig(),
       el('p', { class: 'apply-privacy' }, '신청하면 닉네임, 계산기 세팅, 스크린샷이 랭킹용으로 저장돼요. 랭킹을 볼 때는 본 기록(본 캐릭터, 시각, 기기 구분용 임의 번호)이 180일 동안 남아요. 자세한 내용은 ', el('a', { href: 'privacy.html', target: '_blank', rel: 'noopener', text: '개인정보 처리방침' }), '에 있어요.'),
       pick.box, pick.file,
@@ -1795,15 +1795,15 @@
     if (!(cp > 0)) { toast('실투력이 계산되지 않았어요'); return; }
     if (underMin(cp)) return;
     const old = $('#applyDlg'); if (old) old.remove();
-    const code = updCode(r), pick = shotPicker(), shot = A.shot();
-    if (shot) pick.set(shot, '계산기에 읽힌 스크린샷이에요. 채팅에 위 코드가 안 보이면 코드를 적고 다시 찍어 넣어 주세요');
+    // 계산기에 넣은 사진은 코드가 나오기 전에 찍은 것이라 미리 넣지 않음(신청처럼 매번 새로 찍어 넣음)
+    const code = updCode(r), pick = shotPicker();
     const close = () => { pick.off(); wrap.remove(); };
     const send = el('button', { type: 'button', class: 'btn primary', text: '보내기' });
     const card = el('div', { class: 'dialog-card apply-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'upTitle' },
       el('h3', { id: 'upTitle', text: '랭킹 갱신' }),
       el('p', { class: 'apply-sum' }, `${r.nickname} 실투력을 `, el('b', { text: fmtInt(cp) }), '(으)로 바꿔 달라고 보내요. 관리자가 스크린샷을 확인하면 랭킹에 반영돼요.'),
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
-      el('p', { text: '게임 채팅 입력칸에 이 코드를 적은 다음, 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요. 갱신할 때마다 코드가 새로 나와요. PC방 혜택과 지애 버프는 끄고 찍어 주세요.' }),
+      el('p', { text: '게임 채팅 입력칸에 이 코드를 적은 다음, 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 새로 찍어 넣어 주세요. 채팅 글자가 캐릭터 창이나 상세 스탯 창을 덮지 않게 해 주세요. 갱신할 때마다 코드가 새로 나와요.' }),
       el('p', { class: 'apply-privacy', text: '지금 계산기에 있는 값이 그대로 올라가요. 스크린샷의 스탯과 다르면 반영되지 않아요.' }),
       exampleFig(),
       pick.box, pick.file,
