@@ -304,6 +304,9 @@
           // 살펴보기 창의 ▲▼ 화살표를 숫자 전용 인식이 '4' 따위로 읽는 경우: 1차가 깔끔하면 1차를 믿음
           const d1 = a.text.replace(/\D/g, ''), d2 = t2.replace(/\D/g, '');
           if (/^[\d.,]+%?$/.test(a.text) && d2.length > d1.length && d2.startsWith(d1)) { out.push(a); continue; }
+          // 1차가 숫자만 또렷하게(확신 80 이상) 읽었는데 숫자 전용 인식은 확신이 낮게(60 미만) 다른 숫자를 내면 1차를 믿음
+          // (예: '111.80%'를 숫자 전용 인식이 '1' 하나를 빠뜨려 '11.80%'(확신 11)로 읽음)
+          if (/^[\d.,]+%?$/.test(a.text) && d1 !== d2 && a.confidence >= 80 && Math.min(...ov.map(b => b.confidence)) < 60) { out.push(a); continue; }
           out.push(Object.assign({}, a, { text: t2, confidence: Math.min(...ov.map(b => b.confidence)) }));
           continue;
         }
