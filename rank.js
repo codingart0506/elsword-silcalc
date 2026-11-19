@@ -354,7 +354,7 @@
   let ocrQ = Promise.resolve();
   // 읽기 엔진(ocr.js)이 바뀌면 예전에 읽어 둔 결과는 안 씀: 주소의 ?v= 값(파일 내용으로 정해짐)을 열쇠에 넣음
   const ocrVer = (() => { const el = document.querySelector('script[src*="ocr.js"]'); const m = el && /[?&]v=(\w+)/.exec(el.src); return m ? m[1] : '0'; })();
-  const ocrKey = (path) => 'silOcrChk.' + ocrVer + '.' + path;
+  const ocrKey = (path) => 'silOcrChk.' + ocrVer + '.r2.' + path;
   function shotCheck(c, path, inputs) {
     const O = window.SilOCR;
     const box = el('div', { class: 'adm-ocr' }, el('span', { text: '사진 자동 확인: 차례를 기다리는 중' }));
@@ -366,12 +366,22 @@
       if (!res) {
         box.firstChild.textContent = '사진 자동 확인: 사진 읽는 중';
         const b = await shotBlob(c, path); if (!b) throw new Error('원본 사진을 열지 못했어요');
-        const r = await O.recognize(await blobToCanvas(b), null);
+        const cv = await blobToCanvas(b);
+        const r = await O.recognize(cv, null);
         res = {};
-        for (const [k, f] of Object.entries(r.found || {})) if (f && typeof f.value === 'number') res[k] = { v: f.value, low: f.score < 0.8 || !!f.guessed };
+        const take = (rr) => { for (const [k, f] of Object.entries(rr.found || {})) if (!res[k] && f && typeof f.value === 'number') res[k] = { v: f.value, low: f.score < 0.8 || !!f.guessed }; };
+        take(r);
+        let atkList = r.atk || [];
+        // 공격력·적응력 줄을 못 읽었으면: 공격력에 마우스를 올려 뜬 설명 창 때문에 창 위치를 아래쪽만 잡은 경우가 있어서,
+        // 창 위쪽으로 넓힌 부분만 한 번 더 읽어 빈 칸을 채움
+        if (r.rect && (!res.C11 || !res.C14)) {
+          const R = r.rect, up = R.h * 0.35;
+          const r2 = await O.recognize(cv, { x: Math.max(0, R.x - 20), y: Math.max(0, R.y - up), w: Math.min(cv.width - Math.max(0, R.x - 20), R.w + 40), h: up + R.h * 0.45 });
+          take(r2); atkList = atkList.concat(r2.atk || []);
+        }
         // 물리·마법 공격력이 둘 다 보이면 둘 다 남겨 둠(어느 쪽인지는 올린 세팅의 전직으로 고름)
         res.atk = {};
-        for (const a of r.atk || []) if (a.kind && (!res.atk[a.kind] || a.score > res.atk[a.kind].score)) res.atk[a.kind] = { v: a.value, low: a.score < 0.8, score: a.score };
+        for (const a of atkList) if (a.kind && (!res.atk[a.kind] || a.score > res.atk[a.kind].score)) res.atk[a.kind] = { v: a.value, low: a.score < 0.8, score: a.score };
         try { sessionStorage.setItem(ocrKey(path), JSON.stringify(res)); } catch (e) { /* 못 남겨도 됨 */ }
       }
       ocrMemo.set(path, res);
@@ -395,12 +405,19 @@
     const pv = (c) => res[c] ? res[c].v : null, eq = inp._eq === true || inp._eq === 'true';
     const swap = eq || big(pv('C24'), pv('C25')) || big(num(inp.C24), num(inp.C25)) || big(pv('C24'), num(inp.C25)) || big(num(inp.C24), pv('C25'));
     const pants = [];
+    let atkUnread = false; // 이 전직의 공격력을 사진에서 못 읽음(가장 중요한 칸이라 '같아요'라고 하지 않음)
     for (const f of O.FIELDS) {
       const c = f.cell; if (!c || c === 'C35') continue; // 동작속도는 계산에 안 씀
       const pct = f.kind === 'pct', up = num(inp[c]);
       let r = res[c], name = names.get(c) || (c === 'C11' ? '공격력' : c === 'C12' ? '극대화 범위 최댓값' : f.names[0]) || c;
       // 공격력은 전직에 맞는 줄(물리/마법)만 비교. 그 줄을 못 읽었으면 못 읽은 항목으로
       if (c === 'C11' && atkT && res.atk) { r = res.atk[atkT] || null; name = `${atkT} 공격력`; }
+      if (!r && c === 'C11') {
+        // 이 전직의 공격력 줄은 못 읽었는데, 올린 값이 사진의 반대 공격력(물리↔마법)과 같으면 바꿔 넣은 것
+        const otherT = atkT === '마법' ? '물리' : atkT === '물리' ? '마법' : null, o = otherT && res.atk && res.atk[otherT];
+        if (o && up != null && Math.abs(up - o.v) < 0.5) { diff.push({ name, up: fmt(up, pct), shot: '못 읽음', note: `올린 값이 사진의 ${otherT} 공격력과 같아요` }); continue; }
+        atkUnread = true;
+      }
       if (!r) { if (up) miss.push(name); continue; }
       if (up != null && Math.abs(up - r.v) < (pct ? 5e-6 : 0.5)) same++;
       else if (swap && (c === 'C24' || c === 'C25')) pants.push(`${name} 올린 ${fmt(up, pct)}, 사진 ${fmt(r.v, pct)}`);
@@ -415,11 +432,16 @@
     if (diff.length) {
       box.className = 'adm-ocr bad';
       const tb = el('table', {}, el('tr', {}, el('th', { text: '항목' }), el('th', { text: '올린 값' }), el('th', { text: '사진' })));
-      for (const d of diff) tb.append(el('tr', {}, el('td', {}, d.name, d.low ? el('small', { text: ' 사진 글자가 흐려서 잘못 읽었을 수 있어요' }) : null), el('td', { class: 'v', text: d.up }), el('td', { class: 'v', text: d.shot })));
+      for (const d of diff) tb.append(el('tr', {}, el('td', {}, d.name, d.note ? el('small', { text: d.note }) : d.low ? el('small', { text: ' 사진 글자가 흐려서 잘못 읽었을 수 있어요' }) : null), el('td', { class: 'v', text: d.up }), el('td', { class: 'v', text: d.shot })));
       box.append(el('b', { class: 't', text: `사진과 다른 값 ${diff.length}개` }), tb);
+    } else if (atkUnread) {
+      box.className = 'adm-ocr warn';
+      box.append(el('b', { class: 't', text: '공격력을 사진에서 못 읽었어요. 사진에서 직접 확인해 주세요' }),
+        el('span', { text: `읽은 상세 스탯 ${same}개는 올린 값과 같아요` }));
     } else {
       box.className = 'adm-ocr ok';
-      box.append(el('span', { text: pants.length ? `사진 자동 확인: 바지 수치 말고 상세 스탯 ${same}개가 올린 값과 모두 같아요` : `사진 자동 확인: 상세 스탯 ${same}개가 올린 값과 모두 같아요` }));
+      const what = pants.length ? '바지 수치 말고 ' : '';
+      box.append(el('span', { text: miss.length ? `사진 자동 확인: ${what}읽은 상세 스탯 ${same}개는 올린 값과 같아요` : `사진 자동 확인: ${what}상세 스탯 ${same}개가 올린 값과 모두 같아요` }));
     }
     if (pants.length) box.append(el('small', { class: 'miss', text: `강배·역강배 바지를 갈아입는 세팅(${eq ? '강배 역강배 수치 동일을 켬' : '두 수치 차이 12%p 이상'})이라 사진과 달라도 돼요: ${pants.join(' / ')}` }));
     if (miss.length) box.append(el('small', { class: 'miss', text: `사진에서 못 읽은 항목: ${miss.join(', ')}` }));
