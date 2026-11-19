@@ -386,6 +386,11 @@
     const fmt = (v, pct) => v == null ? '없음' : pct ? `${+(v * 100).toFixed(2)}%` : fmtInt(v);
     const diff = [], miss = []; let same = 0;
     const atkT = A.atkTypeOf ? A.atkTypeOf(inp) : null; // 이 전직의 주 공격력(물리/마법)
+    // 강배(체력 50% 초과)·역강배(체력 50% 이하) 수치가 12%p 이상 차이 나면 바지를 갈아입는 세팅:
+    // 사진엔 입고 있던 바지 쪽만 나오고 다른 쪽은 계산기에 따로 적으니, 이 두 줄은 틀린 값으로 안 셈
+    const big = (a, b) => a != null && b != null && Math.abs(a - b) >= 0.12 - 1e-9;
+    const swap = big(res.C24 ? res.C24.v : null, res.C25 ? res.C25.v : null) || big(num(inp.C24), num(inp.C25));
+    const pants = [];
     for (const f of O.FIELDS) {
       const c = f.cell; if (!c || c === 'C35') continue; // 동작속도는 계산에 안 씀
       const pct = f.kind === 'pct', up = num(inp[c]);
@@ -394,10 +399,11 @@
       if (c === 'C11' && atkT && res.atk) { r = res.atk[atkT] || null; name = `${atkT} 공격력`; }
       if (!r) { if (up) miss.push(name); continue; }
       if (up != null && Math.abs(up - r.v) < (pct ? 5e-6 : 0.5)) same++;
+      else if (swap && (c === 'C24' || c === 'C25')) pants.push(`${name} 올린 ${fmt(up, pct)}, 사진 ${fmt(r.v, pct)}`);
       else diff.push({ name, up: fmt(up, pct), shot: fmt(r.v, pct), low: r.low });
     }
     box.innerHTML = '';
-    if (!same && !diff.length) {
+    if (!same && !diff.length && !pants.length) {
       box.className = 'adm-ocr warn';
       box.append(el('span', { text: '사진 자동 확인: 상세 스탯 창을 못 읽었어요. 사진을 직접 봐 주세요' }));
       return;
@@ -409,8 +415,9 @@
       box.append(el('b', { class: 't', text: `사진과 다른 값 ${diff.length}개` }), tb);
     } else {
       box.className = 'adm-ocr ok';
-      box.append(el('span', { text: `사진 자동 확인: 상세 스탯 ${same}개가 올린 값과 모두 같아요` }));
+      box.append(el('span', { text: pants.length ? `사진 자동 확인: 바지 수치 말고 상세 스탯 ${same}개가 올린 값과 모두 같아요` : `사진 자동 확인: 상세 스탯 ${same}개가 올린 값과 모두 같아요` }));
     }
+    if (pants.length) box.append(el('small', { class: 'miss', text: `강배·역강배 바지를 갈아입는 세팅(두 수치 차이 12%p 이상)이라 사진과 달라도 돼요: ${pants.join(' / ')}` }));
     if (miss.length) box.append(el('small', { class: 'miss', text: `사진에서 못 읽은 항목: ${miss.join(', ')}` }));
   }
   // 관리자: 신청·갱신한 세팅을 계산기에서 열어 실투력이 맞는지 확인
