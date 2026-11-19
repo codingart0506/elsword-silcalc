@@ -26,7 +26,11 @@
     { cell: 'C35', kind: 'pct', names: ['동작속도'] },
     // 계산에 안 쓰는 항목: 비슷한 이름으로 잘못 붙지 않도록 먼저 걸러냄
     { cell: null, names: ['HP', '경험치 획득량 증가', 'ED 획득량 증가', '아이템 드랍률 증가', '일반 몬스터에게 주는 피해 증가',
-      '이동속도', '데미지 감소', '보스에게 받는 피해 감소', '전투력', '수비력', '공명도'] },
+      '이동속도', '데미지 감소', '보스에게 받는 피해 감소', '전투력', '수비력', '공명도',
+      // '즐겨찾기만 보기'를 끈 전체 상세 스탯 창에만 나오는 줄: 특히 '강인한'은 '강렬한'과 비슷해서 먼저 걸러야 함
+      '물리 방어력', '마법 방어력', '적 물리 방어력 무시', '적 마법 방어력 무시', '추가 데미지', '더블 어택',
+      '일반 커맨드 공격 데미지 증가', '액티브 스킬 데미지 증가', '액티브 스킬 재사용 시간 감소',
+      '강인한 스킬 데미지 증가', '강인한 스킬 재사용 시간 감소', '하이퍼 스킬 데미지 증가'] },
   ];
 
   // ---------- 문자열 정규화 / 유사도 ----------
@@ -255,7 +259,7 @@
     const MAXV = { C14: 1, C15: 1, C17: 1, C19: 1, C20: 1, C24: 2, C25: 2, C26: 2, C31: 1, C32: 1, C34: 1 };
     for (const [c, mx] of Object.entries(MAXV)) if (found[c] && found[c].value > mx) delete found[c];
     // 관리자 확인용: 공격력 후보(물리/마법) 목록. 계산기 쪽은 안 씀
-    Object.defineProperty(found, 'atk', { value: atk.map(a => ({ value: a.value, score: a.score, kind: a.kind || null })), enumerable: false });
+    Object.defineProperty(found, 'atk', { value: atk.map(a => ({ value: a.value, score: a.score, kind: a.kind || null })), enumerable: false, configurable: true });
     return found;
   }
 
@@ -450,6 +454,22 @@
     const words = mergeDigitPass(collectWords(r1.data), collectWords(r2.data));
     const rows = wordsToRows(words);
     const found = parseRows(rows);
+    let atkAll = found.atk || [];
+    // 창 위치를 짧게 잡아 위쪽(공격력·적응력) 또는 아래쪽(스킬 칸) 줄이 잘린 경우: 잘린 쪽만 넓혀 한 번 더 읽고 빈 칸만 채움
+    // ('즐겨찾기만 보기'를 끈 전체 창은 줄이 많아 창이 길고, 공격력 설명 창이 창 윗부분을 덮기도 함)
+    if (auto && used) {
+      const ext = [];
+      if (!found.C11 || !found.C14) ext.push({ y: used.y - used.h * 0.35, h: used.h * 0.8 });
+      if (['C29', 'C30', 'C31', 'C32', 'C33'].some(c => !found[c])) ext.push({ y: used.y + used.h * 0.5, h: used.h * 0.8 });
+      for (const e of ext) {
+        const y = Math.max(0, e.y), h = Math.min(src.height - y, e.h + Math.min(0, e.y));
+        if (h < used.h * 0.2) continue;
+        const r2 = await recognize(src, { x: used.x, y, w: used.w, h });
+        for (const [k, f] of Object.entries(r2.found)) if (!found[k] && k !== 'C12') found[k] = f;
+        atkAll = atkAll.concat(r2.atk || []);
+      }
+    }
+    Object.defineProperty(found, 'atk', { value: atkAll, enumerable: false, configurable: true });
     const rng = findRangeMax(rows) || findRangeMax(allRows);
     if (rng) found.C12 = { cell: 'C12', value: rng.value, score: 1, conf: 90, text: rng.text, label: '극대화 범위 최댓값' };
     else delete found.C12;
@@ -465,8 +485,13 @@
         if (!r) continue;
         const m = RE.exec(r.text);
         if (m) {
-          const a = parseInt(m[1].replace(/[,.]/g, ''), 10), b = parseInt(m[2].replace(/[,.]/g, ''), 10);
-          if (b >= a && b > 0) return { value: b, text: rows[i].text.trim() + ' ' + (r === rows[i] ? '' : r.text.trim()) };
+          const a = parseInt(m[1].replace(/[,.]/g, ''), 10), da = m[1].replace(/[,.]/g, '');
+          let b = parseInt(m[2].replace(/[,.]/g, ''), 10);
+          // 최댓값 뒤에 옆 글자가 숫자로 붙어 읽힌 경우("173199~2108510324212"): 최솟값과 자릿수를 맞춰 앞부분만
+          // (극대화가 낮으면 범위가 넓어서 최댓값이 최솟값의 2배를 넘기도 함 → 4배까지 봄)
+          const db = m[2].replace(/[,.]/g, '');
+          if (db.length > da.length) for (const n of [da.length, da.length + 1]) { const c = parseInt(db.slice(0, n), 10); if (c >= a && c <= a * 4) { b = c; break; } }
+          if (b >= a && b <= a * 4 && b > 0) return { value: b, text: rows[i].text.trim() + ' ' + (r === rows[i] ? '' : r.text.trim()) };
         }
       }
     }

@@ -130,6 +130,9 @@ select { padding-right: 30px; appearance: none;
 select.pill { background-color: #fff; font-weight: 600; min-width: 120px; border-radius: 999px; }
 input.num, input.pct { text-align: right; font-variant-numeric: tabular-nums; width: 118px; font-weight: 600; }
 input.bad { border-color: var(--up); }
+/* 스크린샷에서 못 읽었거나 확인이 필요한 칸 */
+input.ocr-miss { border-color: rgba(240, 68, 82, .7); background: rgba(240, 68, 82, .08); color: var(--up); }
+input.ocr-miss:focus { border-color: var(--up); background: #fff; color: inherit; }
 .pctwrap { position: relative; display: inline-flex; align-items: center; }
 .pctwrap input { padding-right: 26px; }
 .pctwrap .suffix { position: absolute; right: 11px; color: var(--mute); font-size: 14px; pointer-events: none; }
