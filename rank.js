@@ -352,7 +352,9 @@
   // 한 장씩 차례로 읽고(엔진은 같이 씀), 읽은 결과는 이 탭을 닫기 전까지 기억해서 다시 읽지 않음
   const ocrMemo = new Map();
   let ocrQ = Promise.resolve();
-  const ocrKey = (path) => 'silOcrChk2.' + path;
+  // 읽기 엔진(ocr.js)이 바뀌면 예전에 읽어 둔 결과는 안 씀: 주소의 ?v= 값(파일 내용으로 정해짐)을 열쇠에 넣음
+  const ocrVer = (() => { const el = document.querySelector('script[src*="ocr.js"]'); const m = el && /[?&]v=(\w+)/.exec(el.src); return m ? m[1] : '0'; })();
+  const ocrKey = (path) => 'silOcrChk.' + ocrVer + '.' + path;
   function shotCheck(c, path, inputs) {
     const O = window.SilOCR;
     const box = el('div', { class: 'adm-ocr' }, el('span', { text: '사진 자동 확인: 차례를 기다리는 중' }));
