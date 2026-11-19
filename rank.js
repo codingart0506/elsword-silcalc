@@ -348,6 +348,65 @@
     box.append(tb);
     return box;
   }
+  // 관리자: 신청·갱신 사진을 계산기처럼 한 번 읽어서, 올린 값과 다른 상세 스탯을 띄움.
+  // 한 장씩 차례로 읽고(엔진은 같이 씀), 읽은 결과는 이 탭을 닫기 전까지 기억해서 다시 읽지 않음
+  const ocrMemo = new Map();
+  let ocrQ = Promise.resolve();
+  const ocrKey = (path) => 'silOcrChk.' + path;
+  function shotCheck(c, path, inputs) {
+    const O = window.SilOCR;
+    const box = el('div', { class: 'adm-ocr' }, el('span', { text: '사진 자동 확인: 차례를 기다리는 중' }));
+    if (!path || !O || !O.recognize || !O.FIELDS) { box.hidden = true; return box; }
+    const run = async () => {
+      if (!box.isConnected) return; // 그새 승인·거절해서 목록에서 빠짐
+      let res = ocrMemo.get(path);
+      if (!res) { try { res = JSON.parse(sessionStorage.getItem(ocrKey(path)) || 'null'); } catch (e) { res = null; } }
+      if (!res) {
+        box.firstChild.textContent = '사진 자동 확인: 사진 읽는 중';
+        const b = await shotBlob(c, path); if (!b) throw new Error('원본 사진을 열지 못했어요');
+        const r = await O.recognize(await blobToCanvas(b), null);
+        res = {};
+        for (const [k, f] of Object.entries(r.found || {})) if (f && typeof f.value === 'number') res[k] = { v: f.value, low: f.score < 0.8 || !!f.guessed };
+        try { sessionStorage.setItem(ocrKey(path), JSON.stringify(res)); } catch (e) { /* 못 남겨도 됨 */ }
+      }
+      ocrMemo.set(path, res);
+      showShotCheck(box, res, inputs || {});
+    };
+    ocrQ = ocrQ.then(() => new Promise(r => setTimeout(r, 0))).then(run)
+      .catch(e => { console.warn(e); box.className = 'adm-ocr warn'; box.textContent = '사진 자동 확인을 못 했어요. ' + errMsg(e); });
+    return box;
+  }
+  function showShotCheck(box, res, inp) {
+    const O = window.SilOCR;
+    const names = new Map((A.describeInputs ? A.describeInputs(inp) : []).map(r => [r.c, r.name]));
+    const num = (v) => typeof v === 'number' ? v : (v === '' || v == null || !isFinite(+v) ? null : +v);
+    const fmt = (v, pct) => v == null ? '없음' : pct ? `${+(v * 100).toFixed(2)}%` : fmtInt(v);
+    const diff = [], miss = []; let same = 0;
+    for (const f of O.FIELDS) {
+      const c = f.cell; if (!c || c === 'C35') continue; // 동작속도는 계산에 안 씀
+      const pct = f.kind === 'pct', up = num(inp[c]), r = res[c];
+      const name = names.get(c) || (c === 'C11' ? '공격력' : c === 'C12' ? '극대화 범위 최댓값' : f.names[0]) || c;
+      if (!r) { if (up) miss.push(name); continue; }
+      if (up != null && Math.abs(up - r.v) < (pct ? 5e-6 : 0.5)) same++;
+      else diff.push({ name, up: fmt(up, pct), shot: fmt(r.v, pct), low: r.low });
+    }
+    box.innerHTML = '';
+    if (!same && !diff.length) {
+      box.className = 'adm-ocr warn';
+      box.append(el('span', { text: '사진 자동 확인: 상세 스탯 창을 못 읽었어요. 사진을 직접 봐 주세요' }));
+      return;
+    }
+    if (diff.length) {
+      box.className = 'adm-ocr bad';
+      const tb = el('table', {}, el('tr', {}, el('th', { text: '항목' }), el('th', { text: '올린 값' }), el('th', { text: '사진' })));
+      for (const d of diff) tb.append(el('tr', {}, el('td', {}, d.name, d.low ? el('small', { text: ' 사진 글자가 흐려서 잘못 읽었을 수 있어요' }) : null), el('td', { class: 'v', text: d.up }), el('td', { class: 'v', text: d.shot })));
+      box.append(el('b', { class: 't', text: `사진과 다른 값 ${diff.length}개` }), tb);
+    } else {
+      box.className = 'adm-ocr ok';
+      box.append(el('span', { text: `사진 자동 확인: 상세 스탯 ${same}개가 올린 값과 모두 같아요` }));
+    }
+    if (miss.length) box.append(el('small', { class: 'miss', text: `사진에서 못 읽은 항목: ${miss.join(', ')}` }));
+  }
   // 관리자: 신청·갱신한 세팅을 계산기에서 열어 실투력이 맞는지 확인
   function adminSetting(nick, cls, inputs) {
     return el('button', { type: 'button', class: 'btn', text: '계산기에서 세팅 보기', onclick: () => { setView('calc'); A.openShared({ n: cls, k: nick, i: inputs || {} }); } });
@@ -1972,6 +2031,7 @@
         el('span', { text: `초월:강렬 비율 ${shareText(a.inputs)}` }),
         el('span', { class: 'code' }, '인증 코드 ', el('b', { text: a.verify_code })),
         el('small', { class: 'adm-flag', text: '채팅의 인증 코드와 닉네임을 확인하세요' }),
+        shotCheck(c, a.shot_path, a.inputs),
         inputsView(a.inputs),
         el('small', { text: new Date(a.created_at).toLocaleString('ko-KR') }),
         el('div', { class: 'adm-acts' }, ok, no, adminSetting(a.nickname, a.cls, a.inputs))));
@@ -2029,6 +2089,7 @@
         h.verify_code ? el('span', { class: 'code' }, '인증 코드 ', el('b', { text: h.verify_code })) : null,
         h.verify_code ? el('small', { class: 'adm-flag', text: '채팅의 인증 코드와 닉네임을 확인하세요' }) : (h.status === 'held' ? el('small', { class: 'adm-flag', text: '인증 코드 없이 들어온 갱신이에요(예전 화면)' }) : null),
         h.edited ? el('span', { class: 'adm-flag', text: '스크린샷 적용 뒤 손으로 고친 값 있음' }) : null,
+        h.status === 'held' ? shotCheck(c, h.shot_path, h.inputs) : null,
         inputsView(h.inputs, h.prev_inputs),
         el('small', { text: ago(h.created_at) }), acts));
       if (h.status === 'held') {
