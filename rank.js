@@ -391,7 +391,9 @@
     // 강배(체력 50% 초과)·역강배(체력 50% 이하) 수치가 12%p 이상 차이 나면 바지를 갈아입는 세팅:
     // 사진엔 입고 있던 바지 쪽만 나오고 다른 쪽은 계산기에 따로 적으니, 이 두 줄은 틀린 값으로 안 셈
     const big = (a, b) => a != null && b != null && Math.abs(a - b) >= 0.12 - 1e-9;
-    const swap = big(res.C24 ? res.C24.v : null, res.C25 ? res.C25.v : null) || big(num(inp.C24), num(inp.C25));
+    // 사진 한 줄을 못 읽어도 알 수 있게 사진·올린 값의 강배-역강배 짝을 모두 보고, '강배 역강배 수치 동일'을 켠 세팅도 갈아입는 세팅으로 봄
+    const pv = (c) => res[c] ? res[c].v : null, eq = inp._eq === true || inp._eq === 'true';
+    const swap = eq || big(pv('C24'), pv('C25')) || big(num(inp.C24), num(inp.C25)) || big(pv('C24'), num(inp.C25)) || big(num(inp.C24), pv('C25'));
     const pants = [];
     for (const f of O.FIELDS) {
       const c = f.cell; if (!c || c === 'C35') continue; // 동작속도는 계산에 안 씀
@@ -419,7 +421,7 @@
       box.className = 'adm-ocr ok';
       box.append(el('span', { text: pants.length ? `사진 자동 확인: 바지 수치 말고 상세 스탯 ${same}개가 올린 값과 모두 같아요` : `사진 자동 확인: 상세 스탯 ${same}개가 올린 값과 모두 같아요` }));
     }
-    if (pants.length) box.append(el('small', { class: 'miss', text: `강배·역강배 바지를 갈아입는 세팅(두 수치 차이 12%p 이상)이라 사진과 달라도 돼요: ${pants.join(' / ')}` }));
+    if (pants.length) box.append(el('small', { class: 'miss', text: `강배·역강배 바지를 갈아입는 세팅(${eq ? '강배 역강배 수치 동일을 켬' : '두 수치 차이 12%p 이상'})이라 사진과 달라도 돼요: ${pants.join(' / ')}` }));
     if (miss.length) box.append(el('small', { class: 'miss', text: `사진에서 못 읽은 항목: ${miss.join(', ')}` }));
   }
   // 관리자: 신청·갱신한 세팅을 계산기에서 열어 실투력이 맞는지 확인
