@@ -352,7 +352,7 @@
   // 한 장씩 차례로 읽고(엔진은 같이 씀), 읽은 결과는 이 탭을 닫기 전까지 기억해서 다시 읽지 않음
   const ocrMemo = new Map();
   let ocrQ = Promise.resolve();
-  const ocrKey = (path) => 'silOcrChk.' + path;
+  const ocrKey = (path) => 'silOcrChk2.' + path;
   function shotCheck(c, path, inputs) {
     const O = window.SilOCR;
     const box = el('div', { class: 'adm-ocr' }, el('span', { text: '사진 자동 확인: 차례를 기다리는 중' }));
@@ -367,6 +367,9 @@
         const r = await O.recognize(await blobToCanvas(b), null);
         res = {};
         for (const [k, f] of Object.entries(r.found || {})) if (f && typeof f.value === 'number') res[k] = { v: f.value, low: f.score < 0.8 || !!f.guessed };
+        // 물리·마법 공격력이 둘 다 보이면 둘 다 남겨 둠(어느 쪽인지는 올린 세팅의 전직으로 고름)
+        res.atk = {};
+        for (const a of r.atk || []) if (a.kind && (!res.atk[a.kind] || a.score > res.atk[a.kind].score)) res.atk[a.kind] = { v: a.value, low: a.score < 0.8, score: a.score };
         try { sessionStorage.setItem(ocrKey(path), JSON.stringify(res)); } catch (e) { /* 못 남겨도 됨 */ }
       }
       ocrMemo.set(path, res);
@@ -382,10 +385,13 @@
     const num = (v) => typeof v === 'number' ? v : (v === '' || v == null || !isFinite(+v) ? null : +v);
     const fmt = (v, pct) => v == null ? '없음' : pct ? `${+(v * 100).toFixed(2)}%` : fmtInt(v);
     const diff = [], miss = []; let same = 0;
+    const atkT = A.atkTypeOf ? A.atkTypeOf(inp) : null; // 이 전직의 주 공격력(물리/마법)
     for (const f of O.FIELDS) {
       const c = f.cell; if (!c || c === 'C35') continue; // 동작속도는 계산에 안 씀
-      const pct = f.kind === 'pct', up = num(inp[c]), r = res[c];
-      const name = names.get(c) || (c === 'C11' ? '공격력' : c === 'C12' ? '극대화 범위 최댓값' : f.names[0]) || c;
+      const pct = f.kind === 'pct', up = num(inp[c]);
+      let r = res[c], name = names.get(c) || (c === 'C11' ? '공격력' : c === 'C12' ? '극대화 범위 최댓값' : f.names[0]) || c;
+      // 공격력은 전직에 맞는 줄(물리/마법)만 비교. 그 줄을 못 읽었으면 못 읽은 항목으로
+      if (c === 'C11' && atkT && res.atk) { r = res.atk[atkT] || null; name = `${atkT} 공격력`; }
       if (!r) { if (up) miss.push(name); continue; }
       if (up != null && Math.abs(up - r.v) < (pct ? 5e-6 : 0.5)) same++;
       else diff.push({ name, up: fmt(up, pct), shot: fmt(r.v, pct), low: r.low });

@@ -154,6 +154,8 @@
   }
 
   // 행 목록 → 항목별 인식값
+  // 공격력 줄 이름에 남은 '물리'/'마법'(커서에 일부 가려져도 이 두 글자는 보통 남음)
+  const atkKind = (s) => { const t = norm(s || ''); return /마법/.test(t) ? '마법' : /물리/.test(t) ? '물리' : null; };
   function parseRows(rows) {
     const found = {}, atk = [], guess = [];
     const put = (cell, value, info) => {
@@ -212,7 +214,7 @@
         if (!it.as) continue;
         const f = FIELD_OF[it.as];
         const v = toValue(it.p.raw, it.p.pct, f.kind);
-        put(it.as, v, { score: it.sc, text: row.text.trim(), conf, label: f.names[0] || f.cell, guessed: !!it.how });
+        put(it.as, v, { score: it.sc, text: row.text.trim(), conf, label: f.names[0] || f.cell, guessed: !!it.how, kind: it.as === 'C11' ? atkKind(it.label) : undefined });
         if (it.p.rangeMax && it.as === 'C11') put('C12', toValue(it.p.rangeMax, false, 'int'), { score: it.sc, text: row.text.trim(), conf, label: '극대화 범위 최댓값' });
       }
     }
@@ -221,7 +223,7 @@
       const f = FIELD_OF[g.cell];
       const v = g.value != null ? g.value : toValue(g.it.p.raw, g.it.p.pct, f.kind);
       if (v === null) continue;
-      if (g.cell === 'C11') { atk.push({ cell: 'C11', value: v, score: g.score, text: g.row.text.trim(), conf: g.row.conf, label: f.names[0], guessed: true }); continue; }
+      if (g.cell === 'C11') { atk.push({ cell: 'C11', value: v, score: g.score, text: g.row.text.trim(), conf: g.row.conf, label: f.names[0], guessed: true, kind: atkKind(g.it.label) }); continue; }
       found[g.cell] = { cell: g.cell, value: v, score: g.score, text: g.row.text.trim(), conf: g.row.conf, label: f.names[0] || f.cell, guessed: true };
     }
     // 체력 조건 세 줄은 따로 한 번 더 확인: 못 찾은 칸은 채우고, 세 줄을 순서로 확실히 찾았으면 그 값을 씀
@@ -252,6 +254,8 @@
     // 범위를 크게 벗어난 % 값은 버림(소수점을 놓쳐 100배가 된 값 등) — 다른 칸에서 다시 채우도록
     const MAXV = { C14: 1, C15: 1, C17: 1, C19: 1, C20: 1, C24: 2, C25: 2, C26: 2, C31: 1, C32: 1, C34: 1 };
     for (const [c, mx] of Object.entries(MAXV)) if (found[c] && found[c].value > mx) delete found[c];
+    // 관리자 확인용: 공격력 후보(물리/마법) 목록. 계산기 쪽은 안 씀
+    Object.defineProperty(found, 'atk', { value: atk.map(a => ({ value: a.value, score: a.score, kind: a.kind || null })), enumerable: false });
     return found;
   }
 
@@ -446,7 +450,7 @@
     const rng = findRangeMax(rows) || findRangeMax(allRows);
     if (rng) found.C12 = { cell: 'C12', value: rng.value, score: 1, conf: 90, text: rng.text, label: '극대화 범위 최댓값' };
     else delete found.C12;
-    return { rows, allRows, found, text: r1.data.text, rect: used, auto };
+    return { rows, allRows, found, atk: found.atk || [], text: r1.data.text, rect: used, auto };
   }
 
   // 공격력에 마우스를 올리면 뜨는 툴팁: "[물리 공격력 범위] 162558~198673" → 오른쪽(최댓값)

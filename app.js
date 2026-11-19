@@ -1281,6 +1281,8 @@
     coolCap: () => { const v = wb.get(CALC, 'C196'); return typeof v === 'number' && v > 0 ? Math.round(v * 1000) / 10 : 35; },
     // 랭킹도 계산기에 넣은 그대로(강렬:초월 점유율을 직접 넣었으면 그 비율로) 반영
     rankInputs: () => Object.assign({}, inputs, { _calc: CALC_VER }),
+    // 이 세팅(전직)의 주 공격력이 물리인지 마법인지: 시트 계산('현재·교체 후 계산' C193)
+    atkTypeOf: (inp) => { try { if (!inp || !inp.C6) return null; if (!labWb) labWb = new E.Workbook(M); labWb.assign(sheetInputs(migrateV2(Object.assign({}, inp)))); return atkType(labWb); } catch (e) { return null; } },
     calcVer: () => CALC_VER,
     rankCp: () => { const v = cpOf(wb); return typeof v === 'number' ? Math.round(v) : NaN; },
     customShare: () => inputs.A_B4 === true,
