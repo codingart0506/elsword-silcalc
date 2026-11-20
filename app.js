@@ -1941,9 +1941,9 @@
     const tbody = el('tbody'); tb.append(tbody);
     for (const r of r0.rows) {
       let txt, cls = 'same';
-      if (r.need === null) { txt = '스탯창으로는 못 닿아요'; cls = 'down'; }
-      else if (r.cur < r.need) { txt = `스탯창 +${fmtPct(r.need - r.cur)}${r.add != null ? ` (마법석 ${r.add}칸)` : ''}`; cls = 'down'; }
-      else { txt = r.cur - r.need < 5e-5 ? `${r.cap}이에요` : `${r.cap}, ${fmtPct(r.cur - r.need)} 남아요${r.spare ? ` (마법석 ${r.spare}칸)` : ''}`; cls = 'up'; }
+      if (r.need === null) { txt = '스탯창으로는 못 닿아요'; cls = 'up'; }
+      else if (r.cur < r.need) { txt = `+${fmtPct(r.need - r.cur)}${r.add != null ? ` (마법석 ${r.add}칸)` : ''}`; cls = 'up'; }
+      else { txt = r.cur - r.need < 5e-5 ? `${r.cap}이에요` : `${r.cap}, ${fmtPct(r.cur - r.need)} 남아요${r.spare ? ` (마법석 ${r.spare}칸)` : ''}`; cls = 'down'; }
       tbody.append(el('tr', null, el('th', { scope: 'row', text: r.name }), el('td', { text: fmtPct(r.cur) }), el('td', { class: cls, text: txt })));
     }
     body.append(tb);
