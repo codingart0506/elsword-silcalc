@@ -371,12 +371,13 @@
         res = {};
         const take = (rr) => { for (const [k, f] of Object.entries(rr.found || {})) if (!res[k] && f && typeof f.value === 'number') res[k] = { v: f.value, low: f.score < 0.8 || !!f.guessed }; };
         take(r);
+        res.small = !!r.small; res.doubt = (r.doubt || []).filter(k => k !== 'C35'); // 글자가 작은 사진: 두 번 읽어 값이 달랐던 칸
         let atkList = r.atk || [];
         // 공격력·적응력 줄을 못 읽었으면: 공격력에 마우스를 올려 뜬 설명 창 때문에 창 위치를 아래쪽만 잡은 경우가 있어서,
         // 창 위쪽으로 넓힌 부분만 한 번 더 읽어 빈 칸을 채움
         if (r.rect && (!res.C11 || !res.C14)) {
           const R = r.rect, up = R.h * 0.35;
-          const r2 = await O.recognize(cv, { x: Math.max(0, R.x - 20), y: Math.max(0, R.y - up), w: Math.min(cv.width - Math.max(0, R.x - 20), R.w + 40), h: up + R.h * 0.45 });
+          const r2 = await O.recognize(cv, { x: Math.max(0, R.x - 20), y: Math.max(0, R.y - up), w: Math.min(cv.width - Math.max(0, R.x - 20), R.w + 40), h: up + R.h * 0.45 }, null, { noVerify: true });
           take(r2); atkList = atkList.concat(r2.atk || []);
         }
         // 물리·마법 공격력이 둘 다 보이면 둘 다 남겨 둠(어느 쪽인지는 올린 세팅의 전직으로 고름)
@@ -442,6 +443,11 @@
       box.className = 'adm-ocr ok';
       const what = pants.length ? '바지 수치 말고 ' : '';
       box.append(el('span', { text: miss.length ? `사진 자동 확인: ${what}읽은 상세 스탯 ${same}개는 올린 값과 같아요` : `사진 자동 확인: ${what}상세 스탯 ${same}개가 올린 값과 모두 같아요` }));
+    }
+    // 글자가 작은 사진: 신청한 값을 같은 사진에서 화면인식으로 채웠다면 둘 다 같은 숫자로 틀릴 수 있어서 '같아요'만 믿으면 안 됨
+    if (res.small) {
+      if (box.className === 'adm-ocr ok') box.className = 'adm-ocr warn';
+      box.append(el('small', { class: 'miss', text: `글자가 작게 찍힌 사진이라 숫자를 잘못 읽었을 수 있어요. 같다고 나와도 사진에서 직접 확인해 주세요${res.doubt && res.doubt.length ? ` (두 번 읽어 값이 달라 뺀 칸 ${res.doubt.length}개)` : ''}` }));
     }
     if (pants.length) box.append(el('small', { class: 'miss', text: `강배·역강배 바지를 갈아입는 세팅(${eq ? '강배 역강배 수치 동일을 켬' : '두 수치 차이 12%p 이상'})이라 사진과 달라도 돼요: ${pants.join(' / ')}` }));
     if (miss.length) box.append(el('small', { class: 'miss', text: `사진에서 못 읽은 항목: ${miss.join(', ')}` }));

@@ -1009,3 +1009,31 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .sw-gap { height: 8px; }
 .sw-half select.sw-val { padding-right: 24px; }
 @media (max-width: 560px) { .sw-half.sw-none { display: none; } }
+/* 글자가 작은 사진에서 읽어 채운 칸: 사진과 맞는지 확인해 달라는 노란 표시(누르면 사라짐) */
+input.ocr-check { border-color: #E0A100 !important; background: #FFF8E1 !important; }
+input.ocr-check:focus { background: #fff !important; }
+/* 글자로 찾아 고르기(카트리지·하의 스위칭 옵션) */
+.pick { position: relative; display: block; min-width: 0; width: 100%; }
+.pick > select.pick-src { display: none !important; }
+.pick-in { width: 100%; box-sizing: border-box; padding-right: 30px; cursor: pointer; text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 L6 6.5 L11 1.5' stroke='%238b95a1' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-position: right 11px center; background-repeat: no-repeat; }
+.pick.open .pick-in { cursor: text; }
+.pick-in:disabled { opacity: .45; }
+.pick-list { position: absolute; left: 0; top: calc(100% + 4px); z-index: 60; min-width: 100%; max-width: min(380px, 92vw); max-height: 320px; overflow: auto;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, .12); padding: 4px; box-sizing: border-box; }
+.pick-it { padding: 7px 10px; border-radius: 8px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.pick-it.sub { padding-left: 20px; }
+.pick-it:hover, .pick-it.on { background: var(--fill); }
+.pick-it.cur { font-weight: 700; color: var(--blue); }
+.pick-grp { font-size: 12px; font-weight: 700; color: var(--mute); padding: 8px 10px 2px; }
+.pick-none { font-size: 13px; color: var(--mute); padding: 8px 10px; }
+.srow .ctl .pick { flex: 0 1 240px; width: 240px; max-width: min(240px, 100%); }
+.srow.multi .ctl .pick + select { max-width: 124px; }
+.grp.wide .srow.multi .ctl .pick + select { max-width: 210px; }
+.sw-half .pick-in { font-size: 14px; padding: 7px 26px 7px 10px; background-position: right 9px center; }
+/* 하의 스위칭: 소켓 1을 2~5에도 */
+.sw-slot { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.sw-copy { font-size: 11px; padding: 0; color: var(--blue); background: none; border: 0; cursor: pointer; white-space: nowrap; }
+@media (max-width: 560px) { .sw-slot { flex-direction: row; align-items: baseline; gap: 8px; } .sw-copy { font-size: 12px; } }
+.sw-half input.pick-in { text-align: left; font-weight: 400; }

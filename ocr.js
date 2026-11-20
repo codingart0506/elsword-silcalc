@@ -355,6 +355,7 @@
   }
 
   // ---------- 브라우저 전용 ----------
+  const SMALL_PITCH = 19; // 상세 스탯 줄 간격(원본 px)이 이보다 작으면 '글자가 작은 사진'
   const isBrowser = typeof document !== 'undefined';
   function preprocess(src, rect, opts) {
     opts = opts || {};
@@ -385,6 +386,7 @@
       d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255;
     }
     g.putImageData(img, 0, 0);
+    c._scale = scale;
     return c;
   }
 
@@ -429,7 +431,8 @@
     return workersP;
   }
   // src: 원본 캔버스, rect: 사용자가 고른 영역(없으면 자동으로 능력치 창을 찾음)
-  async function recognize(src, rect, onProgress) {
+  async function recognize(src, rect, onProgress, opts) {
+    opts = opts || {};
     const [A, B] = await getWorkers(onProgress);
     let used = rect || null, auto = false, allRows = [];
     if (!used && src.width * src.height > 700 * 500) {
@@ -449,11 +452,16 @@
         }
       } finally { await A.setParameters({ tessedit_pageseg_mode: '6' }); }
     }
-    const pre = preprocess(src, used);
+    const pre = preprocess(src, used, opts.scale ? { scale: opts.scale } : null);
     const [r1, r2] = await Promise.all([A.recognize(pre, {}, { blocks: true, text: true }), B.recognize(pre, {}, { blocks: true })]);
     const words = mergeDigitPass(collectWords(r1.data), collectWords(r2.data));
     const rows = wordsToRows(words);
     const found = parseRows(rows);
+    // 글자 크기: 상세 스탯 줄 사이 간격(원본 사진 px). 게임 화면 1920 기준 약 27px, 1366이면 19px쯤
+    const ys = rows.filter(r => /\d+[.,]\d\d\s*%/.test(r.text)).map(r => r.y).sort((a, b) => a - b);
+    const gaps = []; for (let i = 1; i < ys.length; i++) if (ys[i] - ys[i - 1] > 2) gaps.push(ys[i] - ys[i - 1]);
+    gaps.sort((a, b) => a - b);
+    const pitch = gaps.length >= 3 ? gaps[gaps.length >> 1] / pre._scale : null;
     let atkAll = found.atk || [];
     // 창 위치를 짧게 잡아 위쪽(공격력·적응력) 또는 아래쪽(스킬 칸) 줄이 잘린 경우: 잘린 쪽만 넓혀 한 번 더 읽고 빈 칸만 채움
     // ('즐겨찾기만 보기'를 끈 전체 창은 줄이 많아 창이 길고, 공격력 설명 창이 창 윗부분을 덮기도 함)
@@ -464,7 +472,7 @@
       for (const e of ext) {
         const y = Math.max(0, e.y), h = Math.min(src.height - y, e.h + Math.min(0, e.y));
         if (h < used.h * 0.2) continue;
-        const r2 = await recognize(src, { x: used.x, y, w: used.w, h });
+        const r2 = await recognize(src, { x: used.x, y, w: used.w, h }, null, { noVerify: true });
         for (const [k, f] of Object.entries(r2.found)) if (!found[k] && k !== 'C12') found[k] = f;
         atkAll = atkAll.concat(r2.atk || []);
       }
@@ -473,7 +481,24 @@
     const rng = findRangeMax(rows) || findRangeMax(allRows);
     if (rng) found.C12 = { cell: 'C12', value: rng.value, score: 1, conf: 90, text: rng.text, label: '극대화 범위 최댓값' };
     else delete found.C12;
-    return { rows, allRows, found, atk: found.atk || [], text: r1.data.text, rect: used, auto };
+    // 글자가 작게 찍힌 사진(줄 간격 SMALL_PITCH px 미만, 게임 화면 1366 미만쯤): 숫자를 비슷한 숫자로 잘못 읽기 쉬움.
+    // 배율을 바꿔 같은 곳을 한 번 더 읽고, 두 번 값이 다른 칸은 비움(빨간 칸으로 직접 넣게). 매번 똑같이 틀리는 건 못 잡으므로 화면에서 '확인 필요'로도 표시
+    const small = pitch !== null && pitch < SMALL_PITCH;
+    const doubt = [];
+    if (small && !opts.noVerify) {
+      onProgress && onProgress({ tag: 'kor', status: '글자가 작아서 한 번 더 읽는 중', progress: 0 });
+      const areas = [used || { x: 0, y: 0, w: src.width, h: src.height }];
+      const again = {};
+      for (const a of areas) {
+        const r3 = await recognize(src, a, null, { scale: pre._scale * 1.35, noVerify: true });
+        for (const [k, f] of Object.entries(r3.found)) if (!again[k]) again[k] = f;
+      }
+      for (const [k, f] of Object.entries(found)) {
+        const b = again[k];
+        if (b && Math.abs(b.value - f.value) > 1e-9 * Math.max(1, Math.abs(f.value))) { doubt.push(k); delete found[k]; }
+      }
+    }
+    return { rows, allRows, found, atk: found.atk || [], text: r1.data.text, rect: used, auto, pitch, small, doubt };
   }
 
   // 공격력에 마우스를 올리면 뜨는 툴팁: "[물리 공격력 범위] 162558~198673" → 오른쪽(최댓값)

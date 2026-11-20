@@ -353,6 +353,7 @@
         }
         if (gr.extra === 'field') g.append(el('div', { class: 'extra', id: 'fieldInfo' }));
         if (gr.extra === 'sw') { g.append(el('div', { class: 'sw-box', id: 'swBox' })); swSig = ''; }
+        for (const c of ['J31', 'J32', 'J33', 'J34']) if (controls[c] && controls[c].node && controls[c].node.tagName === 'SELECT' && !controls[c].node._picker && g.contains(controls[c].node)) makePicker(controls[c].node); // 카트리지: 글자로 찾기
         pane.append(g);
       }
       root.append(pane);
@@ -432,6 +433,79 @@
     if (/^H2[0-2]$/.test(a) && /강화수치/.test(s)) return '0.5% × 강화 수치';
     return s;
   }
+  // ---------- 글자로 찾아 고르기(보기가 많은 칸: 카트리지, 하의 스위칭 옵션) ----------
+  // 원래 <select>는 값 보관용으로 숨겨 두고(다른 코드가 그대로 씀) 그 자리에 글자 칸을 둠.
+  // 누르면 전체 목록, 글자를 치면 그 글자가 들어간 것만(띄어쓰기 무시, 'ㅋㄷ'처럼 초성도 됨). 고르면 <select>의 change를 그대로 일으킴
+  const CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+  const choOf = (s) => [...s].map(ch => { const k = ch.charCodeAt(0) - 0xAC00; return k >= 0 && k < 11172 ? CHO[Math.floor(k / 588)] : ch; }).join('');
+  const qNorm = (s) => String(s).toLowerCase().replace(/[\s()[\]·.,_-]+/g, '');
+  const pickHit = (o, q) => {
+    if (!q) return true;
+    const t = qNorm(o.textContent + ' ' + o.value), qq = qNorm(q);
+    return t.includes(qq) || (/^[ㄱ-ㅎ]+$/.test(qq) && choOf(t).includes(qq));
+  };
+  const pickers = new Set();
+  function makePicker(sel) {
+    if (sel._picker) return sel._picker.wrap;
+    const wrap = el('span', { class: 'pick' });
+    const inp = el('input', { type: 'text', class: 'pick-in', autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'done' });
+    const list = el('div', { class: 'pick-list', role: 'listbox', hidden: '' });
+    if (sel.parentNode) sel.parentNode.insertBefore(wrap, sel);
+    for (const c of sel.classList) if (c !== 'pick-src') wrap.classList.add('pk-' + c);
+    wrap.append(sel, inp, list); sel.classList.add('pick-src'); sel.tabIndex = -1; sel.setAttribute('aria-hidden', 'true');
+    let items = [], act = -1;
+    const text = () => { const o = sel.selectedOptions[0]; return o ? o.textContent : ''; };
+    const sync = () => {
+      inp.disabled = sel.disabled;
+      if (document.activeElement === inp) return;
+      inp.value = text();
+      const o0 = sel.querySelector('option[value=""]'); inp.placeholder = o0 ? o0.textContent : '';
+    };
+    const mark = (i) => { items.forEach((it, j) => it.node.classList.toggle('on', j === i)); act = i; if (items[i]) items[i].node.scrollIntoView({ block: 'nearest' }); };
+    const build = (q) => {
+      list.innerHTML = ''; items = [];
+      const add = (o, sub) => {
+        const n = el('div', { class: 'pick-it' + (sub ? ' sub' : '') + (o.value === sel.value ? ' cur' : ''), role: 'option', text: o.textContent });
+        n.addEventListener('mousedown', (e) => { e.preventDefault(); choose(o.value); });
+        items.push({ node: n, o }); list.append(n);
+      };
+      for (const node of sel.children) {
+        if (node.tagName === 'OPTGROUP') {
+          const os = [...node.children].filter(o => pickHit(o, q)); if (!os.length) continue;
+          list.append(el('div', { class: 'pick-grp', text: node.label })); os.forEach(o => add(o, true));
+        } else if (node.tagName === 'OPTION' && (!q || (node.value !== '' && pickHit(node, q)))) add(node, false);
+      }
+      if (!items.length) list.append(el('div', { class: 'pick-none', text: '맞는 게 없어요' }));
+      const cur = items.findIndex(it => it.o.value === sel.value);
+      mark(q ? (items.length ? 0 : -1) : cur);
+    };
+    const show = () => { list.hidden = false; wrap.classList.add('open'); };
+    const hide = () => { list.hidden = true; wrap.classList.remove('open'); };
+    const choose = (v) => {
+      hide();
+      if (sel.value !== v) { sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+      inp.blur(); sync();
+    };
+    // 누르면 글자 칸을 비우고(지금 값은 흐린 글자로) 바로 칠 수 있게
+    inp.addEventListener('focus', () => { inp.placeholder = text() || inp.placeholder; inp.value = ''; build(''); show(); });
+    inp.addEventListener('input', () => { build(inp.value.trim()); show(); });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (list.hidden) { build(''); show(); } const n = items.length; if (n) mark(((act < 0 ? (e.key === 'ArrowDown' ? -1 : 0) : act) + (e.key === 'ArrowDown' ? 1 : n - 1)) % n); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (items[act]) choose(items[act].o.value); else if (items.length === 1) choose(items[0].o.value); }
+      else if (e.key === 'Escape') { hide(); inp.blur(); sync(); }
+    });
+    // 다른 곳을 누르면 닫음. 친 글자가 보기 하나와 딱 맞으면 그걸로
+    inp.addEventListener('blur', () => {
+      const q = qNorm(inp.value), hit = q && [...sel.options].find(o => qNorm(o.textContent) === q);
+      hide();
+      if (hit && hit.value !== sel.value) choose(hit.value); else sync();
+    });
+    sel._picker = { wrap, sync };
+    pickers.add(sel._picker); sync();
+    return wrap;
+  }
+  function syncPickers() { for (const p of pickers) { if (!p.wrap.isConnected) { pickers.delete(p); continue; } p.sync(); } }
+
   function fillSelect(node, a) {
     const opts = optionsOf(a) || [];
     const cur = g(a);
@@ -664,7 +738,7 @@
       valNode._inp = inp;
     }
     swNodes[kv] = valNode._inp || valNode;
-    return el('div', { class: 'sw-half', 'data-side': side === 'L' ? '강배 바지' : '역강배 바지' }, sel, valNode);
+    return el('div', { class: 'sw-half', 'data-side': side === 'L' ? '강배 바지' : '역강배 바지' }, makePicker(sel), valNode);
   }
   // 그 바지 종류에 없는 칸(네블론의 추가 효과, 엑사스케일의 카트리지·옵션변환)은 비워 둠. 모바일에서는 줄째 숨김
   const swNA = () => el('div', { class: 'sw-half sw-none' });
@@ -712,16 +786,32 @@
       const L = s.cart ? (lOn ? el('div', { class: 'sw-half', 'data-side': '강배 바지' }, el('span', { class: 'sw-ro' }, el('span', { id: 'swCart' }), el('small', { text: '위 카트리지 칸' }))) : swNA('L', lt))
         : lOn ? swHalf('L', s, true) : swNA('L', lt);
       const R = rOn ? swHalf('R', s, lOn) : swNA('R', rt);
-      tbl.append(el('div', { class: 'sw-srow' }, el('span', { class: 'sw-slot', text: s.name }), L, R));
+      const lab = el('span', { class: 'sw-slot' }, el('span', { text: s.name }));
+      if (s.id === 's1') lab.append(el('button', { type: 'button', class: 'txt sw-copy', id: 'swCopy', hidden: '', text: '2~5도 같게', title: '소켓 1의 옵션·수치를 소켓 2~5에도 똑같이 넣어요', onclick: swCopySock }));
+      tbl.append(el('div', { class: 'sw-srow' }, lab, L, R));
     }
     box.append(tbl);
     if (foc) { const n = box.querySelector(`[data-k="${foc}"], [data-cell="${foc}"]`); if (n) n.focus(); }
+  }
+  // 소켓 1과 같은 옵션·수치를 소켓 2~5에도(양쪽 바지 각각, 소켓 1이 비어 있는 쪽은 그대로)
+  function swCopySock() {
+    const s1 = SW_SLOTS[0], rest = SW_SLOTS.filter(s => s.cat === SW_SOCK && s !== s1);
+    let last = null;
+    for (const side of 'LR') {
+      const o = swRaw(inputs, swK(side, s1)), v = swRaw(inputs, swK(side, s1, 1));
+      if (o === '') continue;
+      for (const s of rest) { setIn(swK(side, s), o); setIn(last = swK(side, s, 1), v === '' ? null : v); }
+    }
+    if (!last) return;
+    setVal(last, inputs[last]);
+    toast('소켓 2~5를 소켓 1과 같게 넣었어요');
   }
   // 매번 맞추는 것: 값, 잠금, % 표시, 비어 있으면 안 되는 수치 칸 표시, 강배 바지 종류·강화·카트리지 글자, 안내 문구
   function syncSw() {
     if (!swOn() || swState !== 'ready' || !$('#swBox')) return;
     const arm = $('#swArm'); if (arm) arm.textContent = `${g('J28') ?? '-'} +${g('L28') ?? 0}`;
     const cart = $('#swCart'); if (cart) cart.textContent = swCartText();
+    const cp = $('#swCopy'); if (cp) cp.hidden = !swRaw(inputs, swK('L', SW_SLOTS[0])) && !swRaw(inputs, swK('R', SW_SLOTS[0]));
     const msg = $('#swMsg'); if (msg) { const t = swMsg(); msg.textContent = t; msg.hidden = !t; }
     const lt = String(inputs.J28 ?? '');
     for (const s of SW_SLOTS) for (const side of 'LR') {
@@ -837,6 +927,7 @@
       renderSw();
       for (const a of Object.keys(controls)) syncControl(a);
       syncSw();
+      syncPickers();
       renderResults();
       markOcrMiss();
     } catch (e) { err = e; console.error(e); }
@@ -1061,15 +1152,23 @@
   let pendingExtras = null; // 적용 버튼을 누른 뒤에 물어볼 값
   // 사진에서 아예 못 읽은 상세 스탯 칸: 적용한 뒤 그 칸을 빨갛게 표시. 값을 바꾸면(직접 입력 등) 표시가 사라짐
   // (흐리게 읽은 '확인 필요' 값은 대부분 맞게 읽혀서 빨갛게 하지 않음)
-  let pendingMiss = null, ocrMiss = null;
+  // 글자가 작게 찍힌 사진: 읽어서 채운 칸을 노랗게 표시(비슷한 숫자로 잘못 읽기 쉬움). 그 칸을 눌러 보거나 값을 바꾸면 사라짐
+  let pendingMiss = null, ocrMiss = null, pendingCheck = null, ocrCheck = null;
   function markOcrMiss() {
-    const on = ocrMiss && ocrMiss.key === store.current;
+    const on = ocrMiss && ocrMiss.key === store.current, onC = ocrCheck && ocrCheck.key === store.current;
+    const has = (o, c) => Object.prototype.hasOwnProperty.call(o.vals, c) && String(inputs[c] ?? '') === String(o.vals[c] ?? '');
     for (const [c, ctl] of Object.entries(controls)) {
       if (!ctl || !ctl.node) continue;
-      const bad = !!on && Object.prototype.hasOwnProperty.call(ocrMiss.vals, c) && String(inputs[c] ?? '') === String(ocrMiss.vals[c] ?? '');
+      const bad = !!on && has(ocrMiss, c);
       ctl.node.classList.toggle('ocr-miss', bad);
+      ctl.node.classList.toggle('ocr-check', !bad && !!onC && has(ocrCheck, c));
     }
   }
+  document.addEventListener('focusin', (e) => {
+    const t = e.target; if (!t || !t.classList || !t.classList.contains('ocr-check') || !ocrCheck) return;
+    const c = t.getAttribute('data-cell'); if (c) delete ocrCheck.vals[c];
+    t.classList.remove('ocr-check');
+  });
   async function runOcr() {
     if (!shot) return;
     askExtras({ weapon: true, during: true });
@@ -1101,11 +1200,14 @@
     const body = $('#ocrBody'); body.innerHTML = '';
     const found = res.found; const cells = O.FIELDS.map(f => f.cell).filter(c => found[c] && c !== 'C35'); // 동작속도는 ver.3 시트에 없음
     pendingMiss = cells.length ? O.FIELDS.map(f => f.cell).filter(c => c && c !== 'C35' && !found[c]) : null;
+    pendingCheck = res.small && cells.length ? cells.slice() : null; // 글자가 작은 사진: 채운 칸을 노랗게
     $('#ocrCount').textContent = cells.length ? `${cells.length}개 항목을 읽었어요` : '항목을 못 찾았어요. 상세 스탯 창 부분만 드래그로 골라서 다시 읽어 보세요.';
     // 사진이 작거나 읽은 항목이 적으면 찍는 조건 안내
-    const small = shot && (shot.width < 1600 || shot.height < 900);
+    // 작은지는 사진 크기가 아니라 상세 스탯 글자 크기(줄 간격)로 봄: 큰 화면 스샷 안에 게임 창만 작게 찍힌 경우도 잡음
+    const small = res.small || (res.pitch == null && shot && (shot.width < 1600 || shot.height < 900));
+    const doubtN = (res.doubt || []).filter(c => c !== 'C35').length;
     const tip = $('#ocrTip');
-    tip.textContent = small ? `사진이 작아요(${shot.width}×${shot.height}). 글자가 작으면 잘못 읽을 수 있어요. 게임 해상도 1920×1080 이상, 전체 화면으로 찍어 주세요.`
+    tip.textContent = small ? `글자가 작게 찍힌 사진이에요. 숫자를 비슷한 숫자로 잘못 읽을 수 있어서 읽은 칸을 모두 '확인 필요'로 표시했어요. 사진과 한 번씩 맞춰 봐 주세요.${doubtN ? ` 두 번 읽어서 값이 달랐던 ${doubtN}칸은 비워 뒀어요.` : ''} 게임 해상도를 1920×1080으로 두고 찍으면 정확하게 읽혀요.`
       : (cells.length && cells.length < 12) ? '덜 읽힌 항목이 있어요. 다른 창이나 마우스 설명 창 글자가 상세 스탯 글자와 겹치지 않게, 게임을 전체 화면으로 두고 다시 찍어 보세요.' : '';
     tip.hidden = !tip.textContent;
     for (const c of cells) {
@@ -1113,7 +1215,7 @@
       const cur = g(c);
       const inp = el('input', { type: 'text', inputmode: 'decimal', value: kind === 'pct' ? pctIn(f.value) : String(f.value), 'data-cell': c, class: kind });
       const same = typeof cur === 'number' && Math.abs(cur - f.value) < 1e-9;
-      const low = f.score < 0.8 || f.guessed; // 커서에 가려 옆 칸 위치로 추정한 값도 확인 필요로 표시
+      const low = f.score < 0.8 || f.guessed || small; // 커서에 가려 옆 칸 위치로 추정한 값, 글자가 작은 사진의 값도 확인 필요로 표시
       body.append(el('tr', { class: (same ? 'same' : '') + (low ? ' low' : '') },
         el('td', {}, el('input', { type: 'checkbox', checked: same ? null : 'checked', 'aria-label': '적용' })),
         el('td', { text: LABEL_OF[c] || label('B' + c.slice(1)) }, low ? el('small', { class: 'lowtag', text: ' 확인 필요' }) : null),
@@ -1411,11 +1513,13 @@
     applyInputs(); refresh(); scheduleAutosave(); renderProfiles();
     ocrSnap = Object.assign({}, inputs); ocrShot = shot; ocrSnap._key = store.current;
     if (pendingMiss) { ocrMiss = { key: store.current, vals: Object.fromEntries(pendingMiss.map(c => [c, inputs[c]])) }; pendingMiss = null; }
+    ocrCheck = pendingCheck ? { key: store.current, vals: Object.fromEntries(pendingCheck.map(c => [c, inputs[c]])) } : null; pendingCheck = null;
     markOcrMiss();
     const missN = ocrMiss && ocrMiss.key === store.current ? Object.keys(ocrMiss.vals).length : 0;
+    const checkN = ocrCheck ? Object.keys(ocrCheck.vals).length : 0;
     // 적용이 끝나면 인식 결과 목록만 접고, 사진은 ×로 지울 때까지 남겨 둠
     $('#ocrResult').hidden = true;
-    toast((autoBase ? `${n}개 값을 채우고 기준 세팅으로 잡았어요` : `${n}개 값을 채웠어요`) + (missN ? `. 빨간 칸 ${missN}개는 사진에서 못 읽었어요` : ''));
+    toast((autoBase ? `${n}개 값을 채우고 기준 세팅으로 잡았어요` : `${n}개 값을 채웠어요`) + (missN ? `. 빨간 칸 ${missN}개는 사진에서 못 읽었어요` : '') + (checkN ? `. 글자가 작은 사진이라 노란 칸은 사진과 맞는지 확인해 주세요(칸을 누르면 표시가 사라져요)` : ''));
     // 적용 뒤: 무기 공격력을 아직 안 넣었거나 극대화 범위를 못 읽었으면 그것만 다시 물음
     if (pendingExtras) {
       const p = pendingExtras; pendingExtras = null;
