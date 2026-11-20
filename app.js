@@ -4,10 +4,9 @@
   const E = window.SilEngine, O = window.SilOCR, M = window.SIL_MODEL;
   // 실질전투력 시트 ver.3: 입력은 <Main>과 고급사용자모드, 실투력은 '현재·교체 후 계산'!C498
   const SH = '<Main>', ADV = '고급사용자모드', CALC = '현재·교체 후 계산';
-  const CP_AT = M.meta && M.meta.cp ? M.meta.cp : [CALC, 'C498'];
   // 시트에 없는 버프(피시방·에너지드링크·지애)는 켜고 끄는 체크칸. 시트의 '피시방 버프 미연결' 칸(최종뎀·크리·극대)에 넣어 계산
   const EXTRA_BUFF = { ZB1: '피시방 버프', ZB3: '에너지드링크', ZB2: '지애 버프' };
-  const wb = new E.Workbook(M);
+  let wb = new E.Workbook(M); // 하의 스위칭 계산식을 더하면 새로 만듦
   const $ = (s, r) => (r || document).querySelector(s);
   const el = (tag, attrs, ...kids) => {
     const n = document.createElement(tag);
@@ -78,6 +77,7 @@
         fields: [{ c: 'A_B4', t: '직접 넣기' }, { c: 'A_B5', t: '입력 기준' }, { c: 'A_B6', t: '강렬 스킬' }, { c: 'A_B7', t: '초월 스킬' }] },
       { bar: '추피 보정', note: '싸움이 짧아 추가 지속 피해가 다 안 들어갈 때. 켜면 랭킹에 올릴 수 없어요', fields: [{ c: 'A_E4', t: '켜기' }, { c: 'A_E5', t: '평균 딜타임 (초)' }] },
       { bar: '가동률 DPS 전환', note: '스킬을 더 자주 쓰는 효과를 실투력에 넣는 비율. 켜면 랭킹에 올릴 수 없어요', noteCell: 'A_G7', fields: [{ c: 'A_H4', t: '직접 넣기' }, { c: 'A_H5', t: '전환 계수' }] },
+      { bar: 'HP 구간별 하의 스위칭', note: '보스 체력 50%를 기준으로 다른 하의로 갈아입을 때. 켜면 랭킹에 올릴 수 없어요', wide: true, fields: [], extra: 'sw' },
     ] },
   ];
 
@@ -106,7 +106,8 @@
   }
   const gx = (w, a) => { const [sh, c] = sheetOf(a); const v = w.get(sh, c); return E.isErr(v) ? v.code : fromSheet(a, v); };
   const g = (a) => gx(wb, a);
-  const cpOf = (w) => { const v = w.get(CP_AT[0], CP_AT[1]); return v; };
+  // 실투력 칸: 기본은 '현재·교체 후 계산'!C498, 하의 스위칭 계산식을 더하면 <Main>!C35(스위칭을 끄면 C498과 같음)
+  const cpOf = (w) => { const at = (M.meta && M.meta.cp) || [CALC, 'C498']; return w.get(at[0], at[1]); };
   const atkType = (w) => { const v = (w || wb).get(CALC, 'C193'); return v === '물리' || v === '마법' ? v : null; };
   const LABEL_FALLBACK = { B11: '공격력', B12: '공격력 극대화 범위 내 최댓값', B13: '무기 공격력 (스탯창 X)' };
   const label = (a) => { const v = g(a); if (v == null || v === '' || String(v).startsWith('#')) return LABEL_FALLBACK[a] || ''; return String(v).trim(); };
@@ -248,7 +249,7 @@
   let inputs = Object.assign({}, store.profiles[store.current] || {});
   if (!store.bases[store.current]) store.bases[store.current] = Object.assign({}, inputs);
   // 기준 세팅을 따로 계산해서 지금 값과 비교 (공유 링크를 볼 때는 내 세팅이 기준)
-  const baseWb = new E.Workbook(M);
+  let baseWb = new E.Workbook(M);
   let shared = null; // { n: 이름, i: 입력값 }
   function applyBase() {
     const src = shared ? (store.profiles[store.current] || {}) : (store.bases[store.current] || {});
@@ -338,10 +339,13 @@
         if (gr.bar || gr.sub) g.append(el('p', { class: 'gtitle', text: gr.bar || gr.sub }));
         if (gr.note) g.append(el('p', { class: 'gnote', text: gr.note }));
         if (gr.noteCell) g.append(el('p', { class: 'gnote sub', 'data-notecell': gr.noteCell }));
-        const list = el('div', { class: 'rows' });
-        for (const f of gr.fields) list.append(fieldRow(f));
-        g.append(list);
+        if (gr.fields.length) {
+          const list = el('div', { class: 'rows' });
+          for (const f of gr.fields) list.append(fieldRow(f));
+          g.append(list);
+        }
         if (gr.extra === 'field') g.append(el('div', { class: 'extra', id: 'fieldInfo' }));
+        if (gr.extra === 'sw') { g.append(el('div', { class: 'sw-box', id: 'swBox' })); swSig = ''; }
         pane.append(g);
       }
       root.append(pane);
@@ -415,6 +419,9 @@
       return v ? `${v} (${lv}단계)` : lv + '단계';
     }
     if (/^L(2[6-9]|30)$/.test(a) && typeof o === 'number') return '+' + o;
+    if (/^A_[AD](7[2-9]|8[01])$/.test(a)) return s.replace(/\s*\(.*\)$/, '');  // 하의 스위칭 범주: '칩 (엑사&네블론)' → '칩'
+    if (a === 'A_E69' && typeof o === 'number') return '+' + o;          // 하의 스위칭: 강화·재련
+    if ((a === 'A_B70' || a === 'A_E70') && typeof o === 'number') return o + '단계';
     if (a === 'I8') return s.replace(/\s*\n\s*/g, ' ');
     if (/^H2[0-2]$/.test(a) && /강화수치/.test(s)) return '0.5% × 강화 수치';
     return s;
@@ -422,12 +429,18 @@
   function fillSelect(node, a) {
     const opts = optionsOf(a) || [];
     const cur = g(a);
+    const ph = swPh(a); // 하의 스위칭 옵션 줄: 맨 위에 늘 빈 보기('없음'·'왼쪽과 같음' 등)
     const key = opts.join('\u0001') + (/^L3[1-4]$/.test(a) ? '\u0002' + g('J' + a.slice(1)) : ''); // 카트리지 단계 글자는 종류에 따라 다름
     if (node._key !== key) {
       node.innerHTML = '';
       if (/^J3[1-4]$/.test(a)) fillCartOptions(node, opts, a);
       else for (const o of opts) node.append(el('option', { value: String(o), text: typeof o === 'number' && PCT.has(a) ? +(o * 100).toFixed(2) + '%' : optText(a, o) }));
+      if (ph !== null) node.prepend(el('option', { value: '', 'data-ph': '1' }));
       node._key = key;
+    }
+    if (ph !== null) {
+      const o = node.querySelector('option[data-ph]'); if (o && o.textContent !== ph) o.textContent = ph;
+      if (cur === null || cur === '' || E.isErr(cur)) { node.value = ''; return; }
     }
     if (!opts.some(o => String(o) === String(cur))) {
       const ex = node.querySelector('option[data-extra]'); if (ex) ex.remove();
@@ -503,6 +516,148 @@
     if (!ok) return;
     for (const [c, , nv] of ch) setVal(c, nv);
     toast('상세 스탯도 카트리지만큼 바꿨어요');
+  }
+
+  // ---------- HP 구간별 하의 스위칭 (시트 고급사용자모드 64~83행) ----------
+  // 체력 50% 초과일 때는 지금 스탯창의 하의(강배 바지 = 장비 종류와 강화의 하의), 50% 이하일 때는 갈아입는 하의(역강배 바지)로 계산.
+  // 실투력은 <Main>!C35. 두 하의에서 다른 옵션만 줄로 넣고, 역강배 바지 줄을 비워 두면 강배 바지와 같은 옵션으로 봄.
+  // 강배·역강배(HP 50% 초과·이하 피해)는 상세 스탯의 두 칸 값을 그대로 씀(시트도 옵션 줄의 HP 옵션은 계산에 안 씀).
+  // 계산식이 커서(압축 약 180KB) 켤 때만 model_sw.js를 받아 model.js에 더하고 계산용 시트를 새로 만듦
+  const SW_ROWS = 10, SW_ROW0 = 72;
+  const SW_CELLS = ['A_B65', 'A_B70', 'A_E68', 'A_E69', 'A_E70'];
+  for (let i = 0; i < SW_ROWS; i++) for (const c of 'ABCDEF') SW_CELLS.push('A_' + c + (SW_ROW0 + i));
+  const swOn = (inp) => (inp || inputs).A_B65 === '사용';
+  let swState = M.meta && M.meta.sw ? 'ready' : 'none'; // none · loading · ready · error
+  let swWait = null, swSig = '';
+  const swRowOf = (a) => { const m = /^A_([A-F])(\d+)$/.exec(a); if (!m) return null; const r = +m[2]; return r >= SW_ROW0 && r < SW_ROW0 + SW_ROWS ? { col: m[1], r } : null; };
+  const swV = (c, r) => { const v = inputs['A_' + c + r]; return v === null || v === undefined ? '' : String(v); };
+  // 옵션 줄 고르기 칸의 빈 보기 글자
+  function swPh(a) {
+    const p = swRowOf(a); if (!p) return null;
+    const { col, r } = p;
+    if (col === 'A') return '없음';
+    if (col === 'B' || col === 'C') return '골라 주세요';
+    if (col === 'D') return '위와 같음';
+    const same = !swV('D', r) || swV('D', r) === swV('A', r);
+    if (col === 'E') return same ? '위와 같음' : '골라 주세요';
+    return same && !swV('E', r) ? '위와 같음' : '골라 주세요';
+  }
+  // 범주를 바꾸면 그 줄의 옵션·수치를, 옵션을 바꾸면 수치를 비움(보기가 범주·옵션마다 다름)
+  function swCascade(a, prev, v) {
+    const p = swRowOf(a); if (!p || String(prev ?? '') === String(v ?? '')) return;
+    for (const c of ({ A: 'BC', B: 'C', D: 'EF', E: 'F' })[p.col] || '') { const k = 'A_' + c + p.r; if (inputs[k] != null && inputs[k] !== '') setIn(k, null); }
+  }
+  function mergeSw(D) {
+    try {
+      if (!D || !D.sheets || !D.meta || D.meta.base !== (M.meta && M.meta.version)) return false;
+      for (const [sh, cells] of Object.entries(D.sheets)) Object.assign(M.sheets[sh] || (M.sheets[sh] = {}), cells);
+      for (const d of D.validations || []) { M.validations.push(d); for (const c of d.cells) DV[(d.sheet === ADV ? 'A_' : '') + c] = d; }
+      Object.assign(M.meta, D.meta.over || {});
+      return true;
+    } catch (e) { console.error(e); return false; } finally { try { delete window.SIL_MODEL_SW; } catch (e) { /* 무시 */ } }
+  }
+  function ensureSw() {
+    if (swState === 'ready') return Promise.resolve(true);
+    if (swWait) return swWait;
+    swState = 'loading';
+    swWait = new Promise((res) => {
+      const s = document.createElement('script'); s.src = window.SIL_SW_SRC || 'model_sw.js';
+      s.onload = () => res(mergeSw(window.SIL_MODEL_SW));
+      s.onerror = () => { s.remove(); res(false); };
+      document.head.append(s);
+    }).then((ok) => {
+      swWait = null; swState = ok ? 'ready' : 'error';
+      if (ok) { wb = new E.Workbook(M); baseWb = new E.Workbook(M); cpWb = simWb = labWb = null; applyInputs(); applyBase(); }
+      refresh(); return ok;
+    });
+    return swWait;
+  }
+  const SW_MSG = { '양쪽 재련 단계와 이하용 하의 종류·강화를 확인하세요.': '두 하의의 재련 단계와 역강배 바지의 종류·강화를 골라 주세요',
+    '하의 입력과 옵션을 확인하세요.': '하의 옵션 줄을 확인해 주세요',
+    '테네브로스는 스위칭을 사용할 수 없습니다.': '테네브로스 하의는 스위칭을 쓸 수 없어요. 위 장비 종류와 강화에서 하의를 엑사스케일이나 네블론으로 골라 주세요' };
+  function swMsg() {
+    if (!swOn() || swState !== 'ready') return '';
+    for (const a of ['A_C65', 'A_A83']) { const v = gx(wb, a); if (typeof v === 'string' && v && !v.startsWith('#')) return SW_MSG[v] || v; }
+    return '';
+  }
+  function swToggle(on) {
+    if (!on) { setVal('A_B65', '사용 안 함'); return; }
+    // 처음 켤 때 역강배 바지는 강배 바지와 같게(같으면 실투력도 그대로). 다른 것만 고치면 됨
+    const arm = String(inputs.J28 ?? '');
+    if (inputs.A_E68 == null || inputs.A_E68 === '') setIn('A_E68', arm === '엑사스케일' ? '엑사스케일' : '네블론');
+    if (inputs.A_E69 == null || inputs.A_E69 === '') setIn('A_E69', Number.isFinite(Number(inputs.L28)) && inputs.L28 !== null ? Number(inputs.L28) : 11);
+    for (const a of ['A_B70', 'A_E70']) if (inputs[a] == null || inputs[a] === '') setIn(a, 0);
+    setVal('A_B65', '사용');
+  }
+  // 수치 칸: 옵션의 입력 방식(시트 '하의 스위칭 계산' O열)이 직접 입력이면 숫자 칸, 카트리지 단계 등이면 고르기
+  const swValKind = (a) => {
+    const p = swRowOf(a); if (!p) return 'n';
+    const t = String(wb.get('하의 스위칭 계산', 'O' + ((p.col === 'C' ? 1046 : 1056) + p.r - SW_ROW0)) ?? '');
+    return /^entry-/.test(t) && !/^entry-(direct|none)$/.test(t) ? 's' : 'n';
+  };
+  function swRowCount() {
+    let last = -1;
+    for (let i = 0; i < SW_ROWS; i++) if ([...'ABCDEF'].some(c => swV(c, SW_ROW0 + i))) last = i;
+    return Math.min(SW_ROWS, last + 2);
+  }
+  function swSel(a, cls) { const w = makeControl(a, {}); if (cls) controls[a].node.classList.add(cls); return w; }
+  function swNum(a) { makeControl(a, { k: 'num' }); return el('span', { class: 'pctwrap sw-val' }, controls[a].node, el('span', { class: 'suffix', text: '%' })); }
+  // 칸 구성이 바뀔 때만 다시 그림(줄 수·수치 칸 종류). 값은 refresh의 syncControl이 맞춤
+  function renderSw() {
+    const box = $('#swBox'); if (!box) return;
+    const on = swOn(), ready = on && swState === 'ready';
+    const n = ready ? swRowCount() : 0;
+    let kinds = '';
+    for (let i = 0; i < n; i++) kinds += swValKind('A_C' + (SW_ROW0 + i)) + swValKind('A_F' + (SW_ROW0 + i));
+    const sig = [on, swState, n, kinds].join('|');
+    if (sig === swSig && box.childElementCount) return;
+    swSig = sig;
+    for (const a of SW_CELLS) delete controls[a];
+    box.innerHTML = '';
+    const cb = el('input', { type: 'checkbox', id: 'swOn' }); cb.checked = on;
+    cb.addEventListener('change', () => swToggle(cb.checked));
+    box.append(el('label', { class: 'chk-row' }, cb, el('span', {}, '하의 스위칭 계산하기', el('small', { text: '체력 50% 초과일 때는 지금 입은 강배 바지, 50% 이하일 때는 역강배 바지로 계산해요' }))));
+    if (!on) return;
+    if (!ready) {
+      const p = el('p', { class: 'sw-msg' + (swState === 'error' ? ' warn' : ''), text: swState === 'error' ? '계산식을 불러오지 못했어요. 인터넷 연결을 확인해 주세요. ' : '계산식을 불러오는 중이에요…' });
+      if (swState === 'error') p.append(el('button', { class: 'txt sw-retry', type: 'button', text: '다시 불러오기', onclick: () => { swState = 'none'; refresh(); } }));
+      box.append(p); return;
+    }
+    box.append(el('p', { class: 'sw-msg warn', id: 'swMsg', hidden: '' }));
+    const fld = (t, ctl) => el('div', { class: 'sw-f' }, el('span', { text: t }), ctl);
+    box.append(el('div', { class: 'sw-pants' },
+      el('div', { class: 'sw-card' }, el('p', { class: 'sw-h' }, '강배 바지', el('small', { text: '체력 50% 초과 · 지금 입은 하의' })),
+        fld('종류·강화', el('b', { id: 'swArm', class: 'sw-arm' })), fld('재련', swSel('A_B70'))),
+      el('div', { class: 'sw-card' }, el('p', { class: 'sw-h' }, '역강배 바지', el('small', { text: '체력 50% 이하 · 갈아입는 하의' })),
+        fld('종류', swSel('A_E68')), fld('강화', swSel('A_E69')), fld('재련', swSel('A_E70')))));
+    box.append(el('p', { class: 'gnote sw-tip', text: '강배 바지의 종류·강화는 위 \'장비 종류와 강화\'의 하의 값이에요. 두 하의의 재련이 같으면 그대로 둬도 돼요.' }));
+    box.append(el('p', { class: 'sw-sub', text: '두 하의에서 다른 옵션' }),
+      el('p', { class: 'gnote', text: '같은 옵션은 안 넣어도 돼요. 역강배 바지 줄의 범주를 비워 두면 강배 바지와 같은 옵션으로 계산해요.\n카트리지가 다르면 역강배 바지 줄에만 넣으면 돼요. 강배 바지 카트리지는 위 \'카트리지\'의 하의 값으로 계산해요.\n강배·역강배(HP 50% 초과·이하 피해)는 상세 스탯의 두 칸 값으로 계산해서, 여기서 넣어도 실투력은 그대로예요.' }));
+    const list = el('div', { class: 'sw-opts' });
+    for (let i = 0; i < n; i++) {
+      const r = SW_ROW0 + i;
+      const line = (lab, cs) => el('div', { class: 'sw-line' }, el('span', { class: 'sw-side', text: lab }),
+        swSel('A_' + cs[0] + r, 'sw-cat'), swSel('A_' + cs[1] + r, 'sw-opt'), swValKind('A_' + cs[2] + r) === 's' ? swSel('A_' + cs[2] + r, 'sw-val') : swNum('A_' + cs[2] + r));
+      list.append(el('div', { class: 'sw-orow' }, el('span', { class: 'sw-no', text: String(i + 1) }),
+        el('div', { class: 'sw-lines' }, line('강배 바지', 'ABC'), line('역강배 바지', 'DEF'))));
+    }
+    box.append(list);
+  }
+  // 매번 맞추는 것: 강배 바지 종류·강화 글자, 안내 문구, 못 고르는 칸 잠금, % 표시
+  function syncSw() {
+    if (!swOn() || swState !== 'ready' || !$('#swBox')) return;
+    const arm = $('#swArm'); if (arm) arm.textContent = `${g('J28') ?? '-'} +${g('L28') ?? 0}`;
+    const msg = $('#swMsg'); if (msg) { const t = swMsg(); msg.textContent = t; msg.hidden = !t; }
+    for (let i = 0; i < SW_ROWS; i++) {
+      const r = SW_ROW0 + i;
+      for (const [c, off] of [['B', !swV('A', r)], ['C', !swV('B', r)], ['E', !swV('D', r)], ['F', !swV('D', r)]]) { const k = controls['A_' + c + r]; if (k) k.node.disabled = off; }
+      for (const [c, q] of [['C', 1046 + i], ['F', 1056 + i]]) {
+        const k = controls['A_' + c + r]; if (!k || k.kind === 'select') continue;
+        const suf = k.node.parentNode && k.node.parentNode.querySelector('.suffix');
+        if (suf) suf.hidden = String(wb.get('하의 스위칭 계산', 'Q' + q) ?? '') !== 'unit-percent';
+        k.node.placeholder = k.node.disabled ? '' : swPh('A_' + c + r) === '위와 같음' ? '위와 같음' : '0';
+      }
+    }
   }
 
   // ---------- 값 변경 / 재계산 ----------
@@ -591,6 +746,7 @@
     if (a === 'G33') syncPartyCrit(prev);
     if (a === 'C6') { syncEngraveType(); syncClassDefault(prev); setTimeout(renderProfiles, 0); }
     if (inputs._eq && (a === 'C24' || a === 'C25')) setIn(a === 'C24' ? 'C25' : 'C24', v);
+    swCascade(a, prev, v);
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; refresh(); });
     scheduleAutosave();
   }
@@ -600,8 +756,11 @@
   function refresh() {
     let err = null;
     try {
+      if (swOn() && swState === 'none') ensureSw(); // 하의 스위칭을 켠 세팅(저장·공유 링크 포함)이면 계산식을 받음
       syncLabels();
+      renderSw();
       for (const a of Object.keys(controls)) syncControl(a);
+      syncSw();
       renderResults();
       markOcrMiss();
     } catch (e) { err = e; console.error(e); }
@@ -646,8 +805,12 @@
     const noRange = !(Number(g('C12')) > 0); // 극대화 범위가 없으면 계산값이 의미 없음(음수 등)
     const missing = ['C12', 'C13'].filter(a => !(Number(g(a)) > 0));
     // 시트가 계산을 막는 입력(#N/A): 숫자 대신 이유를 보여 줌. 시트도 공격력 최댓값이 공격력보다 커야 계산함
-    const bad = !noRange && typeof cp !== 'number';
-    const why = !bad ? '' : Number(g('C12')) <= Number(g('C11')) ? '극대화 범위 최댓값이 공격력보다 커야 계산돼요' : '계산할 수 없는 값이 있어요. 넣은 값을 확인해 주세요';
+    // 하의 스위칭: 계산식을 받는 동안은 숫자를 안 보여 줌(스위칭 없는 값이라). 계산이 막히면 시트 안내 문구를 보여 줌
+    const swWaiting = swOn() && swState !== 'ready';
+    const bad = !noRange && (typeof cp !== 'number' || swWaiting);
+    const why = !bad ? '' : swWaiting ? (swState === 'error' ? '하의 스위칭 계산식을 불러오지 못했어요' : '하의 스위칭 계산식을 불러오는 중이에요…')
+      : swMsg() ? '하의 스위칭: ' + swMsg()
+      : Number(g('C12')) <= Number(g('C11')) ? '극대화 범위 최댓값이 공격력보다 커야 계산돼요' : '계산할 수 없는 값이 있어요. 넣은 값을 확인해 주세요';
     setText('#rCP', noRange || bad ? '—' : fmtInt(cp));
     $('#rCPk').classList.toggle('warn', missing.length > 0 || bad);
     setText('#rCPk', missing.length ? `${missing.map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력').join('·')}을 넣어야 정확해요` : bad ? why : korUnit(cp));
@@ -658,7 +821,7 @@
     const base = cpOf(baseWb);
     const dt = $('#deltaText');
     let same = true;
-    if (!noRange && typeof cp === 'number' && typeof base === 'number') {
+    if (!noRange && !swWaiting && typeof cp === 'number' && typeof base === 'number') {
       const d = cp - base; same = Math.abs(d) < 0.5;
       const pct = base ? d / base * 100 : 0;
       dt.className = 'delta-text' + (same ? '' : d > 0 ? ' up' : ' down');
@@ -1246,7 +1409,7 @@
   }
 
   // ---------- 랭킹 화면(rank.js)과 연결 ----------
-  const SKIP_EDIT = new Set(['ZB1', 'ZB2', 'ZB3', 'C12', 'C13', 'G34', 'H34', 'J31', 'L31', 'J32', 'L32', 'J33', 'L33', 'J34', 'L34', 'A_B4', 'A_B5', 'A_B6', 'A_B7', 'A_E4', 'A_E5', 'A_H4', 'A_H5', '_key', '_eq', '_v', '_s35']); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
+  const SKIP_EDIT = new Set(['ZB1', 'ZB2', 'ZB3', 'C12', 'C13', 'G34', 'H34', 'J31', 'L31', 'J32', 'L32', 'J33', 'L33', 'J34', 'L34', 'A_B4', 'A_B5', 'A_B6', 'A_B7', 'A_E4', 'A_E5', 'A_H4', 'A_H5', '_key', '_eq', '_v', '_s35', ...SW_CELLS]); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
   // 지금 세팅에서 몇 칸만 바꿨을 때의 실투력(화면·저장값은 그대로). 아바타 추천을 실투력으로 다시 줄 세울 때 씀
   let simWb = null;
   function cpWith(over) {
@@ -1313,7 +1476,7 @@
     sockSolve: (extra, opt) => { const r = sockSolve(extra || {}, opt); return r && !r.err ? { cp: r.cp, now: r.now, best: r.best.slice(), cur: r.cur.slice(), N: r.N, over: Object.assign({}, extra || {}, r.over), names: SOCK.map(o => o.t), critOk: r.critOk } : null; },
     rankBuffs: () => Object.keys(EXTRA_BUFF).filter(a => inputs[a] === true).map(a => EXTRA_BUFF[a])
       .concat((inputs.J22 ?? '미적용') !== '미적용' ? [`이벤트 버프(${inputs.J22})`] : [])
-      .concat(inputs.A_E4 === true ? ['추피 보정'] : [], inputs.A_H4 === true ? ['가동률 DPS 전환'] : []),
+      .concat(inputs.A_E4 === true ? ['추피 보정'] : [], inputs.A_H4 === true ? ['가동률 DPS 전환'] : [], swOn() ? ['하의 스위칭'] : []),
     missing: () => isEmptySetting(inputs) ? ['세팅'] : ['C12', 'C13'].filter(a => !(Number(g(a)) > 0)).map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력'),
     cls: () => inputs.C6 || '',
     val: (c) => g(c),
