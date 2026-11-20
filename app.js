@@ -666,7 +666,8 @@
     swNodes[kv] = valNode._inp || valNode;
     return el('div', { class: 'sw-half', 'data-side': side === 'L' ? '강배 바지' : '역강배 바지' }, sel, valNode);
   }
-  const swNA = (side, t) => el('div', { class: 'sw-half', 'data-side': side === 'L' ? '강배 바지' : '역강배 바지' }, el('span', { class: 'sw-na', text: t ? t + '엔 없어요' : '—' }));
+  // 그 바지 종류에 없는 칸(네블론의 추가 효과, 엑사스케일의 카트리지·옵션변환)은 비워 둠. 모바일에서는 줄째 숨김
+  const swNA = () => el('div', { class: 'sw-half sw-none' });
   // 칸 구성이 바뀔 때만 다시 그림(바지 종류·옵션마다 수치 칸 모양). 값은 syncSw가 맞춤
   function renderSw() {
     const box = $('#swBox'); if (!box) return;

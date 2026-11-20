@@ -1008,3 +1008,4 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .sw-na { grid-column: 1 / -1; font-size: 13px; color: var(--mute); padding: 8px 2px; }
 .sw-gap { height: 8px; }
 .sw-half select.sw-val { padding-right: 24px; }
+@media (max-width: 560px) { .sw-half.sw-none { display: none; } }
