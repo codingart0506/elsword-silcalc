@@ -478,7 +478,8 @@
       }
     }
     Object.defineProperty(found, 'atk', { value: atkAll, enumerable: false, configurable: true });
-    const rng = findRangeMax(rows) || findRangeMax(allRows);
+    const atkV = atkAll.map(a => a.value).concat(found.C11 ? [found.C11.value] : []).filter(v => v > 0);
+    const rng = findRangeMax(rows, atkV) || findRangeMax(allRows, atkV);
     if (rng) found.C12 = { cell: 'C12', value: rng.value, score: 1, conf: 90, text: rng.text, label: '극대화 범위 최댓값' };
     else delete found.C12;
     // 글자가 작게 찍힌 사진(줄 간격 SMALL_PITCH px 미만, 게임 화면 1366 미만쯤): 숫자를 비슷한 숫자로 잘못 읽기 쉬움.
@@ -502,7 +503,7 @@
   }
 
   // 공격력에 마우스를 올리면 뜨는 툴팁: "[물리 공격력 범위] 162558~198673" → 오른쪽(최댓값)
-  function findRangeMax(rows) {
+  function findRangeMax(rows, atkV) {
     const RE = /(\d[\d,.]{3,})\s*[~∼〜\-]\s*(\d[\d,.]{3,})/;
     for (let i = 0; i < rows.length; i++) {
       if (!/범\s*위/.test(rows[i].text)) continue;
@@ -515,8 +516,15 @@
           // 최댓값 뒤에 옆 글자가 숫자로 붙어 읽힌 경우("173199~2108510324212"): 최솟값과 자릿수를 맞춰 앞부분만
           // (극대화가 낮으면 범위가 넓어서 최댓값이 최솟값의 2배를 넘기도 함 → 4배까지 봄)
           const db = m[2].replace(/[,.]/g, '');
+          const txt = rows[i].text.trim() + ' ' + (r === rows[i] ? '' : r.text.trim());
+          // 사진에서 읽은 공격력이 있으면 그걸로 먼저 맞춰 봄: 최댓값은 공격력의 1~3배쯤.
+          // 최솟값 앞자리가 옆 창 글자와 섞여 짧게 읽히면("175472"→"5472") 최솟값 기준으로는 멀쩡한 최댓값을 잘라 버려서
+          if (atkV && atkV.length) {
+            const okK = (v) => v > 0 && atkV.some(k => v >= k * 0.95 && v <= k * 3);
+            for (const v of [b].concat(db.length > da.length ? [da.length, da.length + 1].map(n => parseInt(db.slice(0, n), 10)) : [])) if (okK(v)) return { value: v, text: txt };
+          }
           if (db.length > da.length) for (const n of [da.length, da.length + 1]) { const c = parseInt(db.slice(0, n), 10); if (c >= a && c <= a * 4) { b = c; break; } }
-          if (b >= a && b <= a * 4 && b > 0) return { value: b, text: rows[i].text.trim() + ' ' + (r === rows[i] ? '' : r.text.trim()) };
+          if (b >= a && b <= a * 4 && b > 0) return { value: b, text: txt };
         }
       }
     }
