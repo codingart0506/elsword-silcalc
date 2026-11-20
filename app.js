@@ -176,7 +176,7 @@
   }
 
   // 실투력 계산 방식 버전: 계산이 바뀔 때 올림. 랭킹에 올린 세팅에 같이 적어서, 예전 방식으로 올린 기록은 랭킹에 '업데이트 전 지표'로 표시
-  const CALC_VER = '3.0.18'; // 시트 3.0.19·3.0.21도 그대로 둠(올리면 랭킹이 모두 '업데이트 전 지표'로 표시됨). 3.0.21은 딜러 직업의 서포트 1·2형 카트리지만 효과가 빠짐(서포터 직업만 적용)
+  const CALC_VER = '3.0.18'; // 시트 3.0.19·3.0.21·3.0.22도 그대로 둠(올리면 랭킹이 모두 '업데이트 전 지표'로 표시됨). 3.0.21은 딜러 직업의 서포트 1·2형 카트리지만 효과가 빠짐(서포터 직업만 적용), 3.0.22는 레이지 하츠 폭나헨 크뎀을 뺌
 
   // ---------- 상태 / 저장 ----------
   const LS = 'silcalc.v1';
@@ -420,6 +420,7 @@
     }
     if (/^L(2[6-9]|30)$/.test(a) && typeof o === 'number') return '+' + o;
     if (/^A_[AD](7[2-9]|8[01])$/.test(a)) return s.replace(/\s*\(.*\)$/, '');  // 하의 스위칭 범주: '칩 (엑사&네블론)' → '칩'
+    if (/^A_[BE](7[2-9]|8[01])$/.test(a) && s === NONE) return '없음';
     if (a === 'A_E69' && typeof o === 'number') return '+' + o;          // 하의 스위칭: 강화·재련
     if ((a === 'A_B70' || a === 'A_E70') && typeof o === 'number') return o + '단계';
     if (a === 'I8') return s.replace(/\s*\n\s*/g, ' ');
@@ -427,7 +428,7 @@
     return s;
   }
   function fillSelect(node, a) {
-    const opts = optionsOf(a) || [];
+    const opts = swOpts(a, optionsOf(a) || []);
     const cur = g(a);
     const ph = swPh(a); // 하의 스위칭 옵션 줄: 맨 위에 늘 빈 보기('없음'·'왼쪽과 같음' 등)
     const key = opts.join('\u0001') + (/^L3[1-4]$/.test(a) ? '\u0002' + g('J' + a.slice(1)) : ''); // 카트리지 단계 글자는 종류에 따라 다름
@@ -520,32 +521,74 @@
 
   // ---------- HP 구간별 하의 스위칭 (시트 고급사용자모드 64~83행) ----------
   // 체력 50% 초과일 때는 지금 스탯창의 하의(강배 바지 = 장비 종류와 강화의 하의), 50% 이하일 때는 갈아입는 하의(역강배 바지)로 계산.
-  // 실투력은 <Main>!C35. 두 하의에서 다른 옵션만 줄로 넣고, 역강배 바지 줄을 비워 두면 강배 바지와 같은 옵션으로 봄.
+  // 실투력은 <Main>!C35. 시트의 옵션 줄 10개(72~81행, 강배 A~C열 · 역강배 D~F열)를 바지 칸에 맞춰 나눠 씀:
+  //   72~76행 소켓 1~5, 77행 칩, 78행 카트리지, 79~81행 그 밖의 옵션(추가 효과·회로·옵션변환). 계산은 줄 순서와 상관없음(빼고 더함).
+  // 시트 규칙: 역강배 칸을 비워 두면 강배 바지와 같은 옵션. 강배 바지 카트리지는 위 '카트리지'의 하의 값(J32)으로 계산돼서 78행 강배 쪽은 비워 둠.
   // 강배·역강배(HP 50% 초과·이하 피해)는 상세 스탯의 두 칸 값을 그대로 씀(시트도 옵션 줄의 HP 옵션은 계산에 안 씀).
   // 계산식이 커서(압축 약 180KB) 켤 때만 model_sw.js를 받아 model.js에 더하고 계산용 시트를 새로 만듦
   const SW_ROWS = 10, SW_ROW0 = 72;
+  const SW_SOCK = '소켓 효과 (마법석)', SW_CHIP = '칩 (엑사&네블론)', SW_CART = '카트리지 (네블론)';
+  const SW_FIXED = [SW_SOCK, SW_CHIP, SW_CART];
+  const SW_SLOTS = [1, 2, 3, 4, 5].map(i => ({ r: 71 + i, name: '소켓 ' + i, cat: SW_SOCK })).concat([{ r: 77, name: '칩', cat: SW_CHIP }, { r: 78, name: '카트리지', cat: SW_CART }]);
+  const SW_SLOT_AT = Object.fromEntries(SW_SLOTS.map(s => [s.r, s]));
+  const SW_EXTRA = [79, 80, 81];
   const SW_CELLS = ['A_B65', 'A_B70', 'A_E68', 'A_E69', 'A_E70'];
   for (let i = 0; i < SW_ROWS; i++) for (const c of 'ABCDEF') SW_CELLS.push('A_' + c + (SW_ROW0 + i));
   const swOn = (inp) => (inp || inputs).A_B65 === '사용';
   let swState = M.meta && M.meta.sw ? 'ready' : 'none'; // none · loading · ready · error
-  let swWait = null, swSig = '';
+  let swWait = null, swSig = '', swExtraOpen = false;
   const swRowOf = (a) => { const m = /^A_([A-F])(\d+)$/.exec(a); if (!m) return null; const r = +m[2]; return r >= SW_ROW0 && r < SW_ROW0 + SW_ROWS ? { col: m[1], r } : null; };
   const swV = (c, r) => { const v = inputs['A_' + c + r]; return v === null || v === undefined ? '' : String(v); };
-  // 옵션 줄 고르기 칸의 빈 보기 글자
+  const swEmpty = (v) => v === '' || v === NONE || v === '미장착'; // 옵션이 없으면 수치 칸을 잠금
+  // 고르기 칸의 빈 보기 글자(null이면 하의 스위칭 칸이 아님)
   function swPh(a) {
     const p = swRowOf(a); if (!p) return null;
     const { col, r } = p;
+    if (SW_SLOT_AT[r]) return col === 'B' ? '없음' : col === 'E' ? '강배와 같음' : col === 'F' || col === 'C' ? '단계' : null;
     if (col === 'A') return '없음';
+    if (col === 'D') return '강배와 같음';
     if (col === 'B' || col === 'C') return '골라 주세요';
-    if (col === 'D') return '위와 같음';
     const same = !swV('D', r) || swV('D', r) === swV('A', r);
-    if (col === 'E') return same ? '위와 같음' : '골라 주세요';
-    return same && !swV('E', r) ? '위와 같음' : '골라 주세요';
+    if (col === 'E') return same ? '강배와 같음' : '골라 주세요';
+    return same && !swV('E', r) ? '강배와 같음' : '골라 주세요';
+  }
+  // 보기 거르기: 강배 칸은 '해당사항 없음'을 빈 보기('없음')로 대신, 그 밖의 옵션 범주에는 소켓·칩·카트리지를 뺌
+  function swOpts(a, opts) {
+    const p = swRowOf(a); if (!p) return opts;
+    if (SW_SLOT_AT[p.r] && p.col === 'B') return opts.filter(o => o !== NONE);
+    if (!SW_SLOT_AT[p.r] && (p.col === 'A' || p.col === 'D')) return opts.filter(o => !SW_FIXED.includes(o));
+    return opts;
   }
   // 범주를 바꾸면 그 줄의 옵션·수치를, 옵션을 바꾸면 수치를 비움(보기가 범주·옵션마다 다름)
   function swCascade(a, prev, v) {
     const p = swRowOf(a); if (!p || String(prev ?? '') === String(v ?? '')) return;
     for (const c of ({ A: 'BC', B: 'C', D: 'EF', E: 'F' })[p.col] || '') { const k = 'A_' + c + p.r; if (inputs[k] != null && inputs[k] !== '') setIn(k, null); }
+  }
+  // 처음 만든 방식(줄마다 범주를 고르던 값)을 칸 위치로 옮기고, 바지 칸의 범주를 채움. 계산 결과는 그대로
+  function swPrepare() {
+    let ch = false;
+    const rows = [];
+    for (let r = SW_ROW0; r < SW_ROW0 + SW_ROWS; r++) {
+      const raw = {}; for (const c of 'ABCDEF') raw[c] = inputs['A_' + c + r];
+      const cat = swV('A', r) || swV('D', r);
+      rows.push({ r, raw, cat, used: !!(swV('B', r) || swV('C', r) || swV('E', r) || swV('F', r)) });
+    }
+    const fits = ({ r, raw }) => {
+      const s = SW_SLOT_AT[r], a = raw.A || '', d = raw.D || '';
+      return s ? (!a || a === s.cat) && (!d || d === s.cat) : !SW_FIXED.includes(a) && !SW_FIXED.includes(d);
+    };
+    if (!rows.every(x => !x.used || fits(x))) {
+      const free = { [SW_SOCK]: [72, 73, 74, 75, 76], [SW_CHIP]: [77], [SW_CART]: [78], other: SW_EXTRA.slice() };
+      for (const x of rows) for (const c of 'ABCDEF') setIn('A_' + c + x.r, null);
+      for (const x of rows.filter(y => y.used)) {
+        const r = (free[x.cat] || free.other).shift() ?? free.other.shift();
+        if (r != null) for (const c of 'ABCDEF') if (x.raw[c] != null && x.raw[c] !== '') setIn('A_' + c + r, x.raw[c]);
+      }
+      ch = true;
+    }
+    for (const s of SW_SLOTS) for (const c of 'AD') if (inputs['A_' + c + s.r] !== s.cat) { setIn('A_' + c + s.r, s.cat); ch = true; }
+    for (const c of 'BC') if (swV(c, 78)) { setIn('A_' + c + '78', null); ch = true; } // 강배 바지 카트리지는 J32로 계산
+    if (ch) scheduleAutosave();
   }
   function mergeSw(D) {
     try {
@@ -573,11 +616,20 @@
     return swWait;
   }
   const SW_MSG = { '양쪽 재련 단계와 이하용 하의 종류·강화를 확인하세요.': '두 하의의 재련 단계와 역강배 바지의 종류·강화를 골라 주세요',
-    '하의 입력과 옵션을 확인하세요.': '하의 옵션 줄을 확인해 주세요',
+    '하의 입력과 옵션을 확인하세요.': '하의 옵션 칸을 확인해 주세요',
     '테네브로스는 스위칭을 사용할 수 없습니다.': '테네브로스 하의는 스위칭을 쓸 수 없어요. 위 장비 종류와 강화에서 하의를 엑사스케일이나 네블론으로 골라 주세요' };
+  // 시트 안내 'HP 50% 초과 · 옵션 1 · …'를 칸 이름으로 바꿔 보여 줌
+  function swMsgText(v) {
+    if (SW_MSG[v]) return SW_MSG[v];
+    const m = /^HP 50% (초과|이하) · 옵션 (\d+) · (.+)$/.exec(v);
+    if (!m) return v;
+    const r = SW_ROW0 - 1 + Number(m[2]), s = SW_SLOT_AT[r];
+    const where = s ? s.name : '그 밖의 옵션 ' + (SW_EXTRA.indexOf(r) + 1);
+    return `${m[1] === '초과' ? '강배' : '역강배'} 바지 ${where}: ${m[3].replace('수치를 기호 없이 숫자로 입력하세요.', '수치를 숫자로 넣어 주세요').replace(/\.$/, '')}`;
+  }
   function swMsg() {
     if (!swOn() || swState !== 'ready') return '';
-    for (const a of ['A_C65', 'A_A83']) { const v = gx(wb, a); if (typeof v === 'string' && v && !v.startsWith('#')) return SW_MSG[v] || v; }
+    for (const a of ['A_C65', 'A_A83']) { const v = gx(wb, a); if (typeof v === 'string' && v && !v.startsWith('#')) return swMsgText(v); }
     return '';
   }
   function swToggle(on) {
@@ -595,23 +647,31 @@
     const t = String(wb.get('하의 스위칭 계산', 'O' + ((p.col === 'C' ? 1046 : 1056) + p.r - SW_ROW0)) ?? '');
     return /^entry-/.test(t) && !/^entry-(direct|none)$/.test(t) ? 's' : 'n';
   };
-  function swRowCount() {
+  function swExtraCount() {
     let last = -1;
-    for (let i = 0; i < SW_ROWS; i++) if ([...'ABCDEF'].some(c => swV(c, SW_ROW0 + i))) last = i;
-    return Math.min(SW_ROWS, last + 2);
+    SW_EXTRA.forEach((r, i) => { if ([...'ABCDEF'].some(c => swV(c, r))) last = i; });
+    return Math.min(SW_EXTRA.length, last + 2);
   }
   function swSel(a, cls) { const w = makeControl(a, {}); if (cls) controls[a].node.classList.add(cls); return w; }
   function swNum(a) { makeControl(a, { k: 'num' }); return el('span', { class: 'pctwrap sw-val' }, controls[a].node, el('span', { class: 'suffix', text: '%' })); }
-  // 칸 구성이 바뀔 때만 다시 그림(줄 수·수치 칸 종류). 값은 refresh의 syncControl이 맞춤
+  const swVal = (a) => swValKind(a) === 's' ? swSel(a, 'sw-val') : swNum(a);
+  function swCartText() {
+    const j = g('J32'), l = g('L32');
+    if (j === null || j === '' || j === NONE) return '없음';
+    return `${optText('J32', j)}${Number(l) >= 1 ? ' ' + l + '단계' : ''}`;
+  }
+  // 칸 구성이 바뀔 때만 다시 그림(그 밖의 옵션 줄 수·수치 칸 종류). 값은 refresh의 syncControl이 맞춤
   function renderSw() {
     const box = $('#swBox'); if (!box) return;
     const on = swOn(), ready = on && swState === 'ready';
-    const n = ready ? swRowCount() : 0;
+    if (ready) swPrepare();
+    const n = ready ? swExtraCount() : 0;
     let kinds = '';
-    for (let i = 0; i < n; i++) kinds += swValKind('A_C' + (SW_ROW0 + i)) + swValKind('A_F' + (SW_ROW0 + i));
+    for (let i = 0; i < n; i++) kinds += swValKind('A_C' + SW_EXTRA[i]) + swValKind('A_F' + SW_EXTRA[i]);
     const sig = [on, swState, n, kinds].join('|');
     if (sig === swSig && box.childElementCount) return;
     swSig = sig;
+    const dt = box.querySelector('details.sw-more'); if (dt) swExtraOpen = dt.open;
     for (const a of SW_CELLS) delete controls[a];
     box.innerHTML = '';
     const cb = el('input', { type: 'checkbox', id: 'swOn' }); cb.checked = on;
@@ -631,31 +691,56 @@
       el('div', { class: 'sw-card' }, el('p', { class: 'sw-h' }, '역강배 바지', el('small', { text: '체력 50% 이하 · 갈아입는 하의' })),
         fld('종류', swSel('A_E68')), fld('강화', swSel('A_E69')), fld('재련', swSel('A_E70')))));
     box.append(el('p', { class: 'gnote sw-tip', text: '강배 바지의 종류·강화는 위 \'장비 종류와 강화\'의 하의 값이에요. 두 하의의 재련이 같으면 그대로 둬도 돼요.' }));
-    box.append(el('p', { class: 'sw-sub', text: '두 하의에서 다른 옵션' }),
-      el('p', { class: 'gnote', text: '같은 옵션은 안 넣어도 돼요. 역강배 바지 줄의 범주를 비워 두면 강배 바지와 같은 옵션으로 계산해요.\n카트리지가 다르면 역강배 바지 줄에만 넣으면 돼요. 강배 바지 카트리지는 위 \'카트리지\'의 하의 값으로 계산해요.\n강배·역강배(HP 50% 초과·이하 피해)는 상세 스탯의 두 칸 값으로 계산해서, 여기서 넣어도 실투력은 그대로예요.' }));
+    // 바지 칸: 소켓 5개 · 칩 · 카트리지
+    box.append(el('p', { class: 'sw-sub', text: '바지 옵션' }),
+      el('p', { class: 'gnote', text: '두 바지가 같은 칸은 비워 둬도 돼요(역강배 칸이 \'강배와 같음\'이면 강배 바지와 같다고 봐요). 다른 칸만 양쪽 다 넣어 주세요.\n강배·역강배(HP 50% 초과·이하 피해) 옵션은 상세 스탯의 두 칸 값으로 계산돼서, 여기서 넣어도 실투력은 그대로예요.' }));
+    const tbl = el('div', { class: 'sw-tbl' });
+    tbl.append(el('div', { class: 'sw-srow sw-thead' }, el('span'),
+      el('span', { class: 'sw-th' }, '강배 바지', el('small', { text: '50% 초과' })), el('span', { class: 'sw-th' }, '역강배 바지', el('small', { text: '50% 이하' }))));
+    for (const s of SW_SLOTS) {
+      const L = s.cat === SW_CART
+        ? el('div', { class: 'sw-half', 'data-side': '강배 바지' }, el('span', { class: 'sw-ro' }, el('span', { id: 'swCart' }), el('small', { text: '위 카트리지 칸' })))
+        : el('div', { class: 'sw-half', 'data-side': '강배 바지' }, swSel('A_B' + s.r, 'sw-opt'), swNum('A_C' + s.r));
+      const R = el('div', { class: 'sw-half', 'data-side': '역강배 바지' }, swSel('A_E' + s.r, 'sw-opt'), s.cat === SW_CART ? swSel('A_F' + s.r, 'sw-val') : swNum('A_F' + s.r));
+      tbl.append(el('div', { class: 'sw-srow' }, el('span', { class: 'sw-slot', text: s.name }), L, R));
+    }
+    box.append(tbl);
+    // 그 밖의 옵션(추가 효과·회로·옵션변환): 줄마다 범주를 고름
+    const more = el('details', { class: 'sw-more' });
+    more.open = swExtraOpen || n > 1;
+    more.addEventListener('toggle', () => { swExtraOpen = more.open; });
+    more.append(el('summary', { text: '그 밖의 옵션 (추가 효과·회로·옵션변환)' }));
     const list = el('div', { class: 'sw-opts' });
     for (let i = 0; i < n; i++) {
-      const r = SW_ROW0 + i;
+      const r = SW_EXTRA[i];
       const line = (lab, cs) => el('div', { class: 'sw-line' }, el('span', { class: 'sw-side', text: lab }),
-        swSel('A_' + cs[0] + r, 'sw-cat'), swSel('A_' + cs[1] + r, 'sw-opt'), swValKind('A_' + cs[2] + r) === 's' ? swSel('A_' + cs[2] + r, 'sw-val') : swNum('A_' + cs[2] + r));
+        swSel('A_' + cs[0] + r, 'sw-cat'), swSel('A_' + cs[1] + r, 'sw-opt'), swVal('A_' + cs[2] + r));
       list.append(el('div', { class: 'sw-orow' }, el('span', { class: 'sw-no', text: String(i + 1) }),
         el('div', { class: 'sw-lines' }, line('강배 바지', 'ABC'), line('역강배 바지', 'DEF'))));
     }
-    box.append(list);
+    more.append(list);
+    box.append(more);
   }
-  // 매번 맞추는 것: 강배 바지 종류·강화 글자, 안내 문구, 못 고르는 칸 잠금, % 표시
+  // 매번 맞추는 것: 강배 바지 종류·강화·카트리지 글자, 안내 문구, 못 넣는 칸 잠금, % 표시, 비어 있으면 안 되는 수치 칸 표시
   function syncSw() {
     if (!swOn() || swState !== 'ready' || !$('#swBox')) return;
     const arm = $('#swArm'); if (arm) arm.textContent = `${g('J28') ?? '-'} +${g('L28') ?? 0}`;
+    const cart = $('#swCart'); if (cart) cart.textContent = swCartText();
     const msg = $('#swMsg'); if (msg) { const t = swMsg(); msg.textContent = t; msg.hidden = !t; }
     for (let i = 0; i < SW_ROWS; i++) {
-      const r = SW_ROW0 + i;
-      for (const [c, off] of [['B', !swV('A', r)], ['C', !swV('B', r)], ['E', !swV('D', r)], ['F', !swV('D', r)]]) { const k = controls['A_' + c + r]; if (k) k.node.disabled = off; }
+      const r = SW_ROW0 + i, slot = !!SW_SLOT_AT[r];
+      const lock = slot
+        ? { C: swEmpty(swV('B', r)), F: swEmpty(swV('E', r)) }
+        : { B: !swV('A', r), C: swEmpty(swV('B', r)), E: !swV('D', r), F: !swV('D', r) || swV('E', r) === NONE };
+      for (const [c, off] of Object.entries(lock)) { const k = controls['A_' + c + r]; if (k) k.node.disabled = off; }
       for (const [c, q] of [['C', 1046 + i], ['F', 1056 + i]]) {
-        const k = controls['A_' + c + r]; if (!k || k.kind === 'select') continue;
+        const k = controls['A_' + c + r]; if (!k) continue;
+        const need = !k.node.disabled && (c === 'C' ? !swEmpty(swV('B', r)) : !swEmpty(swV('E', r))) && !swV(c, r);
+        k.node.classList.toggle('sw-need', need);
+        if (k.kind === 'select') continue;
         const suf = k.node.parentNode && k.node.parentNode.querySelector('.suffix');
-        if (suf) suf.hidden = String(wb.get('하의 스위칭 계산', 'Q' + q) ?? '') !== 'unit-percent';
-        k.node.placeholder = k.node.disabled ? '' : swPh('A_' + c + r) === '위와 같음' ? '위와 같음' : '0';
+        if (suf) suf.hidden = k.node.disabled || String(wb.get('하의 스위칭 계산', 'Q' + q) ?? '') !== 'unit-percent';
+        k.node.placeholder = !k.node.disabled ? '' : c === 'F' && !swV('E', r) && (slot || !swV('D', r) || swV('D', r) === swV('A', r)) ? '같음' : '';
       }
     }
   }

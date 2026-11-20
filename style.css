@@ -979,3 +979,29 @@ body.view-rank .who, body.view-admin .who { display: none; }
   .sw-line { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) 82px; row-gap: 4px; }
   .sw-side { grid-column: 1 / -1; font-size: 12px; }
 }
+/* 하의 스위칭: 바지 칸(소켓 1~5 · 칩 · 카트리지) */
+.sw-tbl { margin-top: 8px; }
+.sw-srow { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: center; padding: 3px 0; }
+.sw-thead { padding-bottom: 4px; }
+.sw-th { font-size: 13px; font-weight: 700; color: var(--text); }
+.sw-th small { font-size: 12px; font-weight: 400; color: var(--mute); margin-left: 6px; }
+.sw-slot { font-size: 13px; color: var(--sub); }
+.sw-half { display: grid; grid-template-columns: minmax(0, 1fr) 92px; gap: 6px; align-items: center; min-width: 0; }
+.sw-half select, .sw-half input { width: 100%; font-size: 14px; padding: 7px 26px 7px 10px; }
+.sw-half input { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sw-half .pctwrap { width: 100%; }
+.sw-half select:disabled, .sw-half input:disabled { opacity: .45; }
+.sw-ro { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; min-height: 36px; padding: 8px 10px; font-size: 14px; color: var(--text); border-radius: 10px; border: 1px dashed var(--line); box-sizing: border-box; }
+.sw-ro small { font-size: 12px; color: var(--mute); }
+.sw-box .sw-need { box-shadow: inset 0 0 0 1.5px var(--up); }
+.sw-more { margin-top: 16px; }
+.sw-more summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--sub); padding: 4px 0; }
+@media (max-width: 560px) {
+  .sw-thead { display: none; }
+  .sw-srow { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .sw-srow:nth-child(2) { border-top: 0; }
+  .sw-slot { font-weight: 700; color: var(--text); }
+  .sw-half { grid-template-columns: 64px minmax(0, 1fr) 84px; }
+  .sw-half::before { content: attr(data-side); font-size: 12px; color: var(--sub); }
+  .sw-ro { grid-column: 2 / -1; }
+}
