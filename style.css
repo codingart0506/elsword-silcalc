@@ -1001,7 +1001,7 @@ body.view-rank .who, body.view-admin .who { display: none; }
   .sw-srow { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 8px 0; border-top: 1px solid var(--line); }
   .sw-srow:nth-child(2) { border-top: 0; }
   .sw-slot { font-weight: 700; color: var(--text); }
-  .sw-half { grid-template-columns: 64px minmax(0, 1fr) 84px; }
+  .sw-half { grid-template-columns: 64px minmax(0, 1fr) 84px 22px; }
   .sw-half::before { content: attr(data-side); font-size: 12px; color: var(--sub); }
   .sw-ro { grid-column: 2 / -1; }
 }
@@ -1032,8 +1032,13 @@ input.ocr-check:focus { background: #fff !important; }
 .srow.multi .ctl .pick + select { max-width: 124px; }
 .grp.wide .srow.multi .ctl .pick + select { max-width: 210px; }
 .sw-half .pick-in { font-size: 14px; padding: 7px 26px 7px 10px; background-position: right 9px center; }
-/* 하의 스위칭: 소켓 1을 2~5에도 */
-.sw-slot { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
-.sw-copy { font-size: 11px; padding: 0; color: var(--blue); background: none; border: 0; cursor: pointer; white-space: nowrap; }
-@media (max-width: 560px) { .sw-slot { flex-direction: row; align-items: baseline; gap: 8px; } .sw-copy { font-size: 12px; } }
+/* 하의 스위칭: 소켓 칸 옆 ↓ = 아래 소켓도 똑같이 */
+.sw-half { grid-template-columns: minmax(0, 1fr) 92px 22px; }
+.sw-fill, .sw-fill-sp { width: 22px; height: 32px; }
+.sw-fill { padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='14' viewBox='0 0 12 14'%3E%3Cpath d='M6 1.5 V11.5 M1.8 7.6 L6 11.8 L10.2 7.6' stroke='%233182F6' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: center; background-repeat: no-repeat; }
+.sw-fill:hover { background-color: var(--fill); }
+.sw-fill.off { visibility: hidden; }
 .sw-half input.pick-in { text-align: left; font-weight: 400; }
+@media (max-width: 560px) { .sw-half { grid-template-columns: 64px minmax(0, 1fr) 84px 22px; } }

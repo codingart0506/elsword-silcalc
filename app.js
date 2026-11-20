@@ -738,7 +738,9 @@
       valNode._inp = inp;
     }
     swNodes[kv] = valNode._inp || valNode;
-    return el('div', { class: 'sw-half', 'data-side': side === 'L' ? '강배 바지' : '역강배 바지' }, makePicker(sel), valNode);
+    const last = s.cat !== SW_SOCK || !SW_SLOTS.some(x => x.cat === SW_SOCK && SW_SLOTS.indexOf(x) > SW_SLOTS.indexOf(s));
+    const fill = last ? el('span', { class: 'sw-fill-sp' }) : el('button', { type: 'button', class: 'sw-fill', 'data-fill': k, title: '아래 소켓도 똑같이', 'aria-label': `${s.name} 옵션을 아래 소켓에도 똑같이`, onclick: () => swFillDown(side, s) });
+    return el('div', { class: 'sw-half', 'data-side': side === 'L' ? '강배 바지' : '역강배 바지' }, makePicker(sel), valNode, fill);
   }
   // 그 바지 종류에 없는 칸(네블론의 추가 효과, 엑사스케일의 카트리지·옵션변환)은 비워 둠. 모바일에서는 줄째 숨김
   const swNA = () => el('div', { class: 'sw-half sw-none' });
@@ -786,32 +788,25 @@
       const L = s.cart ? (lOn ? el('div', { class: 'sw-half', 'data-side': '강배 바지' }, el('span', { class: 'sw-ro' }, el('span', { id: 'swCart' }), el('small', { text: '위 카트리지 칸' }))) : swNA('L', lt))
         : lOn ? swHalf('L', s, true) : swNA('L', lt);
       const R = rOn ? swHalf('R', s, lOn) : swNA('R', rt);
-      const lab = el('span', { class: 'sw-slot' }, el('span', { text: s.name }));
-      if (s.id === 's1') lab.append(el('button', { type: 'button', class: 'txt sw-copy', id: 'swCopy', hidden: '', text: '2~5도 같게', title: '소켓 1의 옵션·수치를 소켓 2~5에도 똑같이 넣어요', onclick: swCopySock }));
-      tbl.append(el('div', { class: 'sw-srow' }, lab, L, R));
+      tbl.append(el('div', { class: 'sw-srow' }, el('span', { class: 'sw-slot', text: s.name }), L, R));
     }
     box.append(tbl);
     if (foc) { const n = box.querySelector(`[data-k="${foc}"], [data-cell="${foc}"]`); if (n) n.focus(); }
   }
-  // 소켓 1과 같은 옵션·수치를 소켓 2~5에도(양쪽 바지 각각, 소켓 1이 비어 있는 쪽은 그대로)
-  function swCopySock() {
-    const s1 = SW_SLOTS[0], rest = SW_SLOTS.filter(s => s.cat === SW_SOCK && s !== s1);
+  // 소켓 칸 옆 ↓: 이 소켓의 옵션·수치를 같은 바지의 아래 소켓에 모두 똑같이
+  function swFillDown(side, s) {
+    const o = swRaw(inputs, swK(side, s)), v = swRaw(inputs, swK(side, s, 1));
+    const below = SW_SLOTS.filter(x => x.cat === SW_SOCK && SW_SLOTS.indexOf(x) > SW_SLOTS.indexOf(s));
+    if (!below.length) return;
     let last = null;
-    for (const side of 'LR') {
-      const o = swRaw(inputs, swK(side, s1)), v = swRaw(inputs, swK(side, s1, 1));
-      if (o === '') continue;
-      for (const s of rest) { setIn(swK(side, s), o); setIn(last = swK(side, s, 1), v === '' ? null : v); }
-    }
-    if (!last) return;
+    for (const x of below) { setIn(swK(side, x), o === '' ? null : o); setIn(last = swK(side, x, 1), v === '' ? null : v); }
     setVal(last, inputs[last]);
-    toast('소켓 2~5를 소켓 1과 같게 넣었어요');
   }
   // 매번 맞추는 것: 값, 잠금, % 표시, 비어 있으면 안 되는 수치 칸 표시, 강배 바지 종류·강화·카트리지 글자, 안내 문구
   function syncSw() {
     if (!swOn() || swState !== 'ready' || !$('#swBox')) return;
     const arm = $('#swArm'); if (arm) arm.textContent = `${g('J28') ?? '-'} +${g('L28') ?? 0}`;
     const cart = $('#swCart'); if (cart) cart.textContent = swCartText();
-    const cp = $('#swCopy'); if (cp) cp.hidden = !swRaw(inputs, swK('L', SW_SLOTS[0])) && !swRaw(inputs, swK('R', SW_SLOTS[0]));
     const msg = $('#swMsg'); if (msg) { const t = swMsg(); msg.textContent = t; msg.hidden = !t; }
     const lt = String(inputs.J28 ?? '');
     for (const s of SW_SLOTS) for (const side of 'LR') {
@@ -824,6 +819,7 @@
       else if (document.activeElement !== vn) vn.value = v === '' ? '' : String(v);
       if (vn.tagName !== 'SELECT') { vn.placeholder = same ? '같음' : ''; const suf = vn.parentNode.querySelector('.suffix'); const x = swOpt(s.cat, o); if (suf) suf.hidden = vn.disabled || !(x && x.pct); }
       vn.classList.toggle('sw-need', !vn.disabled && v === '');
+      const fb = sel.closest('.sw-half') && sel.closest('.sw-half').querySelector('.sw-fill'); if (fb) fb.classList.toggle('off', o === '');
     }
   }
 
@@ -1890,6 +1886,80 @@
     gain.append('최적으로 바꾸면 실투력 ', el('b', { text: fmtInt(res.now) }), ' → ', el('b', { class: 'up', text: fmtInt(res.cp) }), ` (+${((res.cp / res.now - 1) * 100).toFixed(2)}%)`);
   }
   hooks.push(() => { if (sockRes && sockRes.key !== store.current) sockRes = null; renderSock(); });
+
+  // ---------- 만크·만극 계산: 크리티컬·극대화가 실제로 100%(만)인지, 모자라거나 넘친 게 얼마인지 ----------
+  // 실제 확률은 시트 그대로: 크리 = MIN(1, 점감 뒤 크리 × 곱 배율 + 최종 가산 − 필드 크리 저항)(C446, 격려 전), 극대 = MIN(1, …)(C423)
+  // 만까지 필요한 스탯창 값은 스탯창 크리(C17)·극대(C19)를 바꿔 가며 찾음. 마법석 칸 수는 소켓 배분 최적화의 한 칸 수치로 셈
+  let capSeq = 0, capT = 0, capRes = null;
+  function capEval(over) {
+    if (!simWb) simWb = new E.Workbook(M);
+    simWb.assign(sheetInputs(Object.assign({}, inputs, over || {})));
+    const n = (a) => { const v = simWb.get(CALC, a); return typeof v === 'number' ? v : NaN; };
+    return { crit: n('C444') + n('C445') - n('C202'), max: n('C420') * n('C421') + n('C422'), res: n('C202') };
+  }
+  // 스탯창 값 x에서 실제 확률이 1 이상이 되는 가장 작은 x(0.01% 단위)
+  function capNeed(cell, key) {
+    const at = (x) => capEval({ [cell]: x })[key];
+    const cur = Number(inputs[cell]) || 0;
+    let lo, hi;
+    if (at(cur) >= 1 - 1e-9) { lo = 0; hi = cur; if (at(0) >= 1 - 1e-9) return 0; }
+    else { lo = cur; hi = cur + 0.5; let k = 0; while (at(hi) < 1 - 1e-9 && k++ < 6) { lo = hi; hi += 0.5; } if (at(hi) < 1 - 1e-9) return null; }
+    for (let i = 0; i < 24 && hi - lo > 5e-5; i++) { const m = (lo + hi) / 2; if (at(m) >= 1 - 1e-9) hi = m; else lo = m; }
+    return Math.ceil(hi * 1e4 - 1e-6) / 1e4;
+  }
+  function capCalc() {
+    const cfg = sockCfg(), sv = (k) => Number(cfg.v[k] ?? (SOCK.find(o => o.k === k) || {}).v) || 0;
+    const now = capEval({});
+    const rows = [];
+    for (const [cell, key, toRaw, toWin, sk, name, cap] of [['C17', 'crit', SOCK_CI, SOCK_CW, 'crit', '크리티컬', '만크'], ['C19', 'max', SOCK_MI, SOCK_MW, 'max', '극대화', '만극']]) {
+      const cur = Number(inputs[cell]) || 0, need = capNeed(cell, key), step = sv(sk) / 100;
+      const r = { cell, name, cap, cur, real: Math.max(0, Math.min(1, now[key])), need, step };
+      if (need !== null && step > 0) {
+        const raw = toRaw(cur);
+        if (cur < need) { let k = 0; while (toWin(raw + k * step) < need - 1e-6 && k < 40) k++; r.add = k; }
+        else { let k = 0; while (toWin(Math.max(0, raw - (k + 1) * step)) >= need - 1e-6 && k < 40) k++; r.spare = k; }
+      }
+      rows.push(r);
+    }
+    // 만크극을 맞추면: 모자라면 힘트마(사냥석부터)를 빼서 크리·극대 마법석으로, 넘치면 남는 크리·극대 마법석을 힘트마로
+    const tgt = {}; for (const r of rows) if (r.need !== null) tgt[r.cell] = r.need;
+    const m = Object.keys(tgt).length ? sockMatch({}, Object.assign(tgt, { modeC: 'ceil', modeM: 'ceil' })) : null;
+    return { rows, res: now.res, cp: cpOf(wb), m, key: store.current };
+  }
+  function renderCap() {
+    const card = $('#capCard'); if (!card) return;
+    const bad = isEmptySetting(inputs) || !(Number(g('C11')) > 0) || typeof cpOf(wb) !== 'number' || !!shared;
+    card.hidden = bad; if (bad) return;
+    // 값을 바꿀 때마다 바로 다시 재면 무거워서, 손을 멈추면 계산
+    const my = ++capSeq; clearTimeout(capT);
+    capT = setTimeout(() => { if (my !== capSeq) return; try { capRes = capCalc(); } catch (e) { console.error(e); capRes = null; } drawCap(); }, 450);
+  }
+  function drawCap() {
+    const body = $('#capBody'); if (!body) return; body.textContent = '';
+    const r0 = capRes; if (!r0 || r0.key !== store.current) return;
+    const tb = el('table', { class: 'opt-table cap-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '항목' })), el('th', { scope: 'col', text: '실제 확률' }), el('th', { scope: 'col', text: '만까지' }))));
+    const tbody = el('tbody'); tb.append(tbody);
+    for (const r of r0.rows) {
+      let txt, cls = 'same';
+      if (r.need === null) { txt = '스탯창으로는 못 닿아요'; cls = 'down'; }
+      else if (r.cur < r.need) { txt = `스탯창 +${fmtPct(r.need - r.cur)}${r.add != null ? ` (마법석 ${r.add}칸)` : ''}`; cls = 'down'; }
+      else { txt = r.cur - r.need < 5e-5 ? `${r.cap}이에요` : `${r.cap}, ${fmtPct(r.cur - r.need)} 남아요${r.spare ? ` (마법석 ${r.spare}칸)` : ''}`; cls = 'up'; }
+      tbody.append(el('tr', null, el('th', { scope: 'row', text: r.name }), el('td', { text: fmtPct(r.real) }), el('td', { class: cls, text: txt })));
+    }
+    body.append(tb);
+    const need = r0.rows.map(r => r.need === null ? '-' : `${r.name.slice(0, 2)} ${fmtPct(r.need)}`).join(', ');
+    body.append(el('p', { class: 'opt-hint', text: `만크·만극에 딱 맞는 스탯창 값: ${need}. 고른 필드의 크리 저항(${fmtPct(r0.res, 0)})까지 넣고, 격려는 빼고 계산했어요` }));
+    const m = r0.m, gain = el('p', { class: 'opt-gain' });
+    if (m && m.moves && m.moves.length) {
+      const mv = m.moves.map(x => x.n > 0 ? `힘트마 ${x.n}칸 → ${x.t}` : `${x.t} ${-x.n}칸 → 힘트마`).join(', ');
+      const d = m.cp / r0.cp - 1;
+      gain.append(`만크·만극에 맞추면(${mv}) 실투력 `, el('b', { text: fmtInt(r0.cp) }), ' → ', el('b', { class: d >= 0 ? 'up' : 'down', text: fmtInt(m.cp) }), ` (${d >= 0 ? '+' : ''}${(d * 100).toFixed(2)}%)`);
+      if (m.short) gain.append(el('br'), '소켓 배분 최적화에 넣은 힘트마·사냥석 칸이 모자라서 다 못 맞췄어요');
+      if (d < 0) gain.append(el('br'), '이 세팅은 만크·만극보다 지금이 실투력이 높아요. 가장 좋은 배분은 크극 최적화를 보세요');
+    } else if (r0.rows.every(r => r.need !== null && r.cur >= r.need - 5e-5)) gain.textContent = '이미 만크·만극이에요';
+    body.append(gain);
+  }
+  hooks.push(renderCap);
 
   // ---------- 시작 ----------
   function selfTest() {
