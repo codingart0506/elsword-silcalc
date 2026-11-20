@@ -1736,7 +1736,8 @@
   // ---------- 소켓 배분 최적화 (엑셀 "최적 소켓 배분 계산"): 바꿀 수 있는 소켓 칸을 옵션별로 다시 나눠 실투력이 가장 높은 배분을 찾음 ----------
   // 유강강초(유연·강인·강렬·초월 스킬 데미지)는 실투력에 들어가는 강렬·초월 스킬 데미지에 둘 다 반영
   const SOCK = [
-    { k: 'crit', t: '크리티컬', cells: ['C17'], v: 6 }, { k: 'max', t: '극대화', cells: ['C19'], v: 6 }, { k: 'boss', t: '보스 데미지', cells: ['C21'], v: 3 },
+    { k: 'crit', t: '크리티컬', cells: ['C17'], v: 6 }, { k: 'max', t: '극대화', cells: ['C19'], v: 6 }, { k: 'boss', t: '보스 데미지 (힘트마)', cells: ['C21'], v: 3 },
+    { k: 'boss2', t: '보스 데미지 (사냥석)', cells: ['C21'], v: 2.5 },
     { k: 'all', t: '모든 스킬 데미지', cells: ['C33'], v: 2 }, { k: 'brv', t: '초월 스킬 데미지', cells: ['C30'], v: 2.5 }, { k: 'str', t: '강렬 스킬 데미지', cells: ['C29'], v: 2.5 },
     { k: 'both', t: '유강강초', cells: ['C29', 'C30'], v: 2 },
   ];
@@ -1786,12 +1787,15 @@
       critOk = critAt(lock) >= opt.critMin - 1e-4;
     }
     const free = (i) => i !== CI || lock < 0;
+    // 사냥석(보뎀 2.5): 지금 칸 수보다 늘리지 않음. 힘트마는 보뎀 칸 전체가 늘어난 만큼만 더함(사냥석을 힘트마로 바꾸는 건 업그레이드라 배분에서 안 셈)
+    const BI = SOCK.findIndex(o => o.k === 'boss'), HI = SOCK.findIndex(o => o.k === 'boss2');
+    const okA = (t) => HI < 0 || BI < 0 || (t[HI] <= cur[HI] && t[BI] <= cur[BI] + Math.max(0, t[BI] + t[HI] - cur[BI] - cur[HI]));
     // 한 칸씩 가장 많이 오르는 옵션에 넣고(탐욕), 한 칸 옮기기로 더 오르는 게 없을 때까지 다듬음
     let a = SOCK.map(() => 0);
     if (lock >= 0) a[CI] = lock;
     for (let s = a.reduce((x, y) => x + y, 0); s < N; s++) {
       let bi = -1, bv = -Infinity;
-      SOCK.forEach((o, i) => { if (!val[i] || !free(i)) return; const t = a.slice(); t[i]++; const v = cpOf(t); if (v > bv) { bv = v; bi = i; } });
+      SOCK.forEach((o, i) => { if (!val[i] || !free(i)) return; const t = a.slice(); t[i]++; if (!okA(t)) return; const v = cpOf(t); if (v > bv) { bv = v; bi = i; } });
       if (bi < 0) break;
       a[bi]++;
     }
@@ -1803,7 +1807,7 @@
           if (i === j || !x[i] || !val[j] || !free(i) || !free(j)) continue;
           for (const d of [1, 2]) {
             if (x[i] < d) continue;
-            const t = x.slice(); t[i] -= d; t[j] += d; const v = cpOf(t);
+            const t = x.slice(); t[i] -= d; t[j] += d; if (!okA(t)) continue; const v = cpOf(t);
             if (v > xv + 1e-6) { x = t; xv = v; moved = true; }
           }
         }
@@ -1822,9 +1826,12 @@
     const counted = SOCK.some(o => Number(cfg.n[o.k]) > 0), have = (k) => counted ? Math.max(0, Math.round(Number(cfg.n[k]) || 0)) : Infinity;
     const src = Object.assign({}, inputs, extra || {}), o = Object.assign({}, extra || {});
     // 옵션마다 맞추는 방식: ceil = 기준 이상 / near = 기준에 가장 가깝게 / floor = 기준보다 마법석 한 칸만큼 모자라게
-    const r6 = (x) => Math.round(x * 1e6) / 1e6, bStep = val('boss') / 100;
+    const r6 = (x) => Math.round(x * 1e6) / 1e6, bStep = val('boss') / 100, hStep = val('boss2') / 100;
     const modeOf = (c) => (tgt || {})[c === 'C17' ? 'modeC' : 'modeM'] || (tgt || {}).mode || 'ceil';
-    let boss = Number(src.C21) || 0, bossLeft = have('boss'), short = false, skip = null;
+    // 칸 수를 넣었으면 사냥석 칸도 뺄 수 있는 보뎀 칸으로 셈. 뺄 때는 사냥석부터
+    let h2Left = counted ? have('boss2') : 0;
+    let boss = Number(src.C21) || 0, bossLeft = counted ? have('boss') + h2Left : Infinity, short = false, skip = null;
+    const drop = (m) => { if (m <= 0) return m * bStep; const a = Math.min(m, h2Left); return a * hStep + (m - a) * bStep; };
     const moves = [];
     for (const [c, k, toRaw, toWin] of [['C17', 'crit', SOCK_CI, SOCK_CW], ['C19', 'max', SOCK_MI, SOCK_MW]]) {
       const T = Number((tgt || {})[c]) || 0, step = val(k) / 100;
@@ -1844,15 +1851,15 @@
       }
       // best: 기준까지 채우는 것(n칸)과 덜 채우는 것(0~n−1칸)을 다 재서 실투력이 가장 높은 쪽. 기준에 조금 모자랄 때 힘트마를 빼면 손해일 수 있어서
       if (md === 'best' && n > 0) {
-        const at = (m) => { const t = Object.assign({}, o, { [c]: r6(win(m)), C21: r6(Math.max(0, boss - m * bStep)) }); return cpWith(t); };
+        const at = (m) => { const t = Object.assign({}, o, { [c]: r6(win(m)), C21: r6(Math.max(0, boss - drop(m))) }); return cpWith(t); };
         let bn = n, bv = at(n);
         for (let m = n - 1; m >= 0; m--) { const v = at(m); if (v > bv + 1e-6) { bv = v; bn = m; } }
         if (bn < n) skip = { k, t: (SOCK.find(x => x.k === k) || {}).t || k, need: n, used: bn, T, at: win(bn), cpFill: at(n), cpKeep: bv };
         n = bn;
       }
       if (win(n) < T - 1e-4 && md === 'ceil') short = true;
-      if (n > 0) bossLeft -= n;
-      boss -= n * bStep;
+      boss -= drop(n);
+      if (n > 0) { bossLeft -= n; h2Left -= Math.min(n, h2Left); }
       if (n) moves.push({ k, t: (SOCK.find(x => x.k === k) || {}).t || k, n });
       o[c] = r6(win(n));
     }
