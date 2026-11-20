@@ -820,7 +820,8 @@
   }
   const STEP = { 'loading tesseract core': '엔진 불러오는 중', 'initializing tesseract': '엔진 준비 중', 'loading language traineddata': '글자 데이터 불러오는 중', 'initializing api': '준비 중', 'recognizing text': '글자 읽는 중' };
   let pendingExtras = null; // 적용 버튼을 누른 뒤에 물어볼 값
-  // 사진에서 못 읽었거나 흐리게 읽은(확인 필요) 상세 스탯 칸: 적용한 뒤 그 칸을 빨갛게 표시. 값을 바꾸면(직접 입력 등) 표시가 사라짐
+  // 사진에서 아예 못 읽은 상세 스탯 칸: 적용한 뒤 그 칸을 빨갛게 표시. 값을 바꾸면(직접 입력 등) 표시가 사라짐
+  // (흐리게 읽은 '확인 필요' 값은 대부분 맞게 읽혀서 빨갛게 하지 않음)
   let pendingMiss = null, ocrMiss = null;
   function markOcrMiss() {
     const on = ocrMiss && ocrMiss.key === store.current;
@@ -860,7 +861,7 @@
   function showOcrResult(res, gear) {
     const body = $('#ocrBody'); body.innerHTML = '';
     const found = res.found; const cells = O.FIELDS.map(f => f.cell).filter(c => found[c] && c !== 'C35'); // 동작속도는 ver.3 시트에 없음
-    pendingMiss = cells.length ? O.FIELDS.map(f => f.cell).filter(c => c && c !== 'C35' && (!found[c] || found[c].score < 0.8 || found[c].guessed)) : null;
+    pendingMiss = cells.length ? O.FIELDS.map(f => f.cell).filter(c => c && c !== 'C35' && !found[c]) : null;
     $('#ocrCount').textContent = cells.length ? `${cells.length}개 항목을 읽었어요` : '항목을 못 찾았어요. 상세 스탯 창 부분만 드래그로 골라서 다시 읽어 보세요.';
     // 사진이 작거나 읽은 항목이 적으면 찍는 조건 안내
     const small = shot && (shot.width < 1600 || shot.height < 900);
@@ -1175,7 +1176,7 @@
     const missN = ocrMiss && ocrMiss.key === store.current ? Object.keys(ocrMiss.vals).length : 0;
     // 적용이 끝나면 인식 결과 목록만 접고, 사진은 ×로 지울 때까지 남겨 둠
     $('#ocrResult').hidden = true;
-    toast((autoBase ? `${n}개 값을 채우고 기준 세팅으로 잡았어요` : `${n}개 값을 채웠어요`) + (missN ? `. 빨간 칸 ${missN}개는 사진에서 못 읽었거나 확인이 필요해요` : ''));
+    toast((autoBase ? `${n}개 값을 채우고 기준 세팅으로 잡았어요` : `${n}개 값을 채웠어요`) + (missN ? `. 빨간 칸 ${missN}개는 사진에서 못 읽었어요` : ''));
     // 적용 뒤: 무기 공격력을 아직 안 넣었거나 극대화 범위를 못 읽었으면 그것만 다시 물음
     if (pendingExtras) {
       const p = pendingExtras; pendingExtras = null;
