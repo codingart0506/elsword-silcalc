@@ -1937,14 +1937,14 @@
   function drawCap() {
     const body = $('#capBody'); if (!body) return; body.textContent = '';
     const r0 = capRes; if (!r0 || r0.key !== store.current) return;
-    const tb = el('table', { class: 'opt-table cap-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '항목' })), el('th', { scope: 'col', text: '실제 확률' }), el('th', { scope: 'col', text: '만까지' }))));
+    const tb = el('table', { class: 'opt-table cap-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '항목' })), el('th', { scope: 'col', text: '현재 스탯' }), el('th', { scope: 'col', text: '만크극까지' }))));
     const tbody = el('tbody'); tb.append(tbody);
     for (const r of r0.rows) {
       let txt, cls = 'same';
       if (r.need === null) { txt = '스탯창으로는 못 닿아요'; cls = 'down'; }
       else if (r.cur < r.need) { txt = `스탯창 +${fmtPct(r.need - r.cur)}${r.add != null ? ` (마법석 ${r.add}칸)` : ''}`; cls = 'down'; }
       else { txt = r.cur - r.need < 5e-5 ? `${r.cap}이에요` : `${r.cap}, ${fmtPct(r.cur - r.need)} 남아요${r.spare ? ` (마법석 ${r.spare}칸)` : ''}`; cls = 'up'; }
-      tbody.append(el('tr', null, el('th', { scope: 'row', text: r.name }), el('td', { text: fmtPct(r.real) }), el('td', { class: cls, text: txt })));
+      tbody.append(el('tr', null, el('th', { scope: 'row', text: r.name }), el('td', { text: fmtPct(r.cur) }), el('td', { class: cls, text: txt })));
     }
     body.append(tb);
     const need = r0.rows.map(r => r.need === null ? '-' : `${r.name.slice(0, 2)} ${fmtPct(r.need)}`).join(', ');
