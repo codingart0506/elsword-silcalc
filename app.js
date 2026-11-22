@@ -77,6 +77,7 @@
         fields: [{ c: 'A_B4', t: '직접 넣기' }, { c: 'A_B5', t: '입력 기준' }, { c: 'A_B6', t: '강렬 스킬' }, { c: 'A_B7', t: '초월 스킬' }] },
       { bar: '추피 보정', note: '싸움이 짧아 추가 지속 피해가 다 안 들어갈 때. 켜면 랭킹에 올릴 수 없어요', fields: [{ c: 'A_E4', t: '켜기' }, { c: 'A_E5', t: '평균 딜타임 (초)' }] },
       { bar: '가동률 DPS 전환', note: '스킬을 더 자주 쓰는 효과를 실투력에 넣는 비율. 켜면 랭킹에 올릴 수 없어요', noteCell: 'A_G7', fields: [{ c: 'A_H4', t: '직접 넣기' }, { c: 'A_H5', t: '전환 계수' }] },
+      { bar: '쿨타임 감소 상한', note: '쿨감 상한을 직업 기본값보다 낮게 정해 두고, 그 상한에 맞춘 세팅을 볼 때. 켜면 랭킹에 올릴 수 없어요', noteCell: 'A_J7', fields: [{ c: 'A_K4', t: '켜기' }, { c: 'A_K5', t: '상한 (%)' }] },
       { bar: 'HP 구간별 하의 스위칭', note: '보스 체력 50%를 기준으로 다른 하의로 갈아입을 때. 켜면 랭킹에 올릴 수 없어요', wide: true, fields: [], extra: 'sw' },
     ] },
   ];
@@ -121,6 +122,8 @@
     const vals = (m instanceof E.Matrix ? m.flat() : [m]).filter(v => v !== null && v !== '' && !E.isErr(v)).map(v => fromSheet(a, v));
     return [...new Set(vals)];
   }
+  // 쿨타임 감소 상한 안내: 시트 '기본값 · 35%' → 이 직업 기본 상한. 켰는데 상한 칸이 0~100이 아니면 시트 안내 문구
+  const capNote = () => { const w = label('A_J6'); if (w) return w; const m = /([\d.]+)\s*%/.exec(label('A_J7')); return m ? `이 직업의 기본 상한은 ${+m[1]}%예요` : ''; };
   const kindOf = (a, f) => f && f.k ? f.k : DV[a] && DV[a].type === 'list' ? 'select' : PCT.has(a) ? 'pct' : typeof defaultOf(a) === 'boolean' ? 'check' : 'num';
 
   const CAN_LINK = !!window.SIL_CDN; // 링크 공유는 직접 호스팅판에서만 (Claude 링크는 주소 뒤 값을 못 넘김)
@@ -136,7 +139,7 @@
     J26: '사룡무', L26: 12, J27: '네블론', J28: '네블론', J29: '네블론', J30: '네블론', L27: 11, L28: 11, L29: 11, L30: 11,
     J31: NONE, J32: NONE, J33: NONE, J34: NONE, L31: NONE, L32: NONE, L33: NONE, L34: NONE,
     G33: '엑사&네블론 - 연산', G34: '유수', H34: '유니크', I8: '네블론 레이드 : 글리터 보스',
-    A_B4: true, A_B5: '강초뎀 적용 이전', A_B6: 35, A_B7: 65, _s35: 1, A_E4: false, A_E5: 30, A_H4: false, A_H5: 0.24,
+    A_B4: true, A_B5: '강초뎀 적용 이전', A_B6: 35, A_B7: 65, _s35: 1, A_E4: false, A_E5: 30, A_H4: false, A_H5: 0.24, A_K4: false, A_K5: 17,
   });
   const blank = () => Object.assign({}, BLANK);
   const isEmptySetting = (inp) => !inp.C6 || !(Number(inp.C11) > 0);
@@ -177,7 +180,7 @@
   }
 
   // 실투력 계산 방식 버전: 계산이 바뀔 때 올림. 랭킹에 올린 세팅에 같이 적어서, 예전 방식으로 올린 기록은 랭킹에 '업데이트 전 지표'로 표시
-  const CALC_VER = '3.0.18'; // 시트 3.0.19·3.0.21·3.0.22도 그대로 둠(올리면 랭킹이 모두 '업데이트 전 지표'로 표시됨). 3.0.21은 딜러 직업의 서포트 1·2형 카트리지만 효과가 빠짐(서포터 직업만 적용), 3.0.22는 레이지 하츠 폭나헨 크뎀을 뺌
+  const CALC_VER = '3.0.18'; // 시트 3.0.19·3.0.21·3.0.22도 그대로 둠(올리면 랭킹이 모두 '업데이트 전 지표'로 표시됨). 3.0.21은 딜러 직업의 서포트 1·2형 카트리지만 효과가 빠짐(서포터 직업만 적용), 3.0.22는 레이지 하츠 폭나헨 크뎀을 뺌, 3.0.23은 쿨감 상한 설정 추가와 강렬·초월 쿨감이 다를 때만 아주 조금 달라짐
 
   // ---------- 상태 / 저장 ----------
   const LS = 'silcalc.v1';
@@ -543,7 +546,7 @@
       c.row.hidden = String(g(arm)) !== '네블론' && String(g(jc) ?? NONE) === NONE;
     }
     // 기본 강렬:초월 비율 안내(직업·스탯마다 다름)
-    document.querySelectorAll('[data-notecell]').forEach(n => { const c = n.getAttribute('data-notecell'); const t = c === 'A_A9' && inputs.A_B4 === true ? '' : label(c); if (n.textContent !== t) n.textContent = t; n.hidden = !t; });
+    document.querySelectorAll('[data-notecell]').forEach(n => { const c = n.getAttribute('data-notecell'); const t = c === 'A_A9' && inputs.A_B4 === true ? '' : c === 'A_J7' ? capNote() : label(c); if (n.textContent !== t) n.textContent = t; n.hidden = !t; });
   }
 
   // ---------- 카트리지 → 상세 스탯 ----------
@@ -1585,7 +1588,7 @@
   }
 
   // ---------- 랭킹 화면(rank.js)과 연결 ----------
-  const SKIP_EDIT = new Set(['ZB1', 'ZB2', 'ZB3', 'C12', 'C13', 'G34', 'H34', 'J31', 'L31', 'J32', 'L32', 'J33', 'L33', 'J34', 'L34', 'A_B4', 'A_B5', 'A_B6', 'A_B7', 'A_E4', 'A_E5', 'A_H4', 'A_H5', '_key', '_eq', '_v', '_s35', ...SW_CELLS]); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
+  const SKIP_EDIT = new Set(['ZB1', 'ZB2', 'ZB3', 'C12', 'C13', 'G34', 'H34', 'J31', 'L31', 'J32', 'L32', 'J33', 'L33', 'J34', 'L34', 'A_B4', 'A_B5', 'A_B6', 'A_B7', 'A_E4', 'A_E5', 'A_H4', 'A_H5', 'A_K4', 'A_K5', '_key', '_eq', '_v', '_s35', ...SW_CELLS]); // 사진에 없는 값(직접 넣는 값)은 '손으로 고침'으로 치지 않음
   // 지금 세팅에서 몇 칸만 바꿨을 때의 실투력(화면·저장값은 그대로). 아바타 추천을 실투력으로 다시 줄 세울 때 씀
   let simWb = null;
   function cpWith(over) {
@@ -1652,7 +1655,7 @@
     sockSolve: (extra, opt) => { const r = sockSolve(extra || {}, opt); return r && !r.err ? { cp: r.cp, now: r.now, best: r.best.slice(), cur: r.cur.slice(), N: r.N, over: Object.assign({}, extra || {}, r.over), names: SOCK.map(o => o.t), critOk: r.critOk } : null; },
     rankBuffs: () => Object.keys(EXTRA_BUFF).filter(a => inputs[a] === true).map(a => EXTRA_BUFF[a])
       .concat((inputs.J22 ?? '미적용') !== '미적용' ? [`이벤트 버프(${inputs.J22})`] : [])
-      .concat(inputs.A_E4 === true ? ['추피 보정'] : [], inputs.A_H4 === true ? ['가동률 DPS 전환'] : [], swOn() ? ['하의 스위칭'] : []),
+      .concat(inputs.A_E4 === true ? ['추피 보정'] : [], inputs.A_H4 === true ? ['가동률 DPS 전환'] : [], inputs.A_K4 === true ? ['쿨타임 감소 상한'] : [], swOn() ? ['하의 스위칭'] : []),
     missing: () => isEmptySetting(inputs) ? ['세팅'] : ['C12', 'C13'].filter(a => !(Number(g(a)) > 0)).map(a => a === 'C12' ? '극대화 범위 최댓값' : '무기 공격력'),
     cls: () => inputs.C6 || '',
     val: (c) => g(c),
