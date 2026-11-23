@@ -710,6 +710,20 @@
     setVal('A_B65', '사용');
   }
   function swSel(a) { return makeControl(a, {}); }
+  // 재련 단계: 숫자를 치면 바로 반영(고르는 칸 대신 글자 칸). 없는 단계면 빨간 테두리만
+  function swRefine(a) {
+    const node = el('input', { type: 'text', inputmode: 'numeric', autocomplete: 'off', 'data-cell': a, class: 'num sw-ref', placeholder: '0',
+      oninput: () => {
+        const t = node.value.replace(/[^\d]/g, '');
+        if (t === '') { node.classList.remove('bad'); return; }
+        const n = Number(t), ok = (optionsOf(a) || []).some(o => Number(o) === n);
+        node.classList.toggle('bad', !ok);
+        if (ok && Number(g(a)) !== n) setVal(a, parseOpt(a, String(n)));
+      },
+      onfocus: () => node.select(), onblur: () => syncControl(a) });
+    controls[a] = { node, kind: 'num' };
+    return el('span', { class: 'pctwrap sw-refwrap' }, node, el('span', { class: 'suffix', text: '단계' }));
+  }
   const swOptLabel = (cat, o) => o === NONE ? '없음' : cat === SW_CART ? o.replace(/^하이퍼 카트리지 \[(.+)\]$/, '$1 (하이퍼)') : o;
   function swCartText() {
     const j = g('J32'), l = g('L32');
@@ -742,7 +756,7 @@
     }
     swNodes[kv] = valNode._inp || valNode;
     const last = s.cat !== SW_SOCK || !SW_SLOTS.some(x => x.cat === SW_SOCK && SW_SLOTS.indexOf(x) > SW_SLOTS.indexOf(s));
-    const fill = last ? el('span', { class: 'sw-fill-sp' }) : el('button', { type: 'button', class: 'sw-fill', 'data-fill': k, title: '아래 소켓도 똑같이', 'aria-label': `${s.name} 옵션을 아래 소켓에도 똑같이`, onclick: () => swFillDown(side, s) });
+    const fill = last ? el('span', { class: 'sw-fill-sp' }) : el('button', { type: 'button', class: 'sw-fill', 'data-fill': k, title: '바로 아래 소켓도 똑같이', 'aria-label': `${s.name} 옵션을 바로 아래 소켓에도 똑같이`, onclick: () => swFillDown(side, s) });
     return el('div', { class: 'sw-half', 'data-side': side === 'L' ? '강배 바지' : '역강배 바지' }, makePicker(sel), valNode, fill);
   }
   // 그 바지 종류에 없는 칸(네블론의 추가 효과, 엑사스케일의 카트리지·옵션변환)은 비워 둠. 모바일에서는 줄째 숨김
@@ -774,9 +788,9 @@
     const fld = (t, ctl) => el('div', { class: 'sw-f' }, el('span', { text: t }), ctl);
     box.append(el('div', { class: 'sw-pants' },
       el('div', { class: 'sw-card' }, el('p', { class: 'sw-h' }, '강배 바지', el('small', { text: '체력 50% 초과 · 지금 입은 하의' })),
-        fld('종류·강화', el('b', { id: 'swArm', class: 'sw-arm' })), fld('재련', swSel('A_B70'))),
+        fld('종류·강화', el('b', { id: 'swArm', class: 'sw-arm' })), fld('재련', swRefine('A_B70'))),
       el('div', { class: 'sw-card' }, el('p', { class: 'sw-h' }, '역강배 바지', el('small', { text: '체력 50% 이하 · 갈아입는 하의' })),
-        fld('종류', swSel('A_E68')), fld('강화', swSel('A_E69')), fld('재련', swSel('A_E70')))));
+        fld('종류', swSel('A_E68')), fld('강화', swSel('A_E69')), fld('재련', swRefine('A_E70')))));
     box.append(el('p', { class: 'gnote sw-tip', text: '강배 바지의 종류·강화는 위 \'장비 종류와 강화\'의 하의 값이에요. 두 하의의 재련이 같으면 그대로 둬도 돼요.' }));
     box.append(el('p', { class: 'sw-sub', text: '바지 옵션' }),
       el('p', { class: 'gnote', text: '두 바지가 같은 칸은 비워 둬도 돼요(역강배 칸이 \'강배와 같음\'이면 강배 바지와 같다고 봐요). 다른 칸만 양쪽 다 넣어 주세요.\n칩·회로의 강배·역강배(HP 50% 초과·이하 피해)는 상세 스탯의 강배·역강배 칸 값으로 계산해서 여기엔 없어요.' }));
@@ -796,14 +810,15 @@
     box.append(tbl);
     if (foc) { const n = box.querySelector(`[data-k="${foc}"], [data-cell="${foc}"]`); if (n) n.focus(); }
   }
-  // 소켓 칸 옆 ↓: 이 소켓의 옵션·수치를 같은 바지의 아래 소켓에 모두 똑같이
+  // 소켓 칸 옆 ↓: 이 소켓의 옵션·수치를 같은 바지의 바로 아래 소켓에 똑같이
   function swFillDown(side, s) {
     const o = swRaw(inputs, swK(side, s)), v = swRaw(inputs, swK(side, s, 1));
-    const below = SW_SLOTS.filter(x => x.cat === SW_SOCK && SW_SLOTS.indexOf(x) > SW_SLOTS.indexOf(s));
-    if (!below.length) return;
-    let last = null;
-    for (const x of below) { setIn(swK(side, x), o === '' ? null : o); setIn(last = swK(side, x, 1), v === '' ? null : v); }
-    setVal(last, inputs[last]);
+    // 바로 아래 소켓 한 칸만 똑같이(계속 누르며 내려가면 됨)
+    const x = SW_SLOTS[SW_SLOTS.indexOf(s) + 1];
+    if (!x || x.cat !== SW_SOCK) return;
+    setIn(swK(side, x), o === '' ? null : o);
+    const kv = swK(side, x, 1); setIn(kv, v === '' ? null : v);
+    setVal(kv, inputs[kv]);
   }
   // 매번 맞추는 것: 값, 잠금, % 표시, 비어 있으면 안 되는 수치 칸 표시, 강배 바지 종류·강화·카트리지 글자, 안내 문구
   function syncSw() {

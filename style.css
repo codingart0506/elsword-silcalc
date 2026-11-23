@@ -960,6 +960,7 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .sw-h small { font-size: 12px; font-weight: 400; color: var(--mute); }
 .sw-f { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; font-size: 14px; color: var(--sub); }
 .sw-f select { background-color: #fff; min-width: 0; max-width: 170px; font-size: 14px; padding: 6px 28px 6px 10px; }
+.sw-f .sw-refwrap input { width: 92px; background-color: #fff; font-size: 14px; padding: 6px 40px 6px 10px; text-align: right; }
 .sw-arm { font-weight: 600; color: var(--text); }
 .sw-tip { margin-top: 8px; }
 .sw-sub { font-size: 13px; font-weight: 700; color: var(--sub); margin: 18px 0 4px; }
