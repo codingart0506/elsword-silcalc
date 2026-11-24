@@ -476,7 +476,7 @@
         if (node.tagName === 'OPTGROUP') {
           const os = [...node.children].filter(o => pickHit(o, q)); if (!os.length) continue;
           list.append(el('div', { class: 'pick-grp', text: node.label })); os.forEach(o => add(o, true));
-        } else if (node.tagName === 'OPTION' && (!q || (node.value !== '' && pickHit(node, q)))) add(node, false);
+        } else if (node.tagName === 'OPTION' && !node.hidden && (!q || ((node.value !== '' || node.dataset.pick) && pickHit(node, q)))) add(node, false);
       }
       if (!items.length) list.append(el('div', { class: 'pick-none', text: '맞는 게 없어요' }));
       const cur = items.findIndex(it => it.o.value === sel.value);
@@ -619,7 +619,10 @@
   const swRaw = (inp, k) => { const v = inp[k]; return v === null || v === undefined ? '' : v; };
   const swHP = (o) => /^HP[>≤]50%/.test(String(o)); // 강배·역강배: 상세 스탯 칸으로 계산
   const swOpt = (cat, o) => ((M.meta.swCatalog || {})[cat] || []).find(x => x.o === o) || null;
-  const swNoVal = (cat, o) => { const x = swOpt(cat, o); return !o || o === NONE || o === '미장착' || (x && x.t === 'none'); };
+  // 칩 기본: 강배 바지는 강배칩, 역강배 바지는 역강칩. 둘 다 상세 스탯 강배·역강배 칸에 이미 들어 있어서 계산은 '칩 없음'과 같음(시트도 같음)
+  const SW_CHIP_L = '강배칩', SW_CHIP_R = '역강칩';
+  const swChipDef = (o) => o === '' || o === NONE || o === SW_CHIP_L || o === SW_CHIP_R;
+  const swNoVal = (cat, o) => { const x = swOpt(cat, o); return !o || o === NONE || o === '미장착' || o === SW_CHIP_R || (x && x.t === 'none'); };
   // 두 바지 칸 → 시트 옵션 줄. 줄마다 어느 칸인지도 돌려줌(시트 안내 문구를 칸 이름으로 바꾸는 데 씀)
   function swPack(inp) {
     const lt = String(inp.J28 ?? ''), rt = String(inp.A_E68 ?? '');
@@ -629,6 +632,7 @@
       const lo = lOn ? swRaw(inp, swK('L', s)) : '', lv = lOn ? swRaw(inp, swK('L', s, 1)) : '';
       let ro = rOn ? swRaw(inp, swK('R', s)) : '', rv = rOn ? swRaw(inp, swK('R', s, 1)) : '';
       if (rOn && ro === '' && lOn) { ro = lo; rv = lv; } // 강배와 같음
+      if (ro === SW_CHIP_R) { ro = NONE; rv = ''; } // 역강칩: 계산은 칩 없음과 같음
       if (lo !== '' && lo === ro && String(lv) === String(rv)) continue; // 같으면 빼고 더할 것이 없음
       if (lo !== '' && lo !== NONE) L.push({ cat: s.cat, o: lo, v: lv, name: s.name });
       if (ro !== '' && ro !== NONE) R.push({ cat: s.cat, o: ro, v: rv, name: s.name });
@@ -735,10 +739,13 @@
   const swNodes = {};
   function swHalf(side, s, lOn) {
     const k = swK(side, s), kv = swK(side, s, 1), cat = s.cat;
-    const opts = ((M.meta.swCatalog || {})[cat] || []).filter(x => !swHP(x.o) && (side === 'R' ? lOn || x.o !== NONE : x.o !== NONE));
+    const chip = cat === SW_CHIP;
+    const opts = ((M.meta.swCatalog || {})[cat] || []).filter(x => !swHP(x.o) && (chip ? x.o !== NONE : side === 'R' ? lOn || x.o !== NONE : x.o !== NONE));
     const sel = el('select', { class: 'sw-opt', 'data-k': k });
-    sel.append(el('option', { value: '', text: side === 'R' && lOn ? '강배와 같음' : '없음' }));
+    sel.append(el('option', { value: '', text: chip ? (side === 'L' ? SW_CHIP_L : SW_CHIP_R) : side === 'R' && lOn ? '강배와 같음' : '없음', 'data-pick': chip ? '1' : null }));
+    if (chip && side === 'R') sel.append(el('option', { value: SW_CHIP_R, text: SW_CHIP_R, 'data-chipr': '1' }));
     for (const x of opts) sel.append(el('option', { value: x.o, text: swOptLabel(cat, x.o) }));
+    if (chip) sel.append(el('option', { value: NONE, text: '칩 없음' }));
     sel.addEventListener('change', () => { const v = sel.value || null; if (String(inputs[k] ?? '') !== String(v ?? '')) setIn(kv, null); setVal(k, v); });
     swNodes[k] = sel;
     const cur = swRaw(inputs, k), x = cur ? swOpt(cat, cur) : null;
@@ -793,7 +800,7 @@
         fld('종류', swSel('A_E68')), fld('강화', swSel('A_E69')), fld('재련', swRefine('A_E70')))));
     box.append(el('p', { class: 'gnote sw-tip', text: '강배 바지의 종류·강화는 위 \'장비 종류와 강화\'의 하의 값이에요. 두 하의의 재련이 같으면 그대로 둬도 돼요.' }));
     box.append(el('p', { class: 'sw-sub', text: '바지 옵션' }),
-      el('p', { class: 'gnote', text: '두 바지가 같은 칸은 비워 둬도 돼요(역강배 칸이 \'강배와 같음\'이면 강배 바지와 같다고 봐요). 다른 칸만 양쪽 다 넣어 주세요.\n칩·회로의 강배·역강배(HP 50% 초과·이하 피해)는 상세 스탯의 강배·역강배 칸 값으로 계산해서 여기엔 없어요.' }));
+      el('p', { class: 'gnote', text: '두 바지가 같은 칸은 비워 둬도 돼요(역강배 칸이 \'강배와 같음\'이면 강배 바지와 같다고 봐요). 다른 칸만 양쪽 다 넣어 주세요.\n강배칩·역강칩은 상세 스탯의 강배·역강배 칸 값에 이미 들어 있어요(강배 칸은 강배 바지, 역강배 칸은 역강배 바지를 입고 본 값). 칩 칸은 강배·역강이 아닌 칩을 꼈을 때만 바꿔 주세요.' }));
     const tbl = el('div', { class: 'sw-tbl' });
     tbl.append(el('div', { class: 'sw-srow sw-thead' }, el('span'),
       el('span', { class: 'sw-th' }, '강배 바지', el('small', { text: lt })), el('span', { class: 'sw-th' }, '역강배 바지', el('small', { text: rt }))));
@@ -831,7 +838,15 @@
       const sel = swNodes[swK(side, s)], vn = swNodes[swK(side, s, 1)]; if (!sel || !vn) continue;
       const o = swRaw(inputs, swK(side, s)), v = swRaw(inputs, swK(side, s, 1));
       if (sel.value !== String(o)) sel.value = String(o);
-      const same = side === 'R' && o === '' && s.types.includes(lt) && !s.cart;
+      let same = side === 'R' && o === '' && s.types.includes(lt) && !s.cart;
+      // 역강배 바지 칩: 강배 바지 칩이 기본(강배칩·칩 없음)이면 비운 칸은 '역강칩', 다른 칩이면 '강배와 같음'(역강칩은 따로 고름)
+      if (s.cat === SW_CHIP && side === 'R') {
+        const lDef = swChipDef(swRaw(inputs, swK('L', s)));
+        const o0 = sel.querySelector('option[value=""]'), ox = sel.querySelector('option[data-chipr]');
+        const t0 = lDef ? SW_CHIP_R : '강배와 같음'; if (o0 && o0.textContent !== t0) o0.textContent = t0;
+        if (ox) ox.hidden = lDef && o !== SW_CHIP_R;
+        if (lDef) same = false;
+      }
       vn.disabled = swNoVal(s.cat, o);
       if (vn.tagName === 'SELECT') { if (vn.value !== String(v)) vn.value = String(v); }
       else if (document.activeElement !== vn) vn.value = v === '' ? '' : String(v);
