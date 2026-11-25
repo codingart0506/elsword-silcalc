@@ -1682,6 +1682,13 @@
     // 고급 설정의 추피 보정·가동률 DPS 전환도 랭킹에는 못 올림
     // 소켓 배분 최적화를 다른 세팅에서 돌림(계산기 탭에 바꿀 수 있는 소켓 칸을 넣었을 때만)
     sockMatch: (extra, tgt) => sockMatch(extra || {}, tgt || {}),
+    // 아바타 추천에서 크리·극대 마법석을 힘트마와 바꿔 볼 때: 마법석 한 칸 수치, 소켓 칸 수(넣었으면), 지금 크리·극대의 원래 수치(점감 전, %)
+    sockInfo: () => {
+      const cfg = sockCfg(), v = (k) => Number(cfg.v[k] ?? (SOCK.find(o => o.k === k) || {}).v) || 0;
+      const counted = SOCK.some(o => Number(cfg.n[o.k]) > 0), n = (k) => Math.max(0, Math.round(Number(cfg.n[k]) || 0));
+      return { v: { crit: v('crit'), max: v('max'), boss: v('boss'), boss2: v('boss2') }, counted, n: counted ? { crit: n('crit'), max: n('max'), boss: n('boss'), boss2: n('boss2') } : null,
+        rawC: SOCK_CI(Number(g('C17')) || 0) * 100, rawM: SOCK_MI(Number(g('C19')) || 0) * 100 };
+    },
     sockSolve: (extra, opt) => { const r = sockSolve(extra || {}, opt); return r && !r.err ? { cp: r.cp, now: r.now, best: r.best.slice(), cur: r.cur.slice(), N: r.N, over: Object.assign({}, extra || {}, r.over), names: SOCK.map(o => o.t), critOk: r.critOk } : null; },
     rankBuffs: () => Object.keys(EXTRA_BUFF).filter(a => inputs[a] === true).map(a => EXTRA_BUFF[a])
       .concat((inputs.J22 ?? '미적용') !== '미적용' ? [`이벤트 버프(${inputs.J22})`] : [])

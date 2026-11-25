@@ -468,7 +468,8 @@
     const g = r.gain * 100, fmt = (n) => Math.round(n).toLocaleString('ko-KR');
     const rec = Object.assign({ '아바타5셋': r.best.fiveSetDisplay, '한벌': r.best.suit != null ? r.best.suit : (p.worn['한벌'] || '') }, r.best.partToDisplay);
     const showBottom = r.best.bottom != null && !!(p.bottom || r.best.bottom), buffs = Object.entries(r.best.buffs || {});
-    const changed = PARTS.some(part => (p.worn[part] || '') !== (rec[part] || '')) || (showBottom && (p.bottom || '') !== r.best.bottom) || buffs.some(([c, v]) => String(APP.val(c) ?? '') !== String(v));
+    const moves = (r.best.sock && r.best.sock.moves) || [];
+    const changed = PARTS.some(part => (p.worn[part] || '') !== (rec[part] || '')) || (showBottom && (p.bottom || '') !== r.best.bottom) || buffs.some(([c, v]) => String(APP.val(c) ?? '') !== String(v)) || moves.length > 0;
     // 지금 세팅이 목표 쿨감을 못 채우면, 추천(목표를 채우는 조합 중 최고)이 지금보다 낮을 수 있음 → 그렇다고 알려 줌
     const curCool = Number(curStats()['쿨감']) || 0, T = Number(r.coolTarget) || 0;
     const coolMiss = T > 0 && (st.o.coolAtLeast === false ? Math.abs(curCool - T) > 0.005 : curCool < T - 0.005);
@@ -498,6 +499,7 @@
     const extraRow = (label, now, want) => { const same = now === want; tb.append(el('tr', { class: same ? '' : 'chg' }, el('th', { scope: 'row', text: label }), el('td', { text: now || '-' }), el('td', { class: same ? 'same' : 'to', text: same ? '그대로' : (want || '-') }))); };
     if (showBottom) extraRow('하의 악세', p.bottom || '', keepNow ? (p.bottom || '') : r.best.bottom);
     for (const [c, v] of buffs) { const now = String(APP.val(c) ?? ''); extraRow(buffLabel(c), now, keepNow ? now : v); }
+    if (!keepNow) for (const m of moves) extraRow(`마법석(${m.t})`, m.n > 0 ? m.from : `${m.t} ${-m.n}칸`, m.n > 0 ? `${m.t} ${m.n}칸` : `힘트마 ${-m.n}칸`);
     if (r.best.coolReal != null && curCool > 0) { const c2 = (x) => `${Math.round(x * 100) / 100}%`; extraRow('쿨감', c2(curCool), keepNow ? c2(curCool) : c2(r.best.coolReal)); }
     box.append(el('table', { class: 'av-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '부위' })), el('th', { scope: 'col', text: '지금' }), el('th', { scope: 'col', text: '추천' }))), tb));
     // 하의 악세 비교: 지금 실투력은 스탯 창(지금 낀 하의 악세가 이미 들어 있음)으로 재서 칸만 바꿔선 안 변하니, 따로 보여 줌
@@ -507,7 +509,7 @@
       const pc = (v) => `${Math.round(v * 1000) / 10}%`, inpA = APP.inputs(), base0 = r.cpNow > 0 ? r.cpNow : APP.cpWith({});
       const vsNow = (v) => { const d = (v / base0 - 1) * 100; return `${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(2)}%`; };
       const matched = rv.order[0] !== 'plain', goalM = rv.byCap ? '만극' : '지금 극대화';
-      const MODE_TXT = { ceil: '지금 크리 이상', near: '지금 크리에 가깝게', floor: '지금 크리보다 살짝 덜', plain: '' };
+      const MODE_TXT = { ceil: '지금 크리 이상', near: '지금 크리에 가깝게', floor: '지금 크리보다 살짝 덜', plain: '', opt: '마법석까지 최적' };
       const SHORT_B = { '영혼의 족쇄': '족쇄', '글로잉 플라워': '글플' };
       const sorted = (md) => rv.modes[md].slice().sort((x, y) => y.cp - x.cp);
       const gap = (md) => { const l = sorted(md); return { top: l[0], low: l[1], d: (l[0].cp - l[1].cp) / l[1].cp * 100 }; };
@@ -522,7 +524,7 @@
           for (const part of PARTS) { const a0 = p.worn[part] || '', b0 = rec2[part] || ''; if (b0 && a0 !== b0) out.push([PART_LABEL[part] || part, short(a0) || '-', short(b0)]); }
         }
         for (const [c, v] of buffs) { const now = String(APP.val(c) ?? ''); if (now !== String(v)) out.push([buffLabel(c), now || '-', v]); }
-        if (x.sock) for (const m of x.sock.moves) out.push(m.n > 0 ? ['마법석', `힘트마 ${m.n}칸`, `${m.t} 마법석 ${m.n}칸`] : ['마법석', `${m.t} 마법석 ${-m.n}칸`, `힘트마 ${-m.n}칸`]);
+        if (x.sock) for (const m of x.sock.moves) out.push(m.n > 0 ? ['마법석', m.from || `힘트마 ${m.n}칸`, `${m.t} 마법석 ${m.n}칸`] : ['마법석', `${m.t} 마법석 ${-m.n}칸`, `힘트마 ${-m.n}칸`]);
         return out;
       };
       // 스탯: 크리·극대화·적응력은 늘, 나머지는 달라진 것만
@@ -539,16 +541,18 @@
       const head = el('div'), cards = el('div', { class: 'av-vs' });
       cmpBox.append(el('p', { class: 'av-rival-h' }, el('b', { text: '하의 악세 비교' })), head);
       let cur = rv.order[0];
-      const seg = matched ? el('div', { class: 'av-rival-seg', role: 'group', 'aria-label': '크리 맞추는 방식' }) : null;
+      const seg = matched && rv.order.length > 1 ? el('div', { class: 'av-rival-seg', role: 'group', 'aria-label': '크리 맞추는 방식' }) : null;
       const draw = () => {
         if (seg) for (const bt of seg.children) bt.setAttribute('aria-pressed', String(bt.dataset.m === cur));
         const { top, low, d } = gap(cur);
         head.textContent = '';
         head.append(el('p', { class: 'av-vs-verdict' }, d < 0.3 ? `거의 같아요. ${top.n}${iga(top.n)} ${low.n}보다 ${d.toFixed(2)}% 높아요` : `${top.n}${iga(top.n)} ${low.n}보다 ${d.toFixed(2)}% 더 높아요`));
-        head.append(el('p', { class: 'av-rival-note', text: matched
+        head.append(el('p', { class: 'av-rival-note', text: cur === 'opt'
+          ? `지금 실투력 ${fmt(base0)} 기준이에요. 하의 악세마다 아바타·한벌과 크리·극대 마법석(힘트마와 바꾸기)까지 실투력이 가장 높게 다시 골랐어요`
+          : matched
           ? `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 고르고, 크리는 ${MODE_TXT[cur]}(${pc(rv.critT)} 기준) 힘트마를 바꿔 맞췄어요. 극대화는 ${goalM}(${pc(rv.maxT)})까지 채우는 게 더 높을 때만 채워요`
           : `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 골랐어요` }));
-        if (matched && rv.modes[cur].every(x => x.cp < base0)) head.append(el('p', { class: 'av-rival-note', text: '두 쪽 다 지금보다 낮은 건 크리를 기준에 맞추느라 힘트마를 뺐기 때문이에요' }));
+        if (matched && cur !== 'opt' && rv.modes[cur].every(x => x.cp < base0)) head.append(el('p', { class: 'av-rival-note', text: '두 쪽 다 지금보다 낮은 건 크리를 기준에 맞추느라 힘트마를 뺐기 때문이에요' }));
         cards.textContent = '';
         const order = rv.modes[cur].slice().sort((x, y) => (x.n === p.bottom ? -1 : 0) - (y.n === p.bottom ? -1 : 0));
         for (const x of order) {
@@ -572,7 +576,7 @@
       }
       cmpBox.append(cards); draw();
       const tableBottom = r.best.bottom, top0 = sorted(rv.order[0])[0];
-      if (matched && tableBottom && tableBottom !== top0.n) cmpBox.append(el('p', { class: 'av-rival-note tip', text: `위 표의 추천(${tableBottom})은 크리·극대를 맞추기 전 실투력으로 고른 거예요` }));
+      if (matched && rv.order[0] !== 'opt' && tableBottom && tableBottom !== top0.n) cmpBox.append(el('p', { class: 'av-rival-note tip', text: `위 표의 추천(${tableBottom})은 크리·극대를 맞추기 전 실투력으로 고른 거예요` }));
       box.append(cmpBox);
     } else if (p.bottom && BOTTOMS[p.bottom] && APP.cpWith) {
       const cmp = Object.keys(BOTTOMS).map(n => ({ n, cp: APP.cpWith(bottomOver({}, p.bottom, n)) }));
@@ -583,8 +587,8 @@
       }
     }
     if (keepNow) { box.append(el('p', { class: 'av-hint', text: '조건에 맞는 다른 조합은 모두 지금 세팅보다 낮았어요' })); return; }
-    box.append(el('p', { class: 'av-hint', text: `${r.best.polished ? '세트' : '3세트'}: ${r.best.setLabels.join(' · ')} | ${r.mode}${changed && !r.best.polished ? ` | 시트(룰루) 점수로는 실뎀 ${g >= 0 ? '+' : ''}${g.toFixed(2)}%` : ''}` }));
-    if (r.cands && r.cands.length > 1 && r.best.cp > 0) box.append(el('p', { class: 'av-hint', text: r.best.polished ? '3세트 조합 후보들과 지금 세팅에서 부위를 더 바꿔 가며 계산기 실투력이 가장 높아지는 조합을 찾았어요. 세트 효과는 3세트까지만 쳤어요' : `계산기 실투력 기준으로 모든 조합을 비교해서 고른 결과예요. 마지막에 후보 ${r.cands.length}개를 계산기로 정확히 다시 쟀어요` }));
+    box.append(el('p', { class: 'av-hint', text: `세트: ${r.best.setLabels.join(' · ') || '없음'}` }));
+    if (r.stats) box.append(el('p', { class: 'av-hint', text: `모든 조합을 가지치기로 빠짐없이 따지고(남은 부위를 다 최고로 쳐도 1등을 못 넘는 갈래는 건너뜀), 위쪽 ${r.stats.evaluated}개는 계산기 실투력으로 다시 쟀어요. 크리·극대는 실투력 시트 값 그대로 넣고 마법석(힘트마와 바꾸기)까지 맞췄어요. 세트 효과는 3세트까지만 쳤어요${r.stats.capped ? '. 비슷한 조합이 너무 많아 위쪽 일부만 다시 쟀어요' : ''}` }));
   }
   // 아바타 점수 상위 조합을 계산기 본체(시트와 같은 실투력 계산)에 넣어 실투력으로 다시 줄 세움
   const STAT_CELL = { '적응력': ['C14'], '초적응력': ['C15'], '강배': ['C24'], '역강배': ['C25'], '100이하': ['C26'], '추피': ['C22'], '양극화': ['C20'], '모스댐': ['C33'], '초댐증': ['C30'], '크댐증': ['C18'], '보댐증': ['C21'], '쿨감': ['C31', 'C32'], '강렬댐증': ['C29'] };
@@ -612,9 +616,11 @@
     base = base || {};
     const cp0 = APP.cpWith(base); if (!(cp0 > 0)) return null;
     const L0 = Math.log(cp0), inp = APP.inputs(), cs = curStats(), mp = cs['물마퍼'], curCool = cs['쿨감'];
+    // base에 스탯 칸이 들어 있으면(한벌·하의 악세를 바꿔 본 상태) 그 값에서부터 잼
+    const at = (c) => Number(c in base ? base[c] : inp[c]) || 0;
     const over = (stat, d) => {
-      if (stat === '물마퍼') { const k = (100 + mp + d) / (100 + mp); return { C11: Math.round(num('C11') * k), C12: Math.round(num('C12') * k) }; }
-      const o = {}; for (const c of STAT_CELL[stat]) o[c] = Math.round(((Number(inp[c]) || 0) + d / 100) * 1e6) / 1e6; return o;
+      if (stat === '물마퍼') { const k = (100 + mp + d) / (100 + mp); return { C11: Math.round(('C11' in base ? at('C11') : num('C11')) * k), C12: Math.round(('C12' in base ? at('C12') : num('C12')) * k) }; }
+      const o = {}; for (const c of STAT_CELL[stat]) o[c] = Math.round((at(c) + d / 100) * 1e6) / 1e6; return o;
     };
     const lg = (stat, d) => { const v = APP.cpWith(Object.assign({}, base, over(stat, d))); return v > 0 ? Math.log(v) - L0 : 0; };
     const table = (stat, lo, hi, step) => {
@@ -877,6 +883,131 @@
     // 효과가 적용되는 세트만 보여 줌(3세트까지)
     return Object.assign(candOf(S), { cp: v, setLabels: (R.wornContribution(db, S).sets || []).map(sn => `${sn}(${cnt.get(sn) || 0})`) });
   }
+  // 정밀 탐색: 위 탐색이 놓치는 두 가지를 메움.
+  //  ① 한벌 아바타(·하의 악세)마다 그 한벌을 입은 상태에 맞춘 빠른 점수를 따로 만들어 다시 오르막 탐색(한벌이 바뀌면 맞는 아바타도 달라짐)
+  //  ② 위쪽 몇 개는 계산기 실투력으로 이웃 조합을 직접 재 봄: 한 부위, 5셋, 한 세트의 2~3부위, 아무 두 부위(세트 부위를 다른 칸으로 옮기는 조합 등)
+  // 조건(고정·보유·목표 쿨감)은 다른 탐색과 같게 지킴
+  function deepen(r, worn, base, ctx, seeds, suits, bottoms) {
+    const db = r.db, cap = APP.coolCap ? APP.coolCap() : 35;
+    if (!ctx.scorer || !r.bare || !isFinite(r.bare.baseCooldownBare)) return null;
+    const T = Number(r.coolTarget) || 0, atLeast = st.o.coolAtLeast !== false, bare = r.bare.baseCooldownBare;
+    const fixed = ctx.fixed || {}, owned = ctx.owned || null, P = R.ALL_PARTS, F5 = '아바타5셋', SLOTS = [F5].concat(P);
+    const ok = (part, d) => !owned || owned.has(d) || d === (worn[part] || '');
+    const FREE = P.filter(pt => !fixed[pt]);
+    const opts = {}; for (const pt of FREE) opts[pt] = [...(db.partCandidates.get(pt) || [])].filter(d => ok(pt, d));
+    if (!ctx.fiveFixed) opts[F5] = db.fiveSetList.map(x => db.fiveSetDisplay.get(x)).filter(d => d && ok(F5, d));
+    const VAR = (ctx.fiveFixed ? [] : [F5]).concat(FREE);
+    const setItems = [];
+    for (const [sn, parts] of db.setToParts) {
+      const xs = []; for (const pt of parts) { if (fixed[pt]) continue; const d = db.displayBySetPart.get(sn + '||' + pt); if (d && ok(pt, d)) xs.push([pt, d]); }
+      if (xs.length >= 2) setItems.push(xs);
+    }
+    const now = worn['한벌'] || '', bNow = prof().bottom || '';
+    const keyOf = (S) => SLOTS.map(pt => S[pt] || '').join('|');
+    // 빠른 합산: 아이템 스탯을 숫자 배열로 미리 바꿔 두고 R.wornContribution과 같은 규칙(세트 효과는 3세트까지)으로 더함
+    const TS = R.TARGET_STATS, NS = TS.length, IC = TS.indexOf('쿨감'), IG = TS.indexOf('강렬댐증');
+    const vecOf = (o) => { const v = new Float64Array(NS); if (o) for (let i = 0; i < NS; i++) v[i] = Number(o[TS[i]]) || 0; return v; };
+    const sizeOf = (o) => { let t = 0; for (const k in (o || {})) t += Number(o[k]) || 0; return t; };
+    const setIx = new Map(), six = (n) => { if (!n) return -1; let i = setIx.get(n); if (i === undefined) { i = setIx.size; setIx.set(n, i); } return i; };
+    const effs = db.setEffects.map(e => ({ si: six(e.set), need: e.need, v: vecOf(db.statsByDisplay.get(e.display)), size: sizeOf(db.statsByDisplay.get(e.display) || {}) }));
+    const info = new Map(), infoOf = (d) => { let x = info.get(d); if (!x) { x = { v: vecOf(db.statsByDisplay.get(d)), si: six(db.displayToSet.get(d)) }; info.set(d, x); } return x; };
+    const fiveVec = new Map(); for (const [sname, disp] of db.fiveSetDisplay) { const v = fiveVec.get(disp) || new Float64Array(NS), a = vecOf(db.fiveSetStats.get(sname)); for (let i = 0; i < NS; i++) v[i] += a[i]; fiveVec.set(disp, v); }
+    for (const pt of P) for (const d of (db.partCandidates.get(pt) || [])) infoOf(d);
+    for (const pt of P) if (worn[pt]) infoOf(worn[pt]);
+    const NSET = setIx.size + 8, cnt = new Int32Array(NSET), ssz = new Float64Array(NSET), vec = new Float64Array(NS), arr = new Array(13).fill(0);
+    const sums = (S) => {
+      vec.fill(0); cnt.fill(0);
+      const f = S[F5] && fiveVec.get(S[F5]); if (f) for (let i = 0; i < NS; i++) vec[i] += f[i];
+      for (let p = 0; p < P.length; p++) { const d = S[P[p]]; if (!d) continue; const x = infoOf(d), v = x.v; for (let i = 0; i < NS; i++) vec[i] += v[i]; if (x.si >= 0) cnt[x.si]++; }
+      const act = [];
+      for (let k = 0; k < effs.length; k++) { const e = effs[k]; if (cnt[e.si] >= e.need) { if (act.indexOf(e.si) < 0) { act.push(e.si); ssz[e.si] = 0; } ssz[e.si] += e.size; } }
+      if (act.length > 3) { act.sort((x, y) => Math.min(cnt[y], 3) - Math.min(cnt[x], 3) || ssz[y] - ssz[x]); act.length = 3; }
+      else if (act.length > 1) act.sort((x, y) => Math.min(cnt[y], 3) - Math.min(cnt[x], 3) || ssz[y] - ssz[x]);
+      for (let a = 0; a < act.length; a++) { const si = act[a]; for (let k = 0; k < effs.length; k++) { const e = effs[k]; if (e.si === si && cnt[si] >= e.need) { const v = e.v; for (let i = 0; i < NS; i++) vec[i] += v[i]; } } }
+      return vec;
+    };
+    const coolNow = () => Math.min(bare + vec[IC], cap);
+    const okCool = (c) => !T || (atLeast ? c >= T - 1e-9 : Math.abs(c - T) <= 1e-9);
+    const fastOf = (sc) => (S) => { sums(S); const c = coolNow(); if (!okCool(c)) return -Infinity; for (let i = 0; i < 12; i++) arr[i] = vec[i]; arr[12] = vec[IG]; return sc(arr, c); };
+    const candOf = (S) => { const pd = {}; for (const pt of P) if (S[pt]) pd[pt] = S[pt]; sums(S); return { fiveSetDisplay: S[F5] || '', partToDisplay: pd, coolReal: coolNow(), polished: true }; };
+    const memo = new Map();
+    const overOf = (S, sn, bn) => { const o = Object.assign({}, base, overridesFor(r, worn, candOf(S))); suitOver(o, now, sn); bottomOver(o, bNow, bn); return o; };
+    const real = (S, sn, bn) => {
+      const k = sn + '\u0001' + bn + '\u0001' + keyOf(S); let v = memo.get(k);
+      if (v === undefined) { sums(S); v = okCool(coolNow()) ? APP.cpWith(overOf(S, sn, bn)) : -1; if (!(v > 0)) v = -1; memo.set(k, v); }
+      return v;
+    };
+    // 이웃: S를 그 자리에서 바꿨다가 되돌림. each(값들을 넣은 뒤 부르는 함수, 바꾼 내용)
+    const one = (S, each) => { for (const pt of VAR) { const keep = S[pt]; for (const d of opts[pt]) { if (d === keep) continue; S[pt] = d; each(pt, d); } S[pt] = keep; } };
+    const sets = (S, each) => {
+      for (const xs of setItems) for (let i = 0; i < xs.length; i++) for (let j = i + 1; j < xs.length; j++) {
+        const [pi, di] = xs[i], [pj, dj] = xs[j], ki = S[pi], kj = S[pj];
+        S[pi] = di; S[pj] = dj;
+        if (!(ki === di && kj === dj)) each(pi, di, pj, dj);
+        for (let k = j + 1; k < xs.length; k++) { const [pk, dk] = xs[k], kk = S[pk]; if (ki === di && kj === dj && kk === dk) continue; S[pk] = dk; each(pi, di, pj, dj, pk, dk); S[pk] = kk; }
+        S[pi] = ki; S[pj] = kj;
+      }
+    };
+    const two = (S, each) => {
+      for (let a = 0; a < VAR.length; a++) { const pa = VAR[a], ka = S[pa];
+        for (const da of opts[pa]) { if (da === ka) continue; S[pa] = da;
+          for (let b = a + 1; b < VAR.length; b++) { const pb = VAR[b], kb = S[pb]; for (const d2 of opts[pb]) { if (d2 === kb) continue; S[pb] = d2; each(pa, da, pb, d2); } S[pb] = kb; }
+        }
+        S[pa] = ka; }
+    };
+    const apply = (S, m) => { for (let i = 0; i < m.length; i += 2) S[m[i]] = m[i + 1]; };
+    const climb = (S0, fast) => {
+      const S = Object.assign({}, S0); let v = fast(S);
+      for (let it = 0; it < 60; it++) {
+        let bm = null, bv = v;
+        const each = (...m) => { const x = fast(S); if (x > bv + 1e-9) { bv = x; bm = m; } };
+        one(S, each); sets(S, each);
+        if (!bm) two(S, each);
+        if (!bm) break; apply(S, bm); v = bv;
+      }
+      return v > -Infinity ? S : null;
+    };
+    // ① 한벌·하의 악세마다 맞춘 점수로 탐색 → 계산기 실투력으로 잼
+    const found = [], seen = new Set();
+    for (const sn of suits) for (const bn of bottoms) {
+      const same = sn === now && bn === bNow;
+      const sc = same ? ctx.scorer : buildScorer(db, worn, bottomOver(suitOver(Object.assign({}, base), now, sn), bNow, bn));
+      if (!sc) continue;
+      const fast = fastOf(sc);
+      for (const S0 of seeds) {
+        const S = climb(S0, fast); if (!S) continue;
+        const k = sn + '\u0001' + bn + '\u0001' + keyOf(S); if (seen.has(k)) continue; seen.add(k);
+        const cp = real(S, sn, bn); if (cp > 0) found.push({ S, sn, bn, cp, fast });
+      }
+    }
+    if (!found.length) return null;
+    found.sort((a, b) => b.cp - a.cp);
+    // ② 위쪽 조합은 계산기 실투력으로 이웃을 직접 재 봄(한 부위·5셋은 전부, 세트·두 부위 바꾸기는 빠른 점수 위쪽만)
+    const finish = (x) => {
+      const S = Object.assign({}, x.S); let v = x.cp;
+      for (let pass = 0; pass < 6; pass++) {
+        let bm = null, bv = v;
+        const tryReal = (m) => { const c = real(S, x.sn, x.bn); if (c > bv + 0.5) { bv = c; bm = m; } };
+        one(S, (...m) => tryReal(m));
+        const list = [], push = (...m) => { const f = x.fast(S); if (f > -Infinity) list.push([f, m]); };
+        sets(S, push); two(S, push);
+        list.sort((a, b) => b[0] - a[0]);
+        for (const [, m] of list.slice(0, DEEP_TOP)) { const keep = []; for (let i = 0; i < m.length; i += 2) keep.push(m[i], S[m[i]]); apply(S, m); tryReal(m); apply(S, keep); }
+        if (!bm) break; apply(S, bm); v = bv;
+      }
+      return { S, sn: x.sn, bn: x.bn, cp: v, fast: x.fast };
+    };
+    let best = null; const done = new Set();
+    for (const x of found.slice(0, DEEP_SEEDS)) {
+      const y = finish(x), k = y.sn + '\u0001' + y.bn + '\u0001' + keyOf(y.S); if (done.has(k)) continue; done.add(k);
+      if (!best || y.cp > best.cp) best = y;
+    }
+    // 끝으로 찾은 조합에 다른 한벌·하의 악세도 대 봄
+    for (const sn of suits) for (const bn of bottoms) { const c = real(best.S, sn, bn); if (c > best.cp + 0.5) best = { S: best.S, sn, bn, cp: c, fast: best.fast }; }
+    const S = best.S, cntS = new Map(); for (const pt of P) { const sn = db.displayToSet.get(S[pt]); if (sn) cntS.set(sn, (cntS.get(sn) || 0) + 1); }
+    return Object.assign(candOf(S), { cp: best.cp, suit: best.sn, bottom: best.bn, over: overOf(S, best.sn, best.bn), setLabels: (R.wornContribution(db, S).sets || []).map(sn => `${sn}(${cntS.get(sn) || 0})`) });
+  }
+  const DEEP_SEEDS = 3, DEEP_TOP = 120;
   // 크리·극대를 마법석으로 맞춘 실투력(evalS)으로 아바타 부위를 한 칸씩 더 바꿔 봄.
   // 적응력처럼 상한(60%)에 걸리는 옵션은 빠른 점수로는 잘 안 잡혀서, 적응력이 달라지는 부위는 모두 실제로 재 봄
   // (하의 악세를 바꿔 모자라거나 남는 적응력을 다른 아바타 악세로 채우거나 돌리는 경우)
@@ -943,11 +1074,672 @@
         starts.push(W);
         const pol = polish(r, worn, base, ctx, starts, top.suit, top.bottom);
         if (pol && pol.cp > top.cp + 0.5) { evalCand(pol); if (pol.cp > top.cp + 0.5) { pol.score = top.score; pol.mode = '마무리 탐색'; top = pol; } }
+        // 정밀 탐색: 한벌마다 따로, 그리고 계산기 실투력으로 이웃 조합을 직접 재서 더 높은 조합이 있으면 그걸로
+        const seeds = [toS(top)].concat(starts.slice(0, 3), [W]);
+        const dp = deepen(r, worn, base, ctx, seeds, suitChoices(worn), bottoms);
+        if (dp && dp.cp > top.cp + 0.5) { dp.score = top.score; dp.mode = '마무리 탐색'; top = dp; }
       } catch (e) { console.error(e); }
     }
     top.buffs = Object.assign({}, base);
     r.best = top; r.mode = top.mode || r.mode;
     r.gain = (100 + (top.rScore != null ? top.rScore : top.score)) / (100 + r.cur.score) - 1;
+    return r;
+  }
+  // ---------- 최고 보장 탐색 ----------
+  // 실투력 모델: 지금 세팅에서 스탯을 하나씩 바꿔 잰 계산기 실투력(로그) 변화를 더하고, 서로 영향을 주는 세 쌍
+  // (강배·역강배, 강렬·초월 스킬 데미지, 크리·크뎀)은 곱 항으로 보정. 크리·극대는 마법석(크리·극대 ↔ 힘트마)을 다시 맞춘 것 중 가장 높은 값으로 셈.
+  // 가지치기: 고른 부위 + 남은 부위마다 스탯별 최댓값 + 켤 수 있는 세트 효과 최대치로 잰 값이 지금 후보에 못 미치면 그 갈래를 통째로 건너뜀
+  // (모델 기준으로는 빠지는 조합이 없음). 마지막에 모델 위쪽 조합을 계산기 실투력으로 다시 재고, 모델 오차만큼 아래 조합까지 모두 재서 1등을 고름
+  const XS = ['적응력', '초적응력', '강배', '역강배', '100이하', '추피', '양극화', '물마퍼', '모스댐', '초댐증', '크댐증', '보댐증', '쿨감', '강렬댐증', '크리', '극대', '고정공'];
+  const XN = XS.length, XI = {}; XS.forEach((k, i) => { XI[k] = i; });
+  const XCELL = { '적응력': 'C14', '초적응력': 'C15', '강배': 'C24', '역강배': 'C25', '100이하': 'C26', '추피': 'C22', '양극화': 'C20', '모스댐': 'C33', '초댐증': 'C30', '크댐증': 'C18', '보댐증': 'C21', '강렬댐증': 'C29' };
+  const SUIT_X = { atk: '고정공', mp: '물마퍼', crit: '크리', max: '극대', mos: '모스댐', pol: '양극화', adapt: '적응력', dot: '추피', boss: '보댐증' };
+  const I_CR = XI['크리'], I_MX = XI['극대'], I_BS = XI['보댐증'], I_CD = XI['크댐증'], I_CL = XI['쿨감'], I_HA = XI['강배'], I_HB = XI['역강배'], I_SA = XI['강렬댐증'], I_SB = XI['초댐증'];
+  const X_LIN = XS.map((k, i) => i).filter(i => i !== I_CR && i !== I_MX && i !== I_BS);
+  const xVec = (o, map) => { const v = new Float64Array(XN); for (const k in (o || {})) { const s = map ? map[k] : k; if (s != null && XI[s] != null) v[XI[s]] += Number(o[k]) || 0; } return v; };
+  const suitVec = (n) => xVec(SUITS[n], SUIT_X);
+  const bottomVec = (n) => { const isSr = !!(BOTTOMS[n] && BOTTOMS[n].sr), a = xVec(BOTTOMS[n], SUIT_X), b = xVec(srSet(srFixed() + (isSr ? 1 : 0)), SUIT_X); for (let i = 0; i < XN; i++) a[i] += b[i]; return a; };
+  // 실투력 모델(버프 조합 base마다 하나). worn·suitNow·bNow: 지금 낀 것(스탯창 값에 이미 들어 있음)
+  function xModel(base, worn, suitNow, bNow) {
+    base = base || {};
+    const inp = Object.assign({}, APP.inputs(), base), cs = curStats(), cap = APP.coolCap ? APP.coolCap() : 35;
+    const W = R.wornContribution(db, worn).sums, Wv = xVec(W), sv0 = suitVec(suitNow), bv0 = bottomVec(bNow);
+    for (let i = 0; i < XN; i++) Wv[i] += sv0[i] + bv0[i];
+    const curCool = Number(cs['쿨감']) || 0, bare = curCool - (W['쿨감'] || 0), mp = Number(cs['물마퍼']) || 0;
+    const sk = APP.sockInfo ? APP.sockInfo() : { v: { crit: 6, max: 6, boss: 3, boss2: 2.5 }, counted: false, n: null, rawC: 0, rawM: 0 };
+    const vc = sk.v.crit || 6, vm = sk.v.max || 6, vb = sk.v.boss || 3, vh = sk.v.boss2 || 2.5, NR = 12;
+    const haveH = sk.counted ? sk.n.boss2 : 0, bossSlots = sk.counted ? sk.n.boss + sk.n.boss2 : Infinity;
+    const drop = (t) => { if (t <= 0) return t * vb; const a = Math.min(t, haveH); return a * vh + (t - a) * vb; };
+    const r6 = (x) => Math.round(x * 1e6) / 1e6;
+    const C11 = Number(inp.C11) || 0, C12 = Number(inp.C12) || 0, C17 = Number(inp.C17) || 0, C19 = Number(inp.C19) || 0, C21 = Number(inp.C21) || 0;
+    // Δ(지금 대비 아바타 스탯 변화, 쿨감은 상한 적용 뒤 변화) + 마법석 옮김(nc: 힘트마 → 크리 칸 수, nm: 힘트마 → 극대) → 계산기 칸
+    const over = (d, nc, nm) => {
+      const o = Object.assign({}, base);
+      for (const k in XCELL) { const i = XI[k]; let dv = d[i]; if (i === I_BS) dv -= drop(nc + nm); if (dv) o[XCELL[k]] = r6(Math.max(0, (Number(inp[XCELL[k]]) || 0) + dv / 100)); }
+      const dc = d[I_CL]; if (dc) for (const c of ['C31', 'C32']) o[c] = r6(Math.max(0, (Number(inp[c]) || 0) + dc / 100));
+      const dmp = d[XI['물마퍼']], datk = d[XI['고정공']];
+      if (dmp || datk) { const k = (100 + mp + dmp) / (100 + mp), add = datk * (1 + (mp + dmp) / 100); o.C11 = Math.max(1, Math.round(C11 * k + add)); o.C12 = Math.max(1, Math.round(C12 * k + add * (C11 > 0 ? C12 / C11 : 1))); }
+      const dcr = d[I_CR] + vc * nc, dmx = d[I_MX] + vm * nm;
+      if (dcr) o.C17 = APP.addRaw('C17', C17, dcr / 100);
+      if (dmx) o.C19 = APP.addRaw('C19', C19, dmx / 100);
+      return o;
+    };
+    const cp0 = APP.cpWith(base), L0 = Math.log(cp0 > 0 ? cp0 : 1);
+    const lg = (o) => { const c = APP.cpWith(o); return c > 0 ? Math.log(c) - L0 : -50; };
+    const z = new Float64Array(XN), hm = XS.map(() => new Map());
+    let calls = 0;
+    // 스탯 하나만 dv(%) 바꿨을 때의 실투력 변화(로그)
+    // 빠른 표(±150, 고정공 ±1500 안쪽은 배열, 밖은 Map). 탐색이 끝나면 free()로 비움
+    let HD = XS.map(k => { const R = k === '고정공' ? 150000 : 15000; return { R, a: new Float64Array(2 * R + 1).fill(NaN) }; });
+    // 크리·극대: 계산기 칸(스탯창 값)은 0~1에서 잘리고, 만크극 위로는 실투력이 그대로라 칸 값으로 모아서 한 번만 계산
+    // (실투력은 크리·극대가 늘면 줄지 않으므로, 어떤 칸 값에서 1일 때와 같으면 그 위는 모두 같음)
+    const SAT = {}; for (const [i, c, w0] of [[I_CR, 'C17', C17], [I_MX, 'C19', C19]]) SAT[i] = { c, w0, top: null, sat: 1, m: new Map(), lin: undefined };
+    // 크리·극대 칸 값(0~1)에 대한 실투력이 '직선이다가 만크극에서 꺾여 평평'인지 9곳으로 확인 → 맞으면 계산 없이 min(직선, 꼭대기)
+    const cpCell = (c, w) => { calls++; return APP.cpWith(Object.assign({}, base, { [c]: r6(w) })); };
+    const satLine = (S) => {
+      if (S.lin !== undefined) return S.lin;
+      S.lin = null;
+      const top = cpCell(S.c, 1), a0 = cpCell(S.c, 0), a1 = cpCell(S.c, 0.25), k = (a1 - a0) / 0.25;
+      if (!(top > 0) || !(a0 > 0) || !(k > 0)) return null;
+      const ws = Math.min(1, (top - a0) / k), f = (w) => Math.min(a0 + k * w, top);
+      const chk = [0.5, 0.75, ws * 0.9, ws - 0.003, ws + 0.003, (ws + 1) / 2].filter(w => w > 0 && w < 1);
+      for (const w of chk) { const c = cpCell(S.c, w), e = f(w); if (Math.abs(c / e - 1) > 1e-10) return null; }
+      S.lin = { a0, k, top }; return S.lin;
+    };
+    // 고정공·물마퍼: 계산기 공격력 칸(C11·C12)에 대해 실투력이 평면인지 6곳으로 확인 → 맞으면 반올림까지 똑같이 따라 하고 평면으로 계산
+    let ATK;
+    const atkPlane = () => {
+      if (ATK !== undefined) return ATK;
+      ATK = null;
+      const F = (a, b) => { calls++; return APP.cpWith(Object.assign({}, base, { C11: a, C12: b })); };
+      if (!(C11 > 0 && C12 > 0)) return null;
+      const f0 = F(C11, C12), d = Math.max(1000, Math.round(C11 * 0.1)), fb = F(C11 + d, C12), fc = F(C11, C12 + d);
+      const b = (fb - f0) / d, c = (fc - f0) / d, a = f0 - b * C11 - c * C12, P = (x, y) => a + b * x + c * y;
+      for (const [x, y] of [[C11 * 2, C12 * 2], [Math.round(C11 * 0.6), Math.round(C12 * 0.7)], [C11 + 3 * d, C12 + 5 * d]]) { const v = F(x, y), e = P(x, y); if (!(e > 0) || Math.abs(v / e - 1) > 1e-10) return null; }
+      ATK = { P }; return ATK;
+    };
+    const callsBy = new Int32Array(XN), realBy = new Int32Array(XN);
+    const hCalc = (i, key) => {
+      callsBy[i]++;
+      const S = SAT[i];
+      if (S) { const w = Math.min(1, Math.max(0, APP.addRaw(S.c, S.w0, key / 10000)));
+        const Ln = satLine(S); if (Ln) { const c = Math.min(Ln.a0 + Ln.k * r6(w), Ln.top); return c > 0 ? Math.log(c) - L0 : -50; }
+        if (S.top === null) { calls++; S.top = lg(Object.assign({}, base, { [S.c]: 1 })); }
+        if (w >= S.sat - 1e-12) return S.top;
+        const k = Math.round(w * 1e6); let v = S.m.get(k); if (v !== undefined) return v;
+        calls++; realBy[i]++; v = lg(Object.assign({}, base, { [S.c]: r6(w) })); S.m.set(k, v); if (Math.abs(v - S.top) < 1e-13 && w < S.sat) S.sat = w; return v; }
+      if (XS[i] === '고정공' || XS[i] === '물마퍼') { const AP = atkPlane(); if (AP) { z.fill(0); z[i] = key / 100; const o = over(z, 0, 0), c = AP.P(o.C11 ?? C11, o.C12 ?? C12); return c > 0 ? Math.log(c) - L0 : -50; } }
+      const A = affOf(i);
+      if (A) { const dv = key / 100; if (dv >= A.L - 1e-9 && dv <= A.U + 1e-9) { const c = A.c0 + A.k * (dv - A.L); return c > 0 ? Math.log(c) - L0 : -50; } if (A.clampLo && dv < A.L) return A.vL; }
+      return rawH(i, key); };
+    const rawH = (i, key) => { z.fill(0); z[i] = key / 100; calls++; realBy[i]++; return lg(over(z, 0, 0)); };
+    // 칸 하나만 바뀌는 스탯은 쓰는 범위에서 실투력이 직선인지 7곳으로 확인 → 직선이면 그 범위는 계산 없이 직선으로
+    // (모스·보뎀·크뎀처럼 곱해지기만 하는 스탯. 상한·꺾임이 있으면 확인에서 걸려서 그 스탯은 그대로 하나하나 계산)
+    const AFF = {};
+    const affOf = (i) => {
+      if (i in AFF) return AFF[i];
+      AFF[i] = null;
+      // 고정공·물마퍼는 공격력 반올림 때문에 직선에서 아주 조금 어긋나서 그대로 계산
+      if (i === I_CR || i === I_MX || XS[i] === '고정공' || XS[i] === '물마퍼') return null;
+      const cell = XCELL[XS[i]];
+      let L = -150, U = 150, clampLo = false;
+      if (cell) { const d0 = -(Number(inp[cell]) || 0) * 100; if (d0 > L) { L = Math.ceil(d0 * 100) / 100; clampLo = true; } }
+      if (!(U - L > 4)) return null;
+      const tol = 1e-10, N = 7, pts = [];
+      for (let q = 0; q < N; q++) { const dv = Math.round((L + (U - L) * q / (N - 1)) * 100) / 100, v = rawH(i, Math.round(dv * 100)); pts.push([dv, Math.exp(v + L0)]); }
+      const [x0, c0] = pts[0], [x1, c1] = pts[N - 1], k = (c1 - c0) / (x1 - x0);
+      for (const [x, c] of pts) { const l = c0 + k * (x - x0); if (!(l > 0) || Math.abs(c / l - 1) > tol) return null; }
+      AFF[i] = { L: x0, U: x1, c0, k, clampLo, vL: Math.log(c0) - L0 };
+      return AFF[i];
+    };
+    const h = (i, dv) => { const key = Math.round(dv * 100);
+      if (HD) { const D = HD[i], ix = key + D.R; if (ix >= 0 && ix < D.a.length) { let v = D.a[ix]; if (v !== v) { v = hm[i].get(key); if (v === undefined) { v = hCalc(i, key); hm[i].set(key, v); } D.a[ix] = v; } return v; } }
+      const m = hm[i]; let v = m.get(key); if (v === undefined) { v = hCalc(i, key); m.set(key, v); } return v; };
+    const pair = (i, j, a, b) => { z.fill(0); z[i] = a; z[j] = b; calls++; return (lg(over(z, 0, 0)) - h(i, a) - h(j, b)) / (a * b); };
+    const cHP = pair(I_HA, I_HB, 5, 5), cSK = pair(I_SA, I_SB, 5, 5);
+    // 크리·크뎀: 크뎀 변화 × 스탯창 크리 변화(크리는 100%에서 끝나서 원래 수치가 아니라 스탯창 값으로)
+    const wm = new Map(), w0 = Math.min(1, Math.max(0, C17));
+    const wc = (dRaw) => { const key = Math.round(dRaw * 100); let v = wm.get(key); if (v === undefined) { v = (Math.min(1, Math.max(0, APP.addRaw('C17', C17, key / 10000))) - w0) * 100; wm.set(key, v); } return v; };
+    let cCD = 0;
+    for (const dr of [vc, -vc]) { const dw = wc(dr); if (Math.abs(dw) > 0.05) { z.fill(0); z[I_CD] = 5; z[I_CR] = dr; calls++; cCD = (lg(over(z, 0, 0)) - h(I_CD, 5) - h(I_CR, dr)) / (5 * dw); break; } }
+    // 마법석 옮김 범위: 소켓 칸 수를 넣었으면 그 안에서. 원래 수치·보뎀이 0 밑으로는 못 감
+    const ncLo0 = sk.counted ? -sk.n.crit : -NR, nmLo0 = sk.counted ? -sk.n.max : -NR;
+    const Rm = new Map();
+    // 크리·극대·보뎀(+크뎀 곱 항)을 마법석까지 맞춘 가장 높은 값. arg: 그때 옮긴 칸 수
+    const R4 = (dc, dm, db, dcd) => {
+      const key = ((Math.round(dc * 2) + 2000) * 4000 + (Math.round(dm * 2) + 2000)) * 4000 * 4000 + (Math.round(db * 2) + 2000) * 4000 + (Math.round(dcd * 2) + 2000);
+      let r = Rm.get(key); if (r) return r;
+      const ncLo = Math.max(ncLo0, Math.ceil(-(sk.rawC + dc) / vc - 1e-9)), nmLo = Math.max(nmLo0, Math.ceil(-(sk.rawM + dm) / vm - 1e-9));
+      const fc = [], fm = [];
+      for (let n = ncLo; n <= NR; n++) fc.push(h(I_CR, dc + vc * n) + cCD * dcd * wc(dc + vc * n));
+      for (let n = nmLo; n <= NR; n++) fm.push(h(I_MX, dm + vm * n));
+      let bv = -Infinity, bc = 0, bmx = 0;
+      for (let a = 0; a < fc.length; a++) {
+        const nc = ncLo + a;
+        for (let b = 0; b < fm.length; b++) {
+          const nm = nmLo + b, t = nc + nm;
+          if (t > bossSlots || C21 * 100 + db - drop(t) < -1e-9) continue;
+          const v = fc[a] + fm[b] + h(I_BS, db - drop(t));
+          if (v > bv) { bv = v; bc = nc; bmx = nm; }
+        }
+      }
+      r = { v: bv, nc: bc, nm: bmx }; Rm.set(key, r); return r;
+    };
+    // 아바타 스탯 합(절대값, 세트 효과 포함) → 모델 값(지금 대비 실투력 로그 변화)
+    const d = new Float64Array(XN);
+    const delta = (x) => { for (let i = 0; i < XN; i++) d[i] = x[i] - Wv[i]; d[I_CL] = Math.min(bare + x[I_CL], cap) - curCool; return d; };
+    const value = (x) => {
+      delta(x);
+      let v = 0; for (const i of X_LIN) if (d[i]) v += h(i, d[i]);
+      v += cHP * d[I_HA] * d[I_HB] + cSK * d[I_SA] * d[I_SB];
+      return v + R4(d[I_CR], d[I_MX], d[I_BS], d[I_CD]).v;
+    };
+    // 계산기 실투력(마법석은 모델이 고른 칸 수에서 시작해 한 칸씩 옮겨 가며 가장 높은 곳)
+    const real = (x) => {
+      const dd = Float64Array.from(delta(x)), hint = R4(dd[I_CR], dd[I_MX], dd[I_BS], dd[I_CD]);
+      const ncLo = Math.max(ncLo0, Math.ceil(-(sk.rawC + dd[I_CR]) / vc - 1e-9)), nmLo = Math.max(nmLo0, Math.ceil(-(sk.rawM + dd[I_MX]) / vm - 1e-9));
+      const memo = new Map();
+      const f = (nc, nm) => {
+        if (nc < ncLo || nm < nmLo || nc > NR || nm > NR || nc + nm > bossSlots || C21 * 100 + dd[I_BS] - drop(nc + nm) < -1e-9) return -Infinity;
+        const k = nc * 100 + nm; let v = memo.get(k); if (v === undefined) { v = APP.cpWith(over(dd, nc, nm)); if (!(v > 0)) v = -Infinity; memo.set(k, v); } return v;
+      };
+      let nc = hint.nc, nm = hint.nm, v = f(nc, nm);
+      if (!(v > 0)) { nc = 0; nm = 0; v = f(0, 0); }
+      for (let it = 0; it < 40; it++) {
+        let bn = null, bvv = v;
+        for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]]) { const w = f(nc + a, nm + b); if (w > bvv + 1e-6) { bvv = w; bn = [nc + a, nm + b]; } }
+        if (!bn) break; [nc, nm] = bn; v = bvv;
+      }
+      return { cp: v, nc, nm, over: over(dd, nc, nm), model: Math.exp(value(x)) * Math.exp(L0) };
+    };
+    // 가지치기용 기울기: lo~hi 사이에서 스탯 하나가 1 늘 때 모델 값이 가장 많이 오르는 폭(위로 넉넉하게).
+    // 끝점 두 곳의 한 칸 차이와 할선 중 큰 값(오목·볼록 둘 다 덮음), 쿨감은 상한 바로 아래도 봄. 곱 항은 짝 스탯이 가장 유리한 끝에서
+    const dl = new Float64Array(XN), dh = new Float64Array(XN), STEP = XS.map(k => k === '고정공' ? 10 : 1);
+    const sl1 = (f, a, b, st) => { let s = (f(a + st) - f(a)) / st; if (b > a + 1e-9) { s = Math.max(s, (f(b) - f(b - st)) / st, (f(b) - f(a)) / (b - a)); } return s; };
+    const capX = cap - bare;
+    const slopes = (xlo, xhi, S) => {
+      delta(xlo); dl.set(d); delta(xhi); dh.set(d);
+      for (const i of X_LIN) {
+        if (i === I_CL) { const f = (x) => h(I_CL, Math.min(bare + x, cap) - curCool), a = xlo[i], b = Math.max(a, xhi[i]); let s = sl1(f, a, b, 1); const e = Math.min(b, capX); if (e - 1 >= a - 1) s = Math.max(s, f(e) - f(e - 1)); S[i] = s; continue; }
+        const st = STEP[i], f = (v) => h(i, v); S[i] = sl1(f, dl[i], Math.max(dl[i], dh[i]), st);
+      }
+      S[I_HA] += Math.max(cHP * dl[I_HB], cHP * dh[I_HB]); S[I_HB] += Math.max(cHP * dl[I_HA], cHP * dh[I_HA]);
+      S[I_SA] += Math.max(cSK * dl[I_SB], cSK * dh[I_SB]); S[I_SB] += Math.max(cSK * dl[I_SA], cSK * dh[I_SA]);
+      const lo4 = [dl[I_CR], dl[I_MX], dl[I_BS], dl[I_CD]], hi4 = [dh[I_CR], dh[I_MX], dh[I_BS], Math.max(dl[I_CD], dh[I_CD])];
+      const RR = (v) => R4(v[0], v[1], v[2], v[3]).v;
+      [I_CR, I_MX, I_BS, I_CD].forEach((ix, q) => {
+        let s = -Infinity;
+        for (const corner of [lo4, hi4]) {
+          const f = (t) => { const v = corner.slice(); v[q] = t; return RR(v); };
+          s = Math.max(s, sl1(f, lo4[q], Math.max(lo4[q], hi4[q]), 1));
+        }
+        S[ix] = s;
+      });
+      for (let i = 0; i < XN; i++) S[i] = Math.max(0, S[i]) * 1.03 + 1e-6;
+      return S;
+    };
+    // 라그랑주 상한: 스탯마다 가격 lam → 상자 [Lo, Hi](아바타 스탯 합) 안에서 (모델 값 − lam·x)의 최댓값과 그 점(y).
+    // 아바타 수치는 모두 정수(고정공은 5 단위)라 그 칸만 보면 정확. 크리·극대·보뎀·크뎀은 마법석 칸 수마다 나눠서
+    const GR = XS.map(k => k === '고정공' ? 5 : 1);
+    const grid = (lo, hi, st) => { const a = []; for (let x = Math.ceil(lo / st - 1e-9) * st; x <= hi + 1e-9; x += st) a.push(Math.round(x * 100) / 100); return a.length ? a : [lo]; };
+    const fx = (i, x) => i === I_CL ? h(I_CL, Math.min(bare + x, cap) - curCool) : h(i, x - Wv[i]);
+    // 상자마다 한 번: 칸별 h 값을 미리 표로(가격만 바뀌는 반복에서는 더하기·빼기만)
+    const conjPrep = (Lo, Hi) => {
+      const B = { singles: [], pairs: [] };
+      for (const i of X_LIN) {
+        if (i === I_HA || i === I_HB || i === I_SA || i === I_SB || i === I_CD) continue;
+        // 한 스탯짜리는 다 계산하지 않고 필요한 칸만(conj에서 단조성으로 나머지를 위로 묶음)
+        const gx = grid(Lo[i], Hi[i], GR[i]); B.singles.push({ i, gx, fv: new Float64Array(gx.length).fill(NaN), full: false });
+      }
+      for (const [ia, ib, c] of [[I_HA, I_HB, cHP], [I_SA, I_SB, cSK]]) {
+        const ga = grid(Lo[ia], Hi[ia], GR[ia]), gb = grid(Lo[ib], Hi[ib], GR[ib]);
+        B.pairs.push({ ia, ib, c, ga, gb, fa: Float64Array.from(ga, x => fx(ia, x)), fb: Float64Array.from(gb, x => fx(ib, x)), da: Float64Array.from(ga, x => x - Wv[ia]), db: Float64Array.from(gb, x => x - Wv[ib]), fbl: new Float64Array(gb.length) });
+      }
+      const gc = grid(Lo[I_CR], Hi[I_CR], 1), gd = grid(Lo[I_CD], Hi[I_CD], 1), gm = grid(Lo[I_MX], Hi[I_MX], 1), gb = grid(Lo[I_BS], Hi[I_BS], 1);
+      const hd = Float64Array.from(gd, x => h(I_CD, x - Wv[I_CD])), dd = Float64Array.from(gd, x => x - Wv[I_CD]);
+      // 크리: (마법석 nc, xc)마다 u = dc + vc·nc. 크뎀 곱 항은 u에만 달려서 같은 u는 한 번만
+      const uKey = new Map(), uH = [], uW = [], Aent = [];
+      for (let nc = ncLo0; nc <= NR; nc++) { const xs = [], us = [];
+        for (let a = 0; a < gc.length; a++) { const dc = gc[a] - Wv[I_CR]; if (nc < Math.ceil(-(sk.rawC + dc) / vc - 1e-9)) continue; const u = dc + vc * nc, k = Math.round(u * 100);
+          let ui = uKey.get(k); if (ui === undefined) { ui = uH.length; uKey.set(k, ui); uH.push(h(I_CR, u)); uW.push(cCD * wc(u)); } xs.push(a); us.push(ui); }
+        Aent.push({ xs: Int32Array.from(xs), us: Int32Array.from(us) }); }
+      const Bent = []; for (let nm = nmLo0; nm <= NR; nm++) { const xs = [], hv = []; for (let a = 0; a < gm.length; a++) { const dm = gm[a] - Wv[I_MX]; if (nm < Math.ceil(-(sk.rawM + dm) / vm - 1e-9)) continue; xs.push(a); hv.push(h(I_MX, dm + vm * nm)); } Bent.push({ xs: Int32Array.from(xs), hv: Float64Array.from(hv) }); }
+      const tLo = ncLo0 + nmLo0, Cent = [];
+      for (let t = tLo; t <= 2 * NR; t++) { const xs = [], hv = []; if (t <= bossSlots) for (let a = 0; a < gb.length; a++) { const db = gb[a] - Wv[I_BS]; if (C21 * 100 + db - drop(t) < -1e-9) continue; xs.push(a); hv.push(h(I_BS, db - drop(t))); } Cent.push({ xs: Int32Array.from(xs), hv: Float64Array.from(hv) }); }
+      const nU = uH.length;
+      B.r4 = { gc, gd, gm, gb, hd, dd, ad: new Float64Array(gd.length), uH: Float64Array.from(uH), uW: Float64Array.from(uW), uBest: new Float64Array(nU), uArg: new Int32Array(nU), Aent, Bent, Cent, tLo,
+        A: new Float64Array(Aent.length), Aa: new Int32Array(Aent.length), Bv: new Float64Array(Bent.length), Ba: new Int32Array(Bent.length), Cv: new Float64Array(Cent.length), Ca: new Int32Array(Cent.length) };
+      return B;
+    };
+    // 라그랑주 상한: 가격 lam → 상자 안에서 (모델 값 − lam·x)의 최댓값(정확: 아바타 수치가 정수라 칸만 보면 됨)과 그 점 y
+    const conj = (lam, B, y) => {
+      let phi = 0;
+      for (const S of B.singles) {
+        const i = S.i, L = lam[i], gx = S.gx, fv = S.fv, m = gx.length;
+        const get = (a) => { let v = fv[a]; if (v !== v) { v = fx(i, gx[a]); fv[a] = v; } return v; };
+        if (S.full) { for (let a = 0; a < m; a++) get(a); }
+        else { get(0); get(m - 1); }
+        // 실투력은 스탯이 늘면 줄지 않음(L ≥ 0) → 아직 안 잰 칸 (a, b) 사이는 h(b) − L·x(a+1) 보다 클 수 없음. 그 값이 지금 최고보다 크면 가운데를 재서 쪼갬
+        for (;;) {
+          let bv = -Infinity, bx = 0;
+          for (let a = 0; a < m; a++) { const v = fv[a]; if (v === v) { const w = v - L * gx[a]; if (w > bv) { bv = w; bx = a; } } }
+          let need = -1, pa = -1;
+          for (let a = 0; a < m; a++) { if (fv[a] !== fv[a]) continue; if (pa >= 0 && a > pa + 1 && fv[a] - L * gx[pa + 1] > bv + 1e-12) { need = (pa + a) >> 1; break; } pa = a; }
+          if (need < 0) { phi += bv; if (y) y[i] = gx[bx]; break; }
+          const v = get(need);
+          // 단조가 아니면(그럴 일은 없지만) 이 스탯은 모든 칸을 잼
+          let l = need - 1; while (l >= 0 && fv[l] !== fv[l]) l--; let r = need + 1; while (r < m && fv[r] !== fv[r]) r++;
+          if ((l >= 0 && v < fv[l] - 1e-12) || (r < m && v > fv[r] + 1e-12)) { S.full = true; for (let a = 0; a < m; a++) get(a); }
+        }
+      }
+      for (const Pp of B.pairs) { const La = lam[Pp.ia], Lb = lam[Pp.ib], nb = Pp.gb.length, fbl = Pp.fbl, dbv = Pp.db; let bv = -Infinity, ba = 0, bb = 0;
+        for (let q = 0; q < nb; q++) fbl[q] = Pp.fb[q] - Lb * Pp.gb[q];
+        for (let a = 0; a < Pp.ga.length; a++) { const fa = Pp.fa[a] - La * Pp.ga[a], cd = Pp.c * Pp.da[a]; for (let q = 0; q < nb; q++) { const v = fa + fbl[q] + cd * dbv[q]; if (v > bv) { bv = v; ba = a; bb = q; } } }
+        phi += bv; if (y) { y[Pp.ia] = Pp.ga[ba]; y[Pp.ib] = Pp.gb[bb]; } }
+      const Q = B.r4, Lc = lam[I_CR], Ld = lam[I_CD], Lm = lam[I_MX], Lb = lam[I_BS], nd = Q.gd.length, ad = Q.ad, dd = Q.dd;
+      for (let q = 0; q < nd; q++) ad[q] = Q.hd[q] - Ld * Q.gd[q];
+      for (let ui = 0; ui < Q.uH.length; ui++) { const w = Q.uW[ui]; let bv = -Infinity, bq = 0; for (let q = 0; q < nd; q++) { const v = ad[q] + w * dd[q]; if (v > bv) { bv = v; bq = q; } } Q.uBest[ui] = Q.uH[ui] + bv; Q.uArg[ui] = bq; }
+      const A = Q.A, Aa = Q.Aa, Bv = Q.Bv, Ba = Q.Ba, Cv = Q.Cv, Ca = Q.Ca;
+      for (let a = 0; a < A.length; a++) { const E = Q.Aent[a]; let bv = -Infinity, bi = -1; for (let k = 0; k < E.xs.length; k++) { const v = Q.uBest[E.us[k]] - Lc * Q.gc[E.xs[k]]; if (v > bv) { bv = v; bi = k; } } A[a] = bv; Aa[a] = bi; }
+      for (let b = 0; b < Bv.length; b++) { const E = Q.Bent[b]; let bv = -Infinity, bi = -1; for (let k = 0; k < E.xs.length; k++) { const v = E.hv[k] - Lm * Q.gm[E.xs[k]]; if (v > bv) { bv = v; bi = k; } } Bv[b] = bv; Ba[b] = bi; }
+      for (let t = 0; t < Cv.length; t++) { const E = Q.Cent[t]; let bv = -Infinity, bi = -1; for (let k = 0; k < E.xs.length; k++) { const v = E.hv[k] - Lb * Q.gb[E.xs[k]]; if (v > bv) { bv = v; bi = k; } } Cv[t] = bv; Ca[t] = bi; }
+      let bv = -Infinity, ba = -1, bb = -1, bt = -1;
+      for (let a = 0; a < A.length; a++) { if (A[a] === -Infinity) continue; for (let b = 0; b < Bv.length; b++) { if (Bv[b] === -Infinity) continue; const t = ncLo0 + a + nmLo0 + b - Q.tLo; if (t < 0 || t >= Cv.length || Cv[t] === -Infinity) continue; const v = A[a] + Bv[b] + Cv[t]; if (v > bv) { bv = v; ba = a; bb = b; bt = t; } } }
+      if (y && ba >= 0) { const E = Q.Aent[ba]; y[I_CR] = Q.gc[E.xs[Aa[ba]]]; y[I_CD] = Q.gd[Q.uArg[E.us[Aa[ba]]]]; y[I_MX] = Q.gm[Q.Bent[bb].xs[Ba[bb]]]; y[I_BS] = Q.gb[Q.Cent[bt].xs[Ca[bt]]]; }
+      return phi + bv;
+    };
+    const free = () => { HD = null; };
+    return { affInfo: () => XS.map((k, i) => [k, i === I_CR || i === I_MX ? (SAT[i].lin ? 'sat-line' : String(SAT[i].lin)) : (k === '고정공' || k === '물마퍼') ? (ATK ? 'plane' : String(ATK)) : AFF[i] === undefined ? 'unused' : AFF[i] ? 'line' : 'no']), callsBy: () => Array.from(realBy), value, real, slopes, conj, conjPrep, free, GR, Wv, bare, cap, curCool, cp0, L0, h, calls: () => calls, sk, inp };
+  }
+  // 고를 칸들(5셋·12부위·한벌·하의 악세). 고정했으면 지금 것만, 보유 필터를 켰으면 가진 것과 지금 낀 것만
+  function xSlots(worn, o) {
+    const fixed = o.fixed || {}, owned = o.owned || null;
+    const ok = (part, d) => !owned || owned.has(d) || d === (worn[part] || '');
+    const setIx = new Map(), six = (n) => { if (!n) return -1; let i = setIx.get(n); if (i === undefined) { i = setIx.size; setIx.set(n, i); } return i; };
+    const slots = [];
+    const add = (name, list) => slots.push({ name, opts: list.length ? list : [{ d: worn[name] || '', v: new Float64Array(XN), si: -1 }] });
+    if (o.fiveFixed) add('아바타5셋', worn['아바타5셋'] ? [{ d: worn['아바타5셋'], v: xVec(fiveStats(worn['아바타5셋'])), si: -1 }] : []);
+    else add('아바타5셋', db.fiveSetList.map(s => db.fiveSetDisplay.get(s)).filter(d => d && ok('아바타5셋', d)).map(d => ({ d, v: xVec(fiveStats(d)), si: -1 })));
+    for (const pt of R.ALL_PARTS) {
+      const list = fixed[pt] ? (worn[pt] ? [worn[pt]] : []) : [...(db.partCandidates.get(pt) || [])].filter(d => ok(pt, d));
+      add(pt, list.map(d => ({ d, v: xVec(db.statsByDisplay.get(d)), si: six(db.displayToSet.get(d)) })));
+    }
+    slots.push({ name: '한벌', opts: (o.suits || ['']).map(n => ({ d: n, v: suitVec(n), si: -1 })) });
+    slots.push({ name: '하의악세', opts: (o.bottoms || ['']).map(n => ({ d: n, v: bottomVec(n), si: -1 })) });
+    // 세트 효과: 세트마다 필요한 개수별 효과(누적)
+    const sets = [];
+    for (const [name, i] of setIx) sets[i] = { name, effs: [] };
+    for (const e of db.setEffects) { const i = setIx.get(e.set); if (i === undefined) continue; const st0 = db.statsByDisplay.get(e.display) || {}; let size = 0; for (const k in st0) size += Number(st0[k]) || 0; sets[i].effs.push({ need: e.need, v: xVec(st0), size }); }
+    for (const s of sets) { s.effs.sort((a, b) => a.need - b.need); s.cum = []; const acc = new Float64Array(XN); let sz = 0, j = 0; for (let c = 0; c <= 13; c++) { while (j < s.effs.length && s.effs[j].need <= c) { for (let k = 0; k < XN; k++) acc[k] += s.effs[j].v[k]; sz += s.effs[j].size; j++; } s.cum.push({ v: Float64Array.from(acc), size: sz, any: j > 0 }); } }
+    return { slots, sets };
+  }
+  const fiveStats = (disp) => { const o = {}; for (const [s, d] of db.fiveSetDisplay) if (d === disp) { const st0 = db.fiveSetStats.get(s) || {}; for (const k in st0) o[k] = (o[k] || 0) + st0[k]; } return o; };
+  // 가지치기 탐색. opt.K: 모델 위쪽 K개 / opt.thr: 이 값 이상인 조합 모두(opt.max개까지). 같은 스탯 합이면 지금과 덜 바뀐 쪽 하나만
+  const nzOfV = (v) => { const a = []; for (let k = 0; k < XN; k++) if (v[k]) a.push(k, v[k]); return a; };
+  function xSearch(Mo, SL, worn, opt) {
+    const { slots, sets } = SL, NSET = sets.length, NSL = slots.length;
+    const T0 = performance.now(), C0 = Mo.calls(), TM = {};
+    for (const s of slots) for (const o of s.opts) if (!o.nz) o.nz = nzOfV(o.v);
+    for (const st of sets) for (const c of st.cum) if (!c.nz) c.nz = nzOfV(c.v);
+    const cool = opt.cool || null; // { T, atLeast }
+    // 부위 순서: 옵션 사이 차이가 큰 칸부터. 옵션은 혼자 넣었을 때 모델 값이 큰 것부터(좋은 후보를 빨리 찾아 가지치기를 세게)
+    // 순서 정하기용 값: 마법석 다시 맞추기 없이 스탯 하나씩 더한 값의 합(빠름)
+    const solo = (v) => { let t = 0; for (let i = 0; i < XN; i++) if (v[i]) t += i === I_CL ? Mo.h(I_CL, Math.min(Mo.bare + Mo.Wv[i] + v[i], Mo.cap) - Mo.curCool) : Mo.h(i, v[i]); return t; };
+    const ord = slots.map(s => { const sc = s.opts.map(o => ({ o, s: solo(o.v) - solo(new Float64Array(XN)) })).sort((a, b) => b.s - a.s); return { name: s.name, opts: sc.map(x => x.o), spread: sc.length ? sc[0].s - sc[sc.length - 1].s : 0 }; }).sort(opt.order === 'size' ? ((a, b) => b.opts.length - a.opts.length || b.spread - a.spread) : opt.order === 'sizeAsc' ? ((a, b) => a.opts.length - b.opts.length || b.spread - a.spread) : ((a, b) => b.spread - a.spread));
+    TM.ord = [Math.round(performance.now() - T0), Mo.calls() - C0];
+    // 남은 칸 스탯별 최대·최소, 남은 칸에 세트 아이템이 있는 개수
+    const remMax = [], remMin = [], avail = [];
+    for (let dpt = 0; dpt <= NSL; dpt++) { const mx = new Float64Array(XN), mn = new Float64Array(XN), av = new Int32Array(NSET);
+      for (let j = dpt; j < NSL; j++) { const os = ord[j].opts, seen = new Set(); for (let k = 0; k < XN; k++) { let a = -Infinity, b = Infinity; for (const o of os) { if (o.v[k] > a) a = o.v[k]; if (o.v[k] < b) b = o.v[k]; } mx[k] += a; mn[k] += b; } for (const o of os) if (o.si >= 0 && !seen.has(o.si)) { seen.add(o.si); av[o.si]++; } }
+      remMax.push(mx); remMin.push(mn); avail.push(av); }
+    const P = new Float64Array(XN), cnt = new Int32Array(NSET), xb = new Float64Array(XN), xl = new Float64Array(XN), pick = new Array(NSL);
+    // 칸마다 스탯별 최솟값, 옵션마다 (값 − 최솟값)이 0이 아닌 스탯
+    const slotMin = ord.map(s => { const m = new Float64Array(XN); for (let k = 0; k < XN; k++) m[k] = Math.min(...s.opts.map(o => o.v[k])); return m; });
+    const nzOf = ord.map((s, j) => s.opts.map(o => { const a = []; for (let k = 0; k < XN; k++) { const dv = o.v[k] - slotMin[j][k]; if (dv) a.push(k, dv); } return a; }));
+    const xlo = new Float64Array(XN), SV = new Float64Array(XN);
+    const bound2 = (dpt, xbHi) => {
+      const mn = remMin[dpt];
+      for (let k = 0; k < XN; k++) xlo[k] = P[k] + mn[k];
+      Mo.slopes(xlo, xbHi, SV);
+      let add = 0;
+      for (let j = dpt; j < NSL; j++) { let bst = 0; for (const a of nzOf[j]) { let s = 0; for (let q = 0; q < a.length; q += 2) s += SV[a[q]] * a[q + 1]; if (s > bst) bst = s; } add += bst; }
+      // 세트 효과 몫: 켤 수 있는 세트마다 (기울기 · 효과) → 큰 것 3개(세트 효과는 3세트까지)
+      const av = avail[dpt]; let s1 = 0, s2 = 0, s3 = 0;
+      for (let q = 0; q < NSET; q++) { const c = Math.min(13, cnt[q] + av[q]), v = sets[q].cum[c].v; let w = 0; for (let k = 0; k < XN; k++) if (v[k]) w += SV[k] * v[k]; if (w > s3) { if (w > s1) { s3 = s2; s2 = s1; s1 = w; } else if (w > s2) { s3 = s2; s2 = w; } else s3 = w; } }
+      add += s1 + s2 + s3;
+      return Mo.value(xlo) + add;
+    };
+    const top = [], byKey = new Map(); let thr = opt.thr != null ? opt.thr : -Infinity, nodes = 0, leaves = 0, capped = false, bestV = -Infinity;
+    // 라그랑주 가지치기: 가격 lam을 정해 두면 어떤 조합이든 모델 값 ≤ phi(lam, 상자) + lam·x.
+    // lam·x의 위쪽: 칸마다 lam·v 최댓값(base) 합 + 세트마다 (그 세트 아이템을 r곳에 꼈을 때 base 대비 손해 + 세트 효과(c+r))의 최댓값(r을 다 따짐) 중 큰 3개
+    // (세트 효과는 3세트까지. 두 세트가 같은 칸을 원하면 위쪽으로만 셈 → 가지치기는 안전)
+    const lagInfo = {};
+    const PRF = opt.prof ? { at: new Array(NSL + 1).fill(0), lag: new Array(NSL + 1).fill(0), cool: new Array(NSL + 1).fill(0), box: new Array(NSL + 1).fill(0), sl: new Array(NSL + 1).fill(0) } : null;
+    const SLOTS_OF = sets.map(() => []);
+    ord.forEach((s, j) => { const seen = new Set(); for (const o of s.opts) if (o.si >= 0 && !seen.has(o.si)) { seen.add(o.si); SLOTS_OF[o.si].push(j); } });
+    const mkCtx = (L) => {
+      const lw = ord.map(s => new Float64Array(s.opts.length)), linRem = new Float64Array(NSL + 1), baseO = new Array(NSL), baseW = new Float64Array(NSL), bsl = ord.map(() => new Map());
+      for (let j = NSL - 1; j >= 0; j--) { const os = ord[j].opts, W = lw[j]; let bi = 0;
+        for (let t = 0; t < os.length; t++) { const nz = os[t].nz; let w = 0; for (let i = 0; i < nz.length; i += 2) w += L[nz[i]] * nz[i + 1]; W[t] = w; if (w > W[bi]) bi = t; const si = os[t].si; if (si >= 0) { const e = bsl[j].get(si); if (e === undefined || w > W[e]) bsl[j].set(si, t); } }
+        baseO[j] = os[bi]; baseW[j] = W[bi]; linRem[j] = linRem[j + 1] + W[bi]; }
+      const setLin = sets.map(st => { const B = new Float64Array(14); for (let i = 0; i < st.cum.length; i++) { const nz = st.cum[i].nz; let w = 0; for (let t = 0; t < nz.length; t += 2) w += L[nz[t]] * nz[t + 1]; B[i] = w; } return B; });
+      const sOrd = sets.map((st, q) => SLOTS_OF[q].map(j => { const t = bsl[j].get(q); return { j, o: ord[j].opts[t], d: lw[j][t] - baseW[j] }; }).sort((x, y) => y.d - x.d));
+      return { lam: Float64Array.from(L), lw, linRem, baseO, setLin, sOrd, phi: Infinity };
+    };
+    const linSet = (C, dpt, xh) => {
+      let s1 = 0, s2 = 0, s3 = 0, q1 = -1, q2 = -1, q3 = -1, r1 = 0, r2 = 0, r3 = 0;
+      for (let q = 0; q < NSET; q++) {
+        const c = cnt[q], B = C.setLin[q]; let G = B[c > 13 ? 13 : c], acc = 0, r = 0, br = 0;
+        for (const e of C.sOrd[q]) { if (e.j < dpt) continue; r++; acc += e.d; const cc = c + r; const v = B[cc > 13 ? 13 : cc] + acc; if (v > G) { G = v; br = r; } }
+        if (G > s3) { if (G > s1) { s3 = s2; q3 = q2; r3 = r2; s2 = s1; q2 = q1; r2 = r1; s1 = G; q1 = q; r1 = br; } else if (G > s2) { s3 = s2; q3 = q2; r3 = r2; s2 = G; q2 = q; r2 = br; } else { s3 = G; q3 = q; r3 = br; } }
+      }
+      if (xh) { xh.fill(0);
+        for (let j = dpt; j < NSL; j++) { const v = C.baseO[j].v; for (let k = 0; k < XN; k++) xh[k] += v[k]; LPICK[j] = C.baseO[j]; }
+        for (const [q, r] of [[q1, r1], [q2, r2], [q3, r3]]) { if (q < 0) continue; let n = 0;
+          for (const e of C.sOrd[q]) { if (e.j < dpt) continue; if (n++ >= r) break; const a = e.o.v, b0 = C.baseO[e.j].v; for (let k = 0; k < XN; k++) xh[k] += a[k] - b0[k]; LPICK[e.j] = e.o; }
+          const v = sets[q].cum[Math.min(13, cnt[q] + r)].v; for (let k = 0; k < XN; k++) xh[k] += v[k]; }
+      }
+      return C.linRem[dpt] + Math.max(0, s1) + Math.max(0, s2) + Math.max(0, s3);
+    };
+    const LPICK = new Array(NSL);
+    // 가격으로 고른 조합(남은 칸은 LPICK)을 실제로 모델에 넣어 봄 → 좋은 후보를 일찍 찾아 기준을 올림(지금 마디 상태는 되돌려 놓음)
+    const tryPick = (dpt) => {
+      const P0 = Float64Array.from(P), c0 = Int32Array.from(cnt), p0 = pick.slice();
+      for (let j = dpt; j < NSL; j++) { const o = LPICK[j]; for (let k = 0; k < XN; k++) P[k] += o.v[k]; if (o.si >= 0) cnt[o.si]++; pick[j] = o.d; }
+      leaf();
+      P.set(P0); cnt.set(c0); for (let j = 0; j < NSL; j++) pick[j] = p0[j];
+    };
+    const dotP = (L) => { let t = 0; for (let k = 0; k < XN; k++) t += L[k] * P[k]; return t; };
+    // 깊이 dpt 마디(지금 고른 것 P, 세트 개수 cnt)에서 U(lam) = phi(lam, 상자) + lam·P + lam·(남은 칸) 위쪽을 줄이는 가격 찾기(Polyak + 막히면 걸음 절반)
+    const tuneLam = (dpt, lam0, Bx, IT, ST, mu0) => {
+      const lam = Float64Array.from(lam0), y = new Float64Array(XN), xh = new Float64Array(XN), g = new Float64Array(XN);
+      let best = null, mu = mu0, stall = 0, its = 0;
+      for (let it = 0; it < IT; it++) {
+        its++;
+        const C = mkCtx(lam), phi = Mo.conj(lam, Bx, y), U = phi + dotP(lam) + linSet(C, dpt, xh);
+        if (opt.lagPick !== false) tryPick(dpt);
+        if (!best || U < best.U - 1e-7) { best = { U, C, phi }; stall = 0; } else if (++stall >= ST) { mu /= 2; stall = 0; lam.set(best.C.lam); if (mu < 1e-3) break; continue; }
+        const tg = thr > -Infinity ? thr : TGT;
+        if (U - tg < 1e-7) break;
+        let gg = 0; for (let k = 0; k < XN; k++) { g[k] = P[k] + xh[k] - y[k]; gg += g[k] * g[k]; }
+        if (gg < 1e-12) break;
+        const eta = mu * (U - tg) / gg;
+        for (let k = 0; k < XN; k++) lam[k] = Math.max(0, lam[k] - eta * g[k]);
+      }
+      best.C.phi = best.phi; best.its = its; return best;
+    };
+    let TGT = 0;
+    const ctxS = new Array(NSL + 1).fill(null), LoN = new Float64Array(XN); let phiCalls = 0, tuneCalls = 0;
+    const boxAt = (dpt) => { const mn = remMin[dpt]; for (let k = 0; k < XN; k++) LoN[k] = P[k] + mn[k]; return Mo.conjPrep(LoN, Float64Array.from(bound(dpt))); };
+    const lagOk = (dpt, pre) => {
+      let C = ctxS[dpt - 1];
+      if (!pre && !(C.phi + dotP(C.lam) + linSet(C, dpt) > thr - 1e-12)) return false;
+      if (dpt <= (opt.lagD ?? 3)) {
+        const Bx = boxAt(dpt);
+        if (dpt <= (opt.lagR ?? 0)) { tuneCalls++; const T = tuneLam(dpt, C.lam, Bx, opt.lagRIt ?? 40, opt.lagStall ?? 6, opt.lagMu ?? 2); if (T.U < C.phi + dotP(C.lam) + linSet(C, dpt)) C = T.C; else { const phi = Mo.conj(C.lam, Bx, null); C = Object.assign({}, C, { phi: Math.min(C.phi, phi) }); } }
+        else { phiCalls++; const phi = Mo.conj(C.lam, Bx, null); if (phi < C.phi) C = Object.assign({}, C, { phi }); }
+        ctxS[dpt] = C;
+        return C.phi + dotP(C.lam) + linSet(C, dpt) > thr - 1e-12;
+      }
+      ctxS[dpt] = C;
+      return true; };
+    const lagSetup = (x0) => {
+      const c0 = Mo.calls(), Lo = Float64Array.from(remMin[0]), Hi = Float64Array.from(bound(0)), Bx = Mo.conjPrep(Lo, Hi); lagInfo.prepCalls = Mo.calls() - c0; lagInfo.callsBefore = c0;
+      const lam = new Float64Array(XN), GR = Mo.GR, tmp = new Float64Array(XN);
+      for (let k = 0; k < XN; k++) { if (Hi[k] - Lo[k] < 1e-9) continue; const st = GR[k];
+        tmp.set(x0); tmp[k] = Math.min(Hi[k], x0[k] + st); const up = Mo.value(tmp); tmp[k] = Math.max(Lo[k], x0[k] - st); const dn = Mo.value(tmp); tmp[k] = x0[k];
+        const a = Math.min(Hi[k], x0[k] + st) - Math.max(Lo[k], x0[k] - st); lam[k] = a > 0 ? Math.max(0, (up - dn) / a) : 0; }
+      cnt.fill(0); P.fill(0);
+      const T = tuneLam(0, lam, Bx, opt.lagIt ?? 300, opt.lagStall ?? 6, opt.lagMu ?? 2);
+      lagInfo.U = T.U; lagInfo.its = T.its; lagInfo.thr = thr;
+      return T.C;
+    };
+    const T1 = new Float64Array(XN), T2 = new Float64Array(XN), T3 = new Float64Array(XN);
+    const bound = (dpt) => {
+      const mx = remMax[dpt], av = avail[dpt];
+      // 세트 효과 최대치: 스탯마다 켤 수 있는 세트 효과 중 큰 것 3개(세트 효과는 3세트까지). 세트 효과는 스탯 몇 개뿐이라 0 아닌 것만 봄
+      T1.fill(0); T2.fill(0); T3.fill(0);
+      for (let q = 0; q < NSET; q++) { const c = cnt[q] + av[q], nz = sets[q].cum[c > 13 ? 13 : c].nz;
+        for (let t = 0; t < nz.length; t += 2) { const k = nz[t], v = nz[t + 1]; if (v > T3[k]) { if (v > T1[k]) { T3[k] = T2[k]; T2[k] = T1[k]; T1[k] = v; } else if (v > T2[k]) { T3[k] = T2[k]; T2[k] = v; } else T3[k] = v; } } }
+      for (let k = 0; k < XN; k++) xb[k] = P[k] + mx[k] + T1[k] + T2[k] + T3[k];
+      return xb;
+    };
+    const coolOk = (lo, hi) => { if (!cool) return true; const T = cool.T, cLo = Math.min(Mo.bare + lo, Mo.cap), cHi = Math.min(Mo.bare + hi, Mo.cap); return cool.atLeast ? cHi >= T - 1e-9 : (cHi >= T - 1e-9 && cLo <= T + 1e-9); };
+    const leaf = () => {
+      leaves++;
+      for (let k = 0; k < XN; k++) xl[k] = P[k];
+      // 세트 효과(3세트까지: 3부위 이상 낀 세트 먼저, 그다음 효과가 큰 순)
+      const act = [];
+      for (let s = 0; s < NSET; s++) if (cnt[s] > 0 && sets[s].cum[Math.min(13, cnt[s])].any) act.push(s);
+      if (act.length > 1) act.sort((a, b) => Math.min(cnt[b], 3) - Math.min(cnt[a], 3) || sets[b].cum[Math.min(13, cnt[b])].size - sets[a].cum[Math.min(13, cnt[a])].size);
+      for (let a = 0; a < Math.min(3, act.length); a++) { const v = sets[act[a]].cum[Math.min(13, cnt[act[a]])].v; for (let k = 0; k < XN; k++) xl[k] += v[k]; }
+      const c = Math.min(Mo.bare + xl[I_CL], Mo.cap);
+      if (cool && (cool.atLeast ? c < cool.T - 1e-9 : Math.abs(c - cool.T) > 1e-9)) return;
+      const v = Mo.value(xl); if (!(v > thr - 1e-12)) return;
+      let key = ''; for (let k = 0; k < XN; k++) key += Math.round(xl[k] * 100) + ',';
+      let ch = 0; for (let j = 0; j < NSL; j++) { const nm = ord[j].name, cur = nm === '한벌' ? (worn['한벌'] || '') : nm === '하의악세' ? (opt.bNow || '') : (worn[nm] || ''); if (pick[j] !== cur) ch++; }
+      const ex = byKey.get(key);
+      if (ex) { if (ch < ex.ch) { ex.ch = ch; ex.pick = pick.slice(); } return; }
+      const e = { v, x: Float64Array.from(xl), pick: pick.slice(), ch, key };
+      byKey.set(key, e); top.push(e);
+      if (opt.K) {
+        top.sort((a, b) => b.v - a.v);
+        while (top.length > opt.K) byKey.delete(top.pop().key);
+        if (top.length === opt.K) thr = Math.max(thr, top[top.length - 1].v);
+      } else if (opt.margin != null) {
+        // 1등 모델 값에서 margin 안쪽은 모두 모음(실제 실투력으로 다시 잴 후보)
+        if (v > bestV) { bestV = v; thr = Math.max(thr, bestV - opt.margin); }
+        if (top.length > (opt.max || 200) * 2) { top.sort((a, b) => b.v - a.v); while (top.length && top[top.length - 1].v < thr) byKey.delete(top.pop().key); if (top.length > (opt.max || 200)) { while (top.length > (opt.max || 200)) byKey.delete(top.pop().key); capped = true; thr = Math.max(thr, top[top.length - 1].v); } }
+      } else if (opt.max && top.length > opt.max * 4) { top.sort((a, b) => b.v - a.v); while (top.length > opt.max) byKey.delete(top.pop().key); capped = true; thr = Math.max(thr, top[top.length - 1].v); }
+    };
+    // 자식 마디의 라그랑주 위쪽 값을 부모에서 한꺼번에: 세트마다 G를 한 번 구하고, 아이템이 속한 세트만 하나 늘린 G로 바꿔 끼움
+    const gq = (C, q, c, d1) => { const B = C.setLin[q]; let G = B[c > 13 ? 13 : c], acc = 0, r = 0; for (const e of C.sOrd[q]) { if (e.j < d1) continue; r++; acc += e.d; const cc = c + r, v = B[cc > 13 ? 13 : cc] + acc; if (v > G) G = v; } return G; };
+    const chB = ord.map(s => new Float64Array(s.opts.length)), tv = new Float64Array(4), ti = new Int32Array(4);
+    const childBounds = (dpt) => {
+      const C = ctxS[dpt], d1 = dpt + 1, out = chB[dpt];
+      tv.fill(-Infinity); ti.fill(-1);
+      for (let q = 0; q < NSET; q++) { const G = gq(C, q, cnt[q], d1); if (G > tv[3]) { let p = 3; while (p > 0 && G > tv[p - 1]) { tv[p] = tv[p - 1]; ti[p] = ti[p - 1]; p--; } tv[p] = G; ti[p] = q; } }
+      const pos = (x) => x > 0 ? x : 0, top3 = pos(tv[0]) + pos(tv[1]) + pos(tv[2]);
+      const base = C.phi + dotP(C.lam) + C.linRem[d1], os = ord[dpt].opts, W = C.lw[dpt];
+      for (let t = 0; t < os.length; t++) { const q = os[t].si; let S3 = top3;
+        if (q >= 0) { const G1 = gq(C, q, cnt[q] + 1, d1);
+          if (q === ti[0] || q === ti[1] || q === ti[2]) { // q가 위 3개 안: 그 자리를 G1로 바꾼 4개 중 큰 3개
+            let a = -Infinity, b = -Infinity, c = -Infinity; for (let p = 0; p < 4; p++) { const v = ti[p] === q ? G1 : tv[p]; if (v > a) { c = b; b = a; a = v; } else if (v > b) { c = b; b = v; } else if (v > c) c = v; }
+            S3 = pos(a) + pos(b) + pos(c);
+          } else if (G1 > tv[2]) S3 = top3 - pos(tv[2]) + pos(G1); }
+        out[t] = base + W[t] + S3; }
+      return out; };
+    const rec = (dpt, pre) => {
+      nodes++;
+      if (opt.maxNodes && nodes > opt.maxNodes) { capped = true; return; }
+      if (dpt === NSL) { leaf(); return; }
+      if (dpt > 0) {
+        if (PRF) PRF.at[dpt]++;
+        if (ctxS[0] && !lagOk(dpt, pre)) { if (PRF) PRF.lag[dpt]++; return; }
+        const b = bound(dpt);
+        if (!coolOk(P[I_CL] + remMin[dpt][I_CL], b[I_CL])) { if (PRF) PRF.cool[dpt]++; return; }
+        if (!(Mo.value(b) > thr - 1e-12)) { if (PRF) PRF.box[dpt]++; return; }
+        if (opt.tight !== false && thr > -Infinity && !(bound2(dpt, Float64Array.from(b)) > thr - 1e-12)) { if (PRF) PRF.sl[dpt]++; return; }
+      }
+      const os = ord[dpt].opts, cb = ctxS[dpt] && dpt + 1 < NSL ? childBounds(dpt) : null;
+      for (let t = 0; t < os.length; t++) {
+        if (cb && !(cb[t] > thr - 1e-12)) { if (PRF) { PRF.at[dpt + 1]++; PRF.lag[dpt + 1]++; } continue; }
+        const o = os[t];
+        for (let k = 0; k < XN; k++) P[k] += o.v[k];
+        if (o.si >= 0) cnt[o.si]++;
+        pick[dpt] = o.d;
+        rec(dpt + 1, !!cb);
+        if (o.si >= 0) cnt[o.si]--;
+        for (let k = 0; k < XN; k++) P[k] -= o.v[k];
+      }
+    };
+    // 먼저 넣어 둘 후보(빠른 오르막 탐색 결과): 가지치기 기준을 처음부터 높게
+    const runBench = () => { const Lo = Float64Array.from(remMin[0]), Hi = Float64Array.from(bound(0)); let t = performance.now(); const Bx = Mo.conjPrep(Lo, Hi); const tp = performance.now() - t; const lam = new Float64Array(XN).fill(0.003), y = new Float64Array(XN), xh = new Float64Array(XN);
+      t = performance.now(); for (let i = 0; i < 1000; i++) Mo.conj(lam, Bx, y); const tc = performance.now() - t; t = performance.now(); let C; for (let i = 0; i < 1000; i++) C = mkCtx(lam); const tm = performance.now() - t;
+      t = performance.now(); for (let i = 0; i < 1000; i++) linSet(C, 0, xh); const tl = performance.now() - t; t = performance.now(); for (let i = 0; i < 1000; i++) linSet(C, 5); const tl2 = performance.now() - t;
+      t = performance.now(); for (let i = 0; i < 1000; i++) Mo.value(Hi); const tv = performance.now() - t; t = performance.now(); for (let i = 0; i < 1000; i++) bound(5); const tb = performance.now() - t;
+      lagInfo.bench = { prep: tp, conjUs: tc, ctxUs: tm, linSetUs: tl, linSet5Us: tl2, valueUs: tv, boundUs: tb, sizes: Bx.singles.map(x => x.gx.length).concat(Bx.pairs.map(x => x.ga.length + 'x' + x.gb.length), [Bx.r4.uH.length, Bx.r4.gd.length, Bx.r4.Aent.length]) }; };
+    if (opt.bench) runBench();
+    // 출발점(지금 세팅 등)을 먼저 넣어 둠. 가격의 첫값은 그중 모델 값이 가장 높은 점의 기울기로(조건에 안 맞아도 점으로는 씀)
+    let x0 = null, x0v = -Infinity;
+    for (const S0 of (opt.seeds || [])) {
+      for (let k = 0; k < XN; k++) P[k] = 0; cnt.fill(0);
+      for (let j = 0; j < NSL; j++) { const o = ord[j].opts.find(x => x.d === (S0[ord[j].name] ?? '')) || ord[j].opts[0]; for (let k = 0; k < XN; k++) P[k] += o.v[k]; if (o.si >= 0) cnt[o.si]++; pick[j] = o.d; }
+      leaf();
+      const xs = Float64Array.from(xl), vs = Mo.value(xs); if (vs > x0v) { x0v = vs; x0 = xs; }
+    }
+    for (let k = 0; k < XN; k++) P[k] = 0; cnt.fill(0);
+    TM.seeds = [Math.round(performance.now() - T0), Mo.calls() - C0];
+    if (opt.lag !== false && x0) { const t0 = performance.now(); TGT = thr > -Infinity ? thr : x0v - 0.05; ctxS[0] = lagSetup(x0); lagInfo.ms = Math.round(performance.now() - t0); }
+    TM.lag = [Math.round(performance.now() - T0), Mo.calls() - C0];
+    rec(0);
+    TM.tree = [Math.round(performance.now() - T0), Mo.calls() - C0];
+    top.sort((a, b) => b.v - a.v || a.ch - b.ch);
+    const out = (opt.max ? top.slice(0, opt.max) : top).map(e => { const S = {}; ord.forEach((s, j) => { S[s.name] = e.pick[j]; }); return { S, v: e.v, x: e.x, ch: e.ch, key: e.key }; });
+    return { list: out, nodes, leaves, capped: capped || (opt.max && top.length > opt.max), lag: Object.assign({}, lagInfo, { phiCalls, tuneCalls }), tm: TM, prof: PRF, order: ord.map(s => s.name + ':' + s.opts.length).join(' ') };
+  }
+  function xClimb(Mo, SL, worn, starts, cool) {
+    const { slots, sets } = SL, NSET = sets.length;
+    const optOf = {}; for (const s of slots) { optOf[s.name] = new Map(s.opts.map(o => [o.d, o])); }
+    const names = slots.map(s => s.name), x = new Float64Array(XN), cnt = new Int32Array(NSET);
+    const val = (S) => {
+      x.fill(0); cnt.fill(0);
+      for (const n of names) { const o = optOf[n].get(S[n] ?? ''); if (!o) return -Infinity; for (let k = 0; k < XN; k++) x[k] += o.v[k]; if (o.si >= 0) cnt[o.si]++; }
+      const act = []; for (let s = 0; s < NSET; s++) if (cnt[s] > 0 && sets[s].cum[Math.min(13, cnt[s])].any) act.push(s);
+      if (act.length > 1) act.sort((a, b) => Math.min(cnt[b], 3) - Math.min(cnt[a], 3) || sets[b].cum[Math.min(13, cnt[b])].size - sets[a].cum[Math.min(13, cnt[a])].size);
+      for (let a = 0; a < Math.min(3, act.length); a++) { const v = sets[act[a]].cum[Math.min(13, cnt[act[a]])].v; for (let k = 0; k < XN; k++) x[k] += v[k]; }
+      const c = Math.min(Mo.bare + x[I_CL], Mo.cap);
+      if (cool && (cool.atLeast ? c < cool.T - 1e-9 : Math.abs(c - cool.T) > 1e-9)) return -Infinity;
+      return Mo.value(x);
+    };
+    const setMoves = []; for (const s of sets) { const xs = []; for (const sl of slots) for (const o of sl.opts) if (o.si >= 0 && sets[o.si] === s) xs.push([sl.name, o.d]); if (xs.length >= 2) setMoves.push(xs); }
+    const outs = [];
+    for (const S0 of starts) {
+      const S = {}; for (const n of names) S[n] = optOf[n].has(S0[n] ?? '') ? (S0[n] ?? '') : slots.find(s => s.name === n).opts[0].d;
+      let v = val(S);
+      for (let it = 0; it < 80; it++) {
+        let bm = null, bv = v;
+        const tryM = (m) => { const keep = m.map(([n]) => [n, S[n]]); for (const [n, dd] of m) S[n] = dd; const w = val(S); for (const [n, dd] of keep) S[n] = dd; if (w > bv + 1e-12) { bv = w; bm = m; } };
+        for (const n of names) for (const dd of optOf[n].keys()) if (dd !== S[n]) tryM([[n, dd]]);
+        for (const xs of setMoves) for (let i = 0; i < xs.length; i++) for (let j = i + 1; j < xs.length; j++) { if (xs[i][0] === xs[j][0]) continue; tryM([xs[i], xs[j]]); for (let k = j + 1; k < xs.length; k++) if (xs[k][0] !== xs[i][0] && xs[k][0] !== xs[j][0]) tryM([xs[i], xs[j], xs[k]]); }
+        if (!bm) for (let a = 0; a < names.length; a++) for (let b = a + 1; b < names.length; b++) for (const d1 of optOf[names[a]].keys()) { if (d1 === S[names[a]]) continue; for (const d2 of optOf[names[b]].keys()) if (d2 !== S[names[b]]) tryM([[names[a], d1], [names[b], d2]]); }
+        if (!bm) break; for (const [n, dd] of bm) S[n] = dd; v = bv;
+      }
+      if (v > -Infinity) outs.push(Object.assign({}, S));
+    }
+    return outs;
+  }
+  // 한 버프 조합에서: ① 가지치기 탐색으로 모델 1등과 그 아래 E(0.15%) 안쪽 조합을 모두 모음 ② 모델 값 높은 순으로 계산기 실투력(마법석 다시 맞춤)을 재서 1등.
+  // 아직 안 잰 조합이 이길 수 없을 때(모델 값 + 오차 여유 < 지금 1등) 멈춤. 오차가 커서 모은 범위 밖도 이길 수 있으면 범위를 넓혀 한 번 더.
+  // o.thr: 다른 버프 조합에서 이미 찾은 1등(이 모델 기준). 그보다 확실히 낮은 갈래는 처음부터 건너뜀
+  function xBest(Mo, SL, worn, o) {
+    const t0 = performance.now();
+    const cur = {}; for (const s of SL.slots) cur[s.name] = s.name === '한벌' ? (worn['한벌'] || '') : s.name === '하의악세' ? (o.bNow || '') : (worn[s.name] || '');
+    const E = o.E ?? 0.001, seeds = [cur];
+    let nodes = 0, leaves = 0, capped = false, best = null, err = 0, n = 0, floor = Infinity;
+    const slack = () => Math.max(2 * err, 0.0005);
+    const evalList = (list) => {
+      for (const c of list) {
+        if (c.lr !== undefined) continue;
+        if (best && c.v + slack() < best.lr) break;
+        const r = Mo.real(c.x); n++; Object.assign(c, r, { lr: r.cp > 0 ? Math.log(r.cp) - Mo.L0 : -50 });
+        if (r.cp > 0) err = Math.max(err, Math.abs(c.lr - c.v));
+        if (r.cp > 0 && (!best || c.cp > best.cp + 0.5 || (Math.abs(c.cp - best.cp) <= 0.5 && c.ch < best.ch))) best = c;
+      }
+    };
+    let passes = 0;
+    const pass = (thr, margin) => { passes++;
+      const r = xSearch(Mo, SL, worn, Object.assign({}, o, { thr, margin, max: 120, seeds, lagD: 3, lagR: 2, lagRIt: 30, tight: false }));
+      nodes += r.nodes; leaves += r.leaves; capped = capped || !!r.capped;
+      if (r.list.length) floor = Math.min(floor, r.list.reduce((a, c) => Math.max(a, c.v), -Infinity) - margin);
+      return r.list;
+    };
+    let list = pass(o.thr, E);
+    if (!list.length) return null;
+    evalList(list);
+    // 모은 범위(floor) 밑에서도 이길 수 있으면(오차가 큼) 그 밑까지 다시
+    for (let k = 0; k < 2 && best && best.lr - slack() < floor - 1e-9; k++) {
+      const top0 = list[0].v, m2 = top0 - (best.lr - slack());
+      const more = pass(o.thr, m2).filter(c => !list.some(d => d.key === c.key));
+      list = list.concat(more).sort((a, b) => b.v - a.v); floor = top0 - m2; evalList(list);
+    }
+    if (!best) return null;
+    return { best, evaluated: n, err, E, nodes, leaves, capped, passes, ms: Math.round(performance.now() - t0) };
+  }
+
+  // 추천 실행: 버프 조합(최대 3개) × 하의 악세마다 최고 보장 탐색 → 가장 높은 것. o: { owned, fixed, fiveFixed, cool, atLeast }
+  function suitsFor(worn, o) {
+    const now = worn['한벌'] || ''; if ((o.fixed || {})['한벌']) return [now];
+    const own = o.owned; const list = Object.keys(SUITS).filter(n => n === now || ((!own || own.has(n)) && (!SUITS[n].limited || (own && own.has(n)))));
+    return list.length ? list : [now];
+  }
+  function bottomsFor(o) {
+    const now = prof().bottom || ''; if ((o.fixed || {})['하의악세'] || !now) return [now];
+    const own = o.owned; return [...new Set([now].concat(Object.keys(BOTTOMS).filter(n => n !== now && (!own || own.has(n)))))];
+  }
+  function sockMoves(nc, nm, Mo) {
+    const out = [], sk = Mo.sk; let h2 = sk.counted ? sk.n.boss2 : 0;
+    for (const [k, t, n] of [['crit', '크리티컬', nc], ['max', '극대화', nm]]) {
+      if (!n) continue;
+      let from = `힘트마 ${Math.abs(n)}칸`;
+      if (n > 0 && h2 > 0) { const a = Math.min(n, h2); h2 -= a; from = n - a > 0 ? `사냥석 ${a}칸 + 힘트마 ${n - a}칸` : `사냥석 ${a}칸`; }
+      out.push({ k, t, n, from });
+    }
+    return out;
+  }
+  function runExact(o) {
+    const t0 = performance.now(), p = prof(), worn = p.worn || {}, cs = curStats(), cap = APP.coolCap ? APP.coolCap() : 35;
+    const bareCool = (Number(cs['쿨감']) || 0) - (R.wornContribution(db, worn).sums['쿨감'] || 0);
+    let T = 0; const want = Number(o.cool) || 0;
+    if (want > 0 && Number(cs['쿨감']) > 0) { T = want <= bareCool ? bareCool : bareCool + Math.ceil((want - bareCool) / 5) * 5; if (T > cap) T = cap; }
+    const coolC = T > 0 ? { T, atLeast: o.atLeast !== false } : null;
+    const suits = suitsFor(worn, o), bottoms = bottomsFor(o), bNow = p.bottom || '';
+    const runs = [], bases = buffBases(3), models = [];
+    let GL = -Infinity;
+    const doRun = (b, Mo, bns, useGL) => {
+      const SL = xSlots(worn, { fixed: o.fixed, fiveFixed: o.fiveFixed, owned: o.owned, suits, bottoms: bns });
+      const r = xBest(Mo, SL, worn, { cool: coolC, bNow, thr: useGL && GL > -Infinity ? GL - Mo.L0 - 0.002 : undefined });
+      if (r) { runs.push(Object.assign(r, { base: b, bn: r.best.S['하의악세'] || '', Mo })); GL = Math.max(GL, Math.log(r.best.cp)); }
+      return r;
+    };
+    // 첫 버프 조합: 하의 악세마다 따로(비교 표용). 다른 버프 조합: 하의 악세를 함께 넣고, 지금까지 1등보다 낮은 갈래는 건너뜀
+    const M0 = xModel(bases[0], worn, worn['한벌'] || '', bNow); models.push(M0);
+    for (const bn of bottoms) doRun(bases[0], M0, [bn], false);
+    for (const b of bases.slice(1)) { const Mo = xModel(b, worn, worn['한벌'] || '', bNow); models.push(Mo); doRun(b, Mo, bottoms, true); }
+    const r = { cpNow: APP.cpWith({}), coolTarget: T, bare: { baseCooldownBare: bareCool }, cur: { score: 0 }, mode: '최고 보장 탐색', gain: 0, cands: [], best: null };
+    if (!runs.length) return r;
+    const better = (a, b) => (b.best.cp > a.best.cp + 0.5 || (Math.abs(b.best.cp - a.best.cp) <= 0.5 && b.best.ch < a.best.ch)) ? b : a;
+    let top = runs.reduce(better);
+    // 1등이 다른 버프 조합이면 그 조합으로 하의 악세마다 다시(비교 표용)
+    if (top.base !== bases[0] && bNow && bottoms.length > 1) { for (const bn of bottoms) if (bn !== top.bn) doRun(top.base, top.Mo, [bn], false); top = runs.reduce(better); }
+    for (const M of models) M.free();
+    const toCand = (run) => {
+      const c = run.best, S = c.S, pd = {}; for (const pt of R.ALL_PARTS) if (S[pt]) pd[pt] = S[pt];
+      const W2 = Object.assign({ '아바타5셋': S['아바타5셋'] || '' }, pd), wc = R.wornContribution(db, W2), cnt = new Map();
+      for (const pt of R.ALL_PARTS) { const sn = db.displayToSet.get(S[pt]); if (sn) cnt.set(sn, (cnt.get(sn) || 0) + 1); }
+      return { fiveSetDisplay: S['아바타5셋'] || '', partToDisplay: pd, suit: S['한벌'], bottom: S['하의악세'], cp: c.cp, coolReal: Math.min(bareCool + (wc.sums['쿨감'] || 0), cap),
+        buffs: Object.assign({}, run.base), polished: true, mode: '최고 보장 탐색', setLabels: (wc.sets || []).map(sn => `${sn}(${cnt.get(sn) || 0})`),
+        sock: { moves: sockMoves(c.nc, c.nm, run.Mo), over: c.over, skip: null, short: false }, over: c.over, crit: Number(c.over.C17 ?? APP.inputs().C17) || 0, max: Number(c.over.C19 ?? APP.inputs().C19) || 0 };
+    };
+    r.best = toCand(top);
+    r.gain = r.cpNow > 0 ? r.best.cp / r.cpNow - 1 : 0;
+    r.stats = { runs: runs.length, passes: runs.reduce((a, x) => a + (x.passes || 0), 0), evaluated: runs.reduce((a, x) => a + x.evaluated, 0), nodes: runs.reduce((a, x) => a + x.nodes, 0), leaves: runs.reduce((a, x) => a + x.leaves, 0), capped: runs.some(x => x.capped), err: Math.max(...runs.map(x => x.err)), ms: Math.round(performance.now() - t0) };
+    r.cands = runs.map(toCand);
+    // 하의 악세 비교: 고른 버프 조합에서 하의 악세마다 가장 높은 세팅
+    if (bNow && bottoms.length > 1) {
+      const byBn = new Map(); for (const x of runs) if (x.base === top.base) { const e = byBn.get(x.bn); if (!e || better(e, x) === x) byBn.set(x.bn, x); }
+      const rows = [...byBn.values()].map(x => {
+        const c = toCand(x), row = { n: x.bn, cp: c.cp, suit: c.suit, cand: c, crit: c.crit, max: c.max, sock: c.sock, o: c.over };
+        try {
+          const base1 = c.over, a1 = Number('C14' in base1 ? base1.C14 : APP.inputs().C14) || 0, cp1 = APP.cpWith(base1);
+          let k = 0, prev = cp1;
+          while (k < 20) { const v = APP.cpWith(Object.assign({}, base1, { C14: a1 + (k + 1) * 0.005 })); if (!(v > prev + 0.5)) break; prev = v; k++; }
+          if (k > 0) { row.adaptShort = k * 0.005; row.adaptGain = (prev - cp1) / cp1; }
+        } catch (e) { console.error(e); }
+        return row;
+      });
+      if (rows.length > 1) r.best.rivals = { modes: { opt: rows }, order: ['opt'], critT: Number(APP.inputs().C17) || 0, maxT: Number(APP.inputs().C19) || 0, byCap: false };
+    }
     return r;
   }
   function runRec() {
@@ -958,21 +1750,12 @@
     if (window.SilTrack) window.SilTrack('avatar');
     setTimeout(() => {
       try {
-        const p = prof(), c = calcOpts(), cur = curStats();
+        const p = prof(), cur = curStats();
         const owned = st.ownOn ? new Set([...(st.own || []), ...PARTS.map(x => p.worn[x]).filter(Boolean)]) : null;
-        const db = R.prepareDb(A.items);
-        let base = {}, scorer = null;
-        const go = (o, fixed, fiveFixed) => rerank(R.run({ items: A.items, chars: A.chars, cls: sheetClass(APP.cls()), cur, worn: p.worn, fixed, fiveFixed, opt: Object.assign({ topK: 50, scorer, coolCap: APP.coolCap ? APP.coolCap() : 35 }, st.o, c, o) }), p.worn, base, { fixed, fiveFixed, owned: o.owned || null, scorer });
         const fx = p.fixed || {}, f5 = !!p.fiveFixed, anyFix = f5 || Object.values(fx).some(Boolean);
-        // 바깥: 버프·영약 조합(위에서 3개) · 안쪽: 아바타 탐색 + 한벌·하의 악세. 실투력이 가장 높은 것을 고름
-        let r = null, keep = null;
-        for (const b of buffBases(3)) {
-          base = b; scorer = buildScorer(db, p.worn, b);
-          const r1 = go({ owned }, fx, f5);
-          if (!r || (r1.best && (!r.best || (r1.best.cp || 0) > (r.best.cp || 0)))) { r = r1; keep = [b, scorer]; }
-        }
-        [base, scorer] = keep;
-        if (r.best) try { r.best.rivals = bottomRivals(r, p.worn, base, { fixed: fx, fiveFixed: f5, owned, scorer }); } catch (e) { console.error(e); }
+        const cool = Number(st.o.cool) || 0, atLeast = st.o.coolAtLeast !== false;
+        const go = (o) => runExact(Object.assign({ owned, fixed: fx, fiveFixed: f5, cool, atLeast }, o));
+        const r = go({});
         result = { r };
         if (!r.best) {
           // 어떤 조건 때문에 막혔는지 하나씩 풀어 보며 찾음
@@ -981,19 +1764,19 @@
             ? `목표 쿨감 ${r.coolTarget}%를 채우는 조합이 없어요. 지금 아바타·악세를 뺀 쿨감이 ${Math.round(r.bare.baseCooldownBare * 100) / 100}%라서 아바타로 ${Math.round((r.coolTarget - r.bare.baseCooldownBare) * 100) / 100}%를 더 채워야 해요`
             : '계산기 탭의 \'초월한 스킬 재사용 시간 감소\'가 비어 있어서 쿨감을 맞출 수 없어요';
           const tries = [];
-          if (Number(st.o.cool) > 0) {
+          if (cool > 0) {
             // 쿨감은 5%씩 낮춰 가며 맞출 수 있는 가장 높은 목표를 찾음
-            if (cur['쿨감'] > 0) for (let t = Number(st.o.cool) - 5; t > 0; t -= 5) tries.push([{ owned, cool: t }, fx, f5, 'cool:' + t]);
-            tries.push([{ owned, cool: 0 }, fx, f5, 'cool']);
+            if (cur['쿨감'] > 0) for (let t = cool - 5; t > 0; t -= 5) tries.push([{ cool: t }, 'cool:' + t]);
+            tries.push([{ cool: 0 }, 'cool']);
           }
-          if (owned) tries.push([{ owned: null }, fx, f5, 'own']);
-          if (anyFix) tries.push([{ owned }, {}, false, 'fixed']);
-          tries.push([{ owned: null, cool: 0 }, {}, false, 'all']);
-          for (const [o, f, f5b, k] of tries) {
-            const r2 = go(o, f, f5b);
+          if (owned) tries.push([{ owned: null }, 'own']);
+          if (anyFix) tries.push([{ fixed: {}, fiveFixed: false }, 'fixed']);
+          tries.push([{ owned: null, cool: 0, fixed: {}, fiveFixed: false }, 'all']);
+          for (const [o, k] of tries) {
+            const r2 = go(o);
             if (!r2.best) continue;
-            if (k.startsWith('cool') || k === 'all') { if (Number(st.o.cool) > 0) why.push(coolMsg()); }
-            if (k === 'own' || (k === 'all' && owned)) why.push('보유 체크한 아이템만으로는 3세트 조합을 만들 수 없어요. 보유 아바타에서 더 체크하거나 필터를 꺼 주세요');
+            if (k.startsWith('cool') || k === 'all') { if (cool > 0) why.push(coolMsg()); }
+            if (k === 'own' || (k === 'all' && owned)) why.push('보유 체크한 아이템만으로는 목표를 채우는 조합을 만들 수 없어요. 보유 아바타에서 더 체크하거나 필터를 꺼 주세요');
             if (k === 'fixed' || (k === 'all' && anyFix)) why.push('고정한 부위끼리 맞는 조합이 없어요');
             const what = k.startsWith('cool:') ? `목표 쿨감을 ${r2.coolTarget}%로 낮춰` : { cool: '쿨감 조건을 빼고', own: '보유 필터를 끄고', fixed: '고정을 풀고', all: '쿨감·보유·고정 조건을 모두 빼고' }[k];
             result = { r: r2, warn: why, relaxed: what };
