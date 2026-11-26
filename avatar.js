@@ -1542,7 +1542,7 @@
       const X = exPrep(C, dpt), W = xh ? {} : null, best = exEval(C, dpt, rest, X, -1, 0, null, W);
       if (xh && best > -Infinity) { xh.fill(0);
         let sCur = coolMode === 'ge' ? C.FS[dpt].A[Math.max(0, rest - W.T)] : rest - W.T;
-        for (let j = dpt; j < NSL; j++) { const t = C.FA[j][sCur], o = ord[j].opts[t]; LPICK[j] = o; for (let k = 0; k < XN; k++) xh[k] += o.v[k]; sCur = C.FP[j][sCur]; }
+        for (let j = dpt; j < NSL; j++) { const t = sCur >= 0 ? C.FA[j][sCur] : -1, o = ord[j].opts[t >= 0 ? t : 0]; LPICK[j] = o; for (let k = 0; k < XN; k++) xh[k] += o.v[k]; sCur = sCur >= 0 ? C.FP[j][sCur] : -1; }
         const picks = W.F.map(f => [f.q, f.r]); let k = 3 - picks.length; for (let a = 0; a < X.top.length && k > 0; a++) { const q = X.top[a]; if (W.F.some(f => f.q === q)) continue; picks.push([q, RX[q]]); k--; }
         for (const [q, r] of picks) { let n = 0;
           for (const e of C.sOrd[q]) { if (e.j < dpt) continue; if (n++ >= r) break; const a = e.o.v, b0 = LPICK[e.j].v; for (let k2 = 0; k2 < XN; k2++) xh[k2] += a[k2] - b0[k2]; LPICK[e.j] = e.o; }
@@ -1571,6 +1571,7 @@
     const LPICK = new Array(NSL);
     // 가격으로 고른 조합(남은 칸은 LPICK)을 실제로 모델에 넣어 봄 → 좋은 후보를 일찍 찾아 기준을 올림(지금 마디 상태는 되돌려 놓음)
     const tryPick = (dpt) => {
+      for (let j = dpt; j < NSL; j++) if (!LPICK[j]) return;
       const P0 = Float64Array.from(P), c0 = Int32Array.from(cnt), p0 = pick.slice();
       for (let j = dpt; j < NSL; j++) { const o = LPICK[j]; for (let k = 0; k < XN; k++) P[k] += o.v[k]; if (o.si >= 0) cnt[o.si]++; pick[j] = o.d; }
       leaf();
@@ -1584,7 +1585,7 @@
       for (let it = 0; it < IT; it++) {
         its++;
         const C = mkCtx(lam), phi = Mo.conj(lam, Bx, y), U = phi + dotP(lam) + linSet(C, dpt, xh);
-        if (opt.lagPick !== false) tryPick(dpt);
+        if (opt.lagPick !== false && U > -Infinity) tryPick(dpt);
         if (!best || U < best.U - 1e-7) { best = { U, C, phi }; stall = 0; } else if (++stall >= ST) { mu /= 2; stall = 0; lam.set(best.C.lam); if (mu < 1e-3) break; continue; }
         const tg = thr > -Infinity ? thr : TGT;
         if (U - tg < 1e-7) break;
@@ -1933,9 +1934,26 @@
         if (!r.best) {
           // 어떤 조건 때문에 막혔는지 하나씩 풀어 보며 찾음
           const why = [];
+          const r2c = (x) => Math.round(x * 100) / 100, need = r2c(r.coolTarget - r.bare.baseCooldownBare);
           const coolMsg = () => cur['쿨감'] > 0
-            ? `목표 쿨감 ${r.coolTarget}%를 채우는 조합이 없어요. 지금 아바타·악세를 뺀 쿨감이 ${Math.round(r.bare.baseCooldownBare * 100) / 100}%라서 아바타로 ${Math.round((r.coolTarget - r.bare.baseCooldownBare) * 100) / 100}%를 더 채워야 해요`
+            ? `목표 쿨감 ${r.coolTarget}%를 ${atLeast ? '채우는' : '딱 맞추는'} 조합이 없어요. 아바타·악세를 뺀 쿨감이 ${r2c(r.bare.baseCooldownBare)}%라서 아바타로 ${atLeast ? `${need}% 이상` : `딱 ${need}%`}를 채워야 해요(부위 쿨감 5%, 세트 효과 3%·5%를 더해서)`
             : '계산기 탭의 \'초월한 스킬 재사용 시간 감소\'가 비어 있어서 쿨감을 맞출 수 없어요';
+          // 무엇 때문에 막혔는지 먼저 짚음: 보유·고정을 풀면 되는지 → 그렇다면 그게 원인(보유에 없는 아이템 이름까지)
+          let cause = null;
+          if (cool > 0 && cur['쿨감'] > 0 && (owned || anyFix)) {
+            const rOwn = owned ? go({ owned: null }) : null;
+            if (rOwn && rOwn.best) {
+              // 보유에 없는 것 중 쿨감에 쓰인 것만(쿨감 아이템, 또는 쿨감 세트 효과가 켜진 세트의 부위)
+              const b = rOwn.best, used = [b.fiveSetDisplay, ...Object.values(b.partToDisplay || {})].filter(Boolean);
+              const coolSetNames = new Set(A.items.filter(it => it[0] === '세트효과' && it[4] === '쿨감').map(it => it[1]));
+              const active = new Set((b.setLabels || []).map(l => String(l).replace(/\(\d+\)$/, '')));
+              const info = new Map(); for (const it of A.items) if (it[0] !== '세트효과') { const e = info.get(it[3]) || { cool: false, set: it[1] }; if (it[4] === '쿨감') e.cool = true; info.set(it[3], e); }
+              const miss = used.filter(d => !owned.has(d) && (info.get(d) || {}).cool || (!owned.has(d) && coolSetNames.has((info.get(d) || {}).set) && active.has((info.get(d) || {}).set)));
+              cause = `보유 체크한 아이템만으로는 쿨감 ${r.coolTarget}%를 ${atLeast ? '채울' : '딱 맞출'} 수 없어요${miss.length ? `. 쿨감을 맞추려면 보유에 없는 이 아이템이 필요해요: ${miss.slice(0, 6).join(', ')}${miss.length > 6 ? ' 등' : ''}` : ''}`;
+            } else if (anyFix) { const rFix = go({ fixed: {}, fiveFixed: false, owned: null }); if (rFix.best) cause = `고정한 부위 때문에 쿨감 ${r.coolTarget}%를 ${atLeast ? '채울' : '딱 맞출'} 수 없어요. 고정을 풀어 보세요`; }
+          }
+          if (cause) why.push(cause);
+          if (cool > 0 && !atLeast && cur['쿨감'] > 0) why.push(`'이상이면 됨'을 켜면 ${r.coolTarget}% 이상인 조합까지 볼 수 있어요`);
           const tries = [];
           if (cool > 0) {
             // 쿨감은 맞출 수 있는 값을 하나씩 낮춰 가며 가장 높은 목표를 찾음
@@ -1948,14 +1966,16 @@
           for (const [o, k] of tries) {
             const r2 = go(o);
             if (!r2.best) continue;
-            if (k.startsWith('cool') || k === 'all') { if (cool > 0) why.push(coolMsg()); }
-            if (k === 'own' || (k === 'all' && owned)) why.push('보유 체크한 아이템만으로는 목표를 채우는 조합을 만들 수 없어요. 보유 아바타에서 더 체크하거나 필터를 꺼 주세요');
-            if (k === 'fixed' || (k === 'all' && anyFix)) why.push('고정한 부위끼리 맞는 조합이 없어요');
+            if (!cause) {
+              if (k.startsWith('cool') || k === 'all') { if (cool > 0) why.unshift(coolMsg()); }
+              if (k === 'own' || (k === 'all' && owned)) why.unshift('보유 체크한 아이템만으로는 목표를 채우는 조합을 만들 수 없어요. 보유 아바타에서 더 체크하거나 필터를 꺼 주세요');
+              if (k === 'fixed' || (k === 'all' && anyFix)) why.unshift('고정한 부위끼리 맞는 조합이 없어요');
+            }
             const what = k.startsWith('cool:') ? `목표 쿨감을 ${r2.coolTarget}%로 낮춰` : { cool: '쿨감 조건을 빼고', own: '보유 필터를 끄고', fixed: '고정을 풀고', all: '쿨감·보유·고정 조건을 모두 빼고' }[k];
             result = { r: r2, warn: why, relaxed: what };
             break;
           }
-          if (!result.relaxed) result = { r, warn: [coolMsg()] };
+          if (!result.relaxed) result = { r, warn: cause ? why : [coolMsg(), ...why] };
         }
       } catch (e) { console.error(e); result = { err: '계산하다 문제가 생겼어요: ' + (e.message || e) }; }
       btn.disabled = false; btn.textContent = '추천 받기'; renderResult();
