@@ -675,6 +675,8 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .av-inline { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .av-hint { font-size: 13px; color: var(--sub); line-height: 1.5; margin: 8px 0 0; }
 .av-hint.warn { color: var(--up); }
+.av-notes { font-size: 13px; color: var(--sub); line-height: 1.5; margin: 6px 0 0; padding-left: 18px; }
+.av-notes li + li { margin-top: 2px; }
 .av-opt .av-hint { flex-basis: 100%; margin: 0; }
 .av-own-on { margin: 4px 0 10px; }
 .av-own-set { padding: 8px 0; border-bottom: 1px solid var(--line); }

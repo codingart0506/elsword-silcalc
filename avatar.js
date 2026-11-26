@@ -426,15 +426,37 @@
     });
     box.append(el('div', { class: 'av-own-set' }, el('span', { class: 'av-own-name', text: '일반 악세 하의' }), el('div', { class: 'av-chips' }, ...bChips)));
   }
-  // 목표 쿨감 목록: 아바타·악세를 뺀 쿨감 + 5%씩(직업 쿨감 상한까지)
+  // 아바타로 더할 수 있는 쿨감 값들: 부위 아이템(부위마다 하나) + 세트 효과(세트마다 개수에 따라 하나) 조합. 데이터에서 그대로 셈
+  // (부위 쿨감은 5%지만 창해유주 3세트처럼 3%짜리 세트 효과도 있어서 5%씩만이 아님)
+  let COOL_INC = null;
+  function coolIncrements() {
+    if (COOL_INC) return COOL_INC;
+    const byPart = new Map(), bySet = new Map();
+    for (const it of A.items) {
+      if (it[4] !== '쿨감' || !(Number(it[5]) > 0)) continue;
+      if (it[0] === '세트효과') { const a = bySet.get(it[1]) || []; a.push([Number(it[6]) || 0, Number(it[5])]); bySet.set(it[1], a); }
+      else { const k = it[0] === '아바타5셋' ? '아바타5셋' : it[2], a = byPart.get(k) || new Set(); a.add(Number(it[5])); byPart.set(k, a); }
+    }
+    let S = new Set([0]);
+    const add = (vals) => { const n = new Set(S); for (const x of S) for (const v of vals) n.add(Math.round((x + v) * 100) / 100); S = n; };
+    for (const vs of byPart.values()) add([...vs]);
+    for (const ef of bySet.values()) { ef.sort((a, b) => a[0] - b[0]); let c = 0; const cum = []; for (const [, v] of ef) { c += v; cum.push(c); } add(cum); }
+    COOL_INC = [...S].sort((a, b) => a - b);
+    return COOL_INC;
+  }
+  // 목표 쿨감 목록: 아바타·악세를 뺀 쿨감 + 아바타로 더할 수 있는 값(직업 쿨감 상한까지)
+  function coolSteps(bare, cap) {
+    const r2 = (x) => Math.round(x * 100) / 100, list = [];
+    for (const d of coolIncrements()) { const t = r2(bare + d); if (t > 0 && t < cap - 1e-9) list.push(t); }
+    list.push(cap); // 아무리 껴도 상한까지
+    return [...new Set(list)].sort((a, b) => a - b);
+  }
   function coolChoices() {
     const cap = APP.coolCap ? APP.coolCap() : 35, now = Number(curStats()['쿨감']) || 0;
     if (!(now > 0)) return { cap, bare: null, list: [] };
     const worn = R.wornContribution(db, prof().worn || {}).sums['쿨감'] || 0;
-    const r2 = (x) => Math.round(x * 100) / 100, bare = r2(Math.max(0, now - worn)), list = [];
-    for (let t = bare; t < cap - 1e-9; t += 5) if (t > 0) list.push(r2(t));
-    list.push(cap); // 아무리 껴도 상한까지
-    return { cap, bare, list: [...new Set(list)] };
+    const bare = Math.round(Math.max(0, now - worn) * 100) / 100;
+    return { cap, bare, list: coolSteps(bare, cap) };
   }
   function renderCool() {
     const box = $('#avCoolBox'); if (!box) return; box.textContent = '';
@@ -451,7 +473,7 @@
     if (want > 0) box.append(el('label', { class: 'av-fix' }, atLeast, el('span', { text: '이상이면 됨' })));
     const hint = $('#avCoolHint');
     if (hint) hint.textContent = want > 0
-      ? `아바타 쿨감은 5%씩이라, 아바타 쿨감이 하나도 없을 때${bare != null ? `(${bare}%)` : ''}에서 5%씩 오른 값만 고를 수 있어요. 끝은 이 전직의 쿨감 상한(${cap}%)이에요.`
+      ? `아바타 쿨감은 부위 5%, 세트 효과 3%·5%라서, 아바타 쿨감이 하나도 없을 때${bare != null ? `(${bare}%)` : ''}에서 그만큼 오른 값만 고를 수 있어요. 끝은 이 전직의 쿨감 상한(${cap}%)이에요.`
       : '조건 없음이면 쿨감까지 실투력에 넣어 가장 높은 조합을 골라요. 쿨감을 꼭 맞춰야 할 때만 골라 주세요.';
   }
   function renderResult() {
@@ -483,7 +505,7 @@
       : el('span', null, '추천대로 바꾸면 실뎀 ', el('b', { class: 'up', text: '+' + g.toFixed(2) + '%' }));
     else if (!changed || keepNow) head = el('span', { text: byCp ? '지금 세팅이 이미 실투력이 가장 높아요' : '지금 세팅이 이미 가장 좋아요' });
     else {
-      const want = Number(st.o.cool) || 0, tText = want > 0 && Math.abs(want - T) > 0.005 ? `${want}% 이상(아바타 쿨감이 5%씩이라 ${T}%)` : `${T}%`;
+      const want = Number(st.o.cool) || 0, tText = want > 0 && Math.abs(want - T) > 0.005 ? `${want}% 이상(아바타로 맞출 수 있는 값이 ${T}%)` : `${T}%`;
       const lead = `목표 쿨감 ${tText}를 맞추는 조합 중에서는 이 세팅이 가장 높아요. 지금 세팅(쿨감 ${Math.round(curCool * 100) / 100}%)과 비교하면 `;
       head = byCp
         ? (up <= -1 ? el('span', null, lead + '실투력 ', el('b', { text: fmt(r.cpNow) }), ' → ', el('b', { class: 'down', text: fmt(r.best.cp) }), el('span', { class: 'av-gain-sub down', text: ` (−${(-up / r.cpNow * 100).toFixed(2)}%)` })) : el('span', { text: lead + '실투력은 같아요' }))
@@ -552,6 +574,7 @@
           : matched
           ? `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 고르고, 크리는 ${MODE_TXT[cur]}(${pc(rv.critT)} 기준) 힘트마를 바꿔 맞췄어요. 극대화는 ${goalM}(${pc(rv.maxT)})까지 채우는 게 더 높을 때만 채워요`
           : `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 골랐어요` }));
+        { const t = srNote(rv.modes[cur].map(x => x.n)); if (t) head.append(el('p', { class: 'av-rival-note', text: t })); }
         if (matched && cur !== 'opt' && rv.modes[cur].every(x => x.cp < base0)) head.append(el('p', { class: 'av-rival-note', text: '두 쪽 다 지금보다 낮은 건 크리를 기준에 맞추느라 힘트마를 뺐기 때문이에요' }));
         cards.textContent = '';
         const order = rv.modes[cur].slice().sort((x, y) => (x.n === p.bottom ? -1 : 0) - (y.n === p.bottom ? -1 : 0));
@@ -588,7 +611,11 @@
     }
     if (keepNow) { box.append(el('p', { class: 'av-hint', text: '조건에 맞는 다른 조합은 모두 지금 세팅보다 낮았어요' })); return; }
     box.append(el('p', { class: 'av-hint', text: `세트: ${r.best.setLabels.join(' · ') || '없음'}` }));
-    if (r.stats) box.append(el('p', { class: 'av-hint', text: `모든 조합을 가지치기로 빠짐없이 따지고(남은 부위를 다 최고로 쳐도 1등을 못 넘는 갈래는 건너뜀), 위쪽 ${r.stats.evaluated}개는 계산기 실투력으로 다시 쟀어요. 크리·극대는 실투력 시트 값 그대로 넣고 마법석(힘트마와 바꾸기)까지 맞췄어요. 세트 효과는 3세트까지만 쳤어요${r.stats.capped ? '. 비슷한 조합이 너무 많아 위쪽 일부만 다시 쟀어요' : ''}` }));
+    if (r.stats) {
+      const notes = ['아바타 조합을 빠짐없이 다 따져서 실투력이 가장 높은 걸 골랐어요', '크리·극대 마법석(힘트마와 바꾸기)도 같이 맞췄어요', '아바타 세트 효과는 3세트까지만 들어가요'];
+      if (r.stats.capped) notes.push('비슷한 조합이 너무 많아 위쪽 일부만 실투력으로 다시 쟀어요');
+      box.append(el('ul', { class: 'av-notes' }, ...notes.map(t => el('li', { text: t }))));
+    }
   }
   // 아바타 점수 상위 조합을 계산기 본체(시트와 같은 실투력 계산)에 넣어 실투력으로 다시 줄 세움
   const STAT_CELL = { '적응력': ['C14'], '초적응력': ['C15'], '강배': ['C24'], '역강배': ['C25'], '100이하': ['C26'], '추피': ['C22'], '양극화': ['C20'], '모스댐': ['C33'], '초댐증': ['C30'], '크댐증': ['C18'], '보댐증': ['C21'], '쿨감': ['C31', 'C32'], '강렬댐증': ['C29'] };
@@ -671,6 +698,15 @@
   const SR_STAGE = [[2, { crit: 5, boss: 7 }], [3, { pol: 5, dot: 5 }]];
   const srSet = (n) => { const o = {}; for (const [need, fx] of SR_STAGE) if (n >= need) for (const [k, v] of Object.entries(fx)) o[k] = (o[k] || 0) + v; return o; };
   function srFixed() { const p = prof(), sr = p.sr || {}; return (String(APP.inputs().J26 || '') === '사룡무' ? 1 : 0) + (sr.book !== false ? 1 : 0) + (sr.medal !== false ? 1 : 0); }
+  // 하의 악세 비교에 영혼의 족쇄가 있으면: 사룡 세트를 몇 부위로 쳤는지 한 줄로
+  function srNote(names) {
+    const srN = (names || []).find(n => BOTTOMS[n] && BOTTOMS[n].sr); if (!srN) return '';
+    const p = prof(), sr = p.sr || {}, with_ = [];
+    if (String(APP.inputs().J26 || '') === '사룡무') with_.push('사룡무');
+    if (sr.book !== false) with_.push('운명의 예언서'); if (sr.medal !== false) with_.push('Type-Q 여왕의 훈장');
+    const n = with_.length + 1, eff = n >= 3 ? '3부위 효과(양극화·추가 지속 피해 +5%)까지 넣었어요' : n === 2 ? '2부위 효과(크리 +5%·보스 +7%)만 넣었어요' : '세트 효과 없이 쳤어요';
+    return `${srN}는 사룡 세트 ${n}부위${with_.length ? `(${with_.join('·')}${(() => { const c = with_[with_.length - 1].charCodeAt(with_[with_.length - 1].length - 1); return c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28 ? '과' : '와'; })()} 함께)` : ''}로 보고 ${eff}. 사룡 세트 부위는 '계산 조건'에서 바꿀 수 있어요`;
+  }
   function bottomOver(o, from, to) {
     if (from === to) return o;
     const k = srFixed(), isSr = (n) => !!(BOTTOMS[n] && BOTTOMS[n].sr);
@@ -1319,12 +1355,12 @@
         const get = (a) => { let v = fv[a]; if (v !== v) { v = fx(i, gx[a]); fv[a] = v; } return v; };
         if (S.full) { for (let a = 0; a < m; a++) get(a); }
         else { get(0); get(m - 1); }
-        // 실투력은 스탯이 늘면 줄지 않음(L ≥ 0) → 아직 안 잰 칸 (a, b) 사이는 h(b) − L·x(a+1) 보다 클 수 없음. 그 값이 지금 최고보다 크면 가운데를 재서 쪼갬
+        // 실투력은 스탯이 늘면 줄지 않음 → 아직 안 잰 칸 (a, b) 사이는 h(b) − min(L·x(a+1), L·x(b−1)) 보다 클 수 없음. 그 값이 지금 최고보다 크면 가운데를 재서 쪼갬
         for (;;) {
           let bv = -Infinity, bx = 0;
           for (let a = 0; a < m; a++) { const v = fv[a]; if (v === v) { const w = v - L * gx[a]; if (w > bv) { bv = w; bx = a; } } }
           let need = -1, pa = -1;
-          for (let a = 0; a < m; a++) { if (fv[a] !== fv[a]) continue; if (pa >= 0 && a > pa + 1 && fv[a] - L * gx[pa + 1] > bv + 1e-12) { need = (pa + a) >> 1; break; } pa = a; }
+          for (let a = 0; a < m; a++) { if (fv[a] !== fv[a]) continue; if (pa >= 0 && a > pa + 1 && fv[a] - Math.min(L * gx[pa + 1], L * gx[a - 1]) > bv + 1e-12) { need = (pa + a) >> 1; break; } pa = a; }
           if (need < 0) { phi += bv; if (y) y[i] = gx[bx]; break; }
           const v = get(need);
           // 단조가 아니면(그럴 일은 없지만) 이 스탯은 모든 칸을 잼
@@ -1424,22 +1460,113 @@
         baseO[j] = os[bi]; baseW[j] = W[bi]; linRem[j] = linRem[j + 1] + W[bi]; }
       const setLin = sets.map(st => { const B = new Float64Array(14); for (let i = 0; i < st.cum.length; i++) { const nz = st.cum[i].nz; let w = 0; for (let t = 0; t < nz.length; t += 2) w += L[nz[t]] * nz[t + 1]; B[i] = w; } return B; });
       const sOrd = sets.map((st, q) => SLOTS_OF[q].map(j => { const t = bsl[j].get(q); return { j, o: ord[j].opts[t], d: lw[j][t] - baseW[j] }; }).sort((x, y) => y.d - x.d));
-      return { lam: Float64Array.from(L), lw, linRem, baseO, setLin, sOrd, phi: Infinity };
+      const C = { lam: Float64Array.from(L), lw, linRem, baseO, setLin, sOrd, phi: Infinity, F: null };
+      // 쿨감을 딱 맞춰야 할 때: 칸마다 '쿨감 값별' 최대 lam·v → 남은 칸 쿨감 합이 s일 때의 최대(F[j][s], 고른 것 FA). 세트 몫(d)도 같은 쿨감 값 안에서 잼
+      if (coolMode && (coolR || coolMode === 'ge')) {
+        // eq: 쿨감 합이 딱 s, ge: 합을 needI에서 잘라 s(= needI면 'needI 이상')
+        const NI = needI + 1, F = [], FA = [], FP = [], bc = [], ge = coolMode === 'ge';
+        F[NSL] = new Float64Array(NI).fill(-Infinity); F[NSL][0] = 0; FA[NSL] = null;
+        for (let j = NSL - 1; j >= 0; j--) {
+          const os = ord[j].opts, W = lw[j], m = new Map(); for (let t = 0; t < os.length; t++) { const c = Math.round(os[t].v[I_CL]); const e = m.get(c); if (e === undefined || W[t] > W[e]) m.set(c, t); }
+          bc[j] = m; const Fj = new Float64Array(NI).fill(-Infinity), Aj = new Int32Array(NI).fill(-1), Pj = new Int32Array(NI).fill(-1), N = F[j + 1];
+          for (const [c, t] of m) for (let a = 0; a < NI; a++) { if (N[a] === -Infinity) continue; let s2 = a + c; if (ge) s2 = Math.min(s2, needI); if (s2 < 0 || s2 >= NI) continue; const v = N[a] + W[t]; if (v > Fj[s2]) { Fj[s2] = v; Aj[s2] = t; Pj[s2] = a; } }
+          F[j] = Fj; FA[j] = Aj; FP[j] = Pj;
+        }
+        C.F = F; C.FA = FA; C.FP = FP;
+        if (ge) { C.FS = F.map(Fj => { const S = new Float64Array(NI), A = new Int32Array(NI); let bv = -Infinity, bs = -1; for (let s2 = NI - 1; s2 >= 0; s2--) { if (Fj[s2] > bv) { bv = Fj[s2]; bs = s2; } S[s2] = bv; A[s2] = bs; } return { S, A }; }); }
+        C.sOrd = sets.map((st, q) => SLOTS_OF[q].map(j => { const t = bsl[j].get(q), o = ord[j].opts[t], c = Math.round(o.v[I_CL]); return { j, o, d: lw[j][t] - lw[j][bc[j].get(c)] }; }).sort((x, y) => y.d - x.d));
+      }
+      return C;
+    };
+    // 쿨감 딱 맞추기: 이 마디에서 세트 효과로 더할 수 있는 쿨감 합들(rest까지). 남은 칸 수는 avail[dpt] 기준(자식에도 쓸 수 있게 넉넉히)
+    const setCoolSums = (dpt, rest) => {
+      let S = new Uint8Array(rest + 1); S[0] = 1; const av = avail[dpt];
+      for (const q of coolSets) { const vals = []; for (let c = cnt[q]; c <= Math.min(13, cnt[q] + av[q]); c++) { const v = Math.round(sets[q].cum[c].v[I_CL]); if (v > 0) vals.push(v); }
+        if (!vals.length) continue; const N = S.slice(); for (let a = 0; a <= rest; a++) if (S[a]) for (const v of vals) if (a + v <= rest) N[a + v] = 1; S = N; }
+      return S;
+    };
+    // 남은 칸 몫: 쿨감 조건이 없으면 칸마다 최댓값 합, 딱 맞추기면 '남은 칸 쿨감 합 = 필요한 값 − 세트 효과 쿨감' 중 최댓값(그때 세트 효과 쿨감 tStar)
+    let tStar = 0;
+    const remLin = (C, dpt) => {
+      if (!C.F) return C.linRem[dpt];
+      const rest = needI - Math.round(P[I_CL]); if (rest < 0) return -Infinity;
+      const S = setCoolSums(dpt, rest), Fd = C.F[dpt]; let bv = -Infinity; tStar = 0;
+      for (let t = 0; t <= rest; t++) if (S[t] && Fd[rest - t] > bv) { bv = Fd[rest - t]; tStar = t; }
+      return bv;
+    };
+    // 쿨감 딱 맞추기: 세트 효과 쿨감이 어떻게 나뉘는지(어느 쿨감 세트를 몇 단계로 켜는지)를 모두 따져서,
+    // 켜야 하는 세트는 그 단계로 꼭 넣고(손해가 나도), 나머지 칸은 '쿨감 합이 딱 남은 값'인 조합 중 최대로 → 위쪽 값이 훨씬 빡빡해짐
+    const GX = new Float64Array(64), RX = new Int32Array(64);
+    // 쿨감 세트 q의 단계(쿨감 값)별 최댓값: 지금 c개에서 r개 더 낄 때
+    const coolLv = (C, q, c, dpt) => { const B = C.setLin[q], m = new Map(), av = avail[dpt][q]; let acc = 0, r = 0;
+      const put = (rr) => { const cc = Math.min(13, c + rr), b = Math.round(sets[q].cum[cc].v[I_CL]), v = B[cc] + acc, e = m.get(b); if (!e || v > e.v) m.set(b, { v, r: rr }); };
+      put(0); for (const e of C.sOrd[q]) { if (e.j < dpt) continue; if (r >= av) break; r++; acc += e.d; put(r); }
+      return [...m.entries()]; };
+    // 마디 준비: 모든 세트의 G(위 linSet과 같은 식), 큰 순서, 쿨감 세트 단계표
+    const exPrep = (C, dpt) => {
+      for (let q = 0; q < NSET; q++) {
+        const c = cnt[q], B = C.setLin[q]; let G = B[c > 13 ? 13 : c], acc = 0, r = 0, br = 0;
+        for (const e of C.sOrd[q]) { if (e.j < dpt) continue; r++; acc += e.d; const cc = c + r, v = B[cc > 13 ? 13 : cc] + acc; if (v > G) { G = v; br = r; } }
+        GX[q] = G; RX[q] = br;
+      }
+      const top = []; for (let q = 0; q < NSET; q++) if (GX[q] > 0) top.push(q); top.sort((a, b) => GX[b] - GX[a]);
+      return { top, lv: coolSets.map(q => coolLv(C, q, cnt[q], dpt)) };
+    };
+    // 세트 효과 쿨감을 나누는 모든 경우 중 최대. qx는 자식이 하나 늘린 세트(그 세트만 G·단계를 바꿔 끼움)
+    const exEval = (C, dpt, rest, X, qx, Gqx, lvqx, want) => {
+      let best = -Infinity, bestF = null, bestT = 0; const forced = [];
+      const walk = (i, sumT) => {
+        const ge = coolMode === 'ge';
+        if (!ge && sumT > rest) return;
+        if (i === coolSets.length) {
+          const Fv = ge ? C.FS[dpt].S[Math.max(0, rest - sumT)] : C.F[dpt][rest - sumT]; if (Fv === -Infinity || forced.length > 3) return;
+          let v = Fv, k = 3 - forced.length; for (const f of forced) v += f.v;
+          const isF = (q) => { for (const f of forced) if (f.q === q) return true; return false; };
+          let qxDone = qx < 0 || isF(qx) || !(Gqx > 0);
+          for (let a = 0; a < X.top.length && k > 0; a++) { const q = X.top[a]; if (q === qx || isF(q)) continue;
+            if (!qxDone && Gqx >= GX[q]) { v += Gqx; k--; qxDone = true; if (k === 0) break; }
+            v += GX[q]; k--; }
+          if (k > 0 && !qxDone) v += Gqx;
+          if (v > best) { best = v; bestF = forced.slice(); bestT = sumT; }
+          return;
+        }
+        const q = coolSets[i], L = q === qx && lvqx ? lvqx : X.lv[i];
+        for (const [b, e] of L) { if (b > 0) forced.push({ q, v: e.v, r: e.r }); walk(i + 1, sumT + b); if (b > 0) forced.pop(); }
+      };
+      walk(0, 0);
+      if (want) { want.F = bestF; want.T = bestT; }
+      return best;
+    };
+    const exactLin = (C, dpt, xh) => {
+      let rest = needI - Math.round(P[I_CL]); if (rest < 0) { if (coolMode === 'ge') rest = 0; else return -Infinity; }
+      const X = exPrep(C, dpt), W = xh ? {} : null, best = exEval(C, dpt, rest, X, -1, 0, null, W);
+      if (xh && best > -Infinity) { xh.fill(0);
+        let sCur = coolMode === 'ge' ? C.FS[dpt].A[Math.max(0, rest - W.T)] : rest - W.T;
+        for (let j = dpt; j < NSL; j++) { const t = C.FA[j][sCur], o = ord[j].opts[t]; LPICK[j] = o; for (let k = 0; k < XN; k++) xh[k] += o.v[k]; sCur = C.FP[j][sCur]; }
+        const picks = W.F.map(f => [f.q, f.r]); let k = 3 - picks.length; for (let a = 0; a < X.top.length && k > 0; a++) { const q = X.top[a]; if (W.F.some(f => f.q === q)) continue; picks.push([q, RX[q]]); k--; }
+        for (const [q, r] of picks) { let n = 0;
+          for (const e of C.sOrd[q]) { if (e.j < dpt) continue; if (n++ >= r) break; const a = e.o.v, b0 = LPICK[e.j].v; for (let k2 = 0; k2 < XN; k2++) xh[k2] += a[k2] - b0[k2]; LPICK[e.j] = e.o; }
+          const v = sets[q].cum[Math.min(13, cnt[q] + r)].v; for (let k2 = 0; k2 < XN; k2++) xh[k2] += v[k2]; }
+      }
+      return best;
     };
     const linSet = (C, dpt, xh) => {
+      if (C.F) return exactLin(C, dpt, xh);
       let s1 = 0, s2 = 0, s3 = 0, q1 = -1, q2 = -1, q3 = -1, r1 = 0, r2 = 0, r3 = 0;
       for (let q = 0; q < NSET; q++) {
         const c = cnt[q], B = C.setLin[q]; let G = B[c > 13 ? 13 : c], acc = 0, r = 0, br = 0;
         for (const e of C.sOrd[q]) { if (e.j < dpt) continue; r++; acc += e.d; const cc = c + r; const v = B[cc > 13 ? 13 : cc] + acc; if (v > G) { G = v; br = r; } }
         if (G > s3) { if (G > s1) { s3 = s2; q3 = q2; r3 = r2; s2 = s1; q2 = q1; r2 = r1; s1 = G; q1 = q; r1 = br; } else if (G > s2) { s3 = s2; q3 = q2; r3 = r2; s2 = G; q2 = q; r2 = br; } else { s3 = G; q3 = q; r3 = br; } }
       }
+      const RL = remLin(C, dpt);
       if (xh) { xh.fill(0);
-        for (let j = dpt; j < NSL; j++) { const v = C.baseO[j].v; for (let k = 0; k < XN; k++) xh[k] += v[k]; LPICK[j] = C.baseO[j]; }
+        if (C.F && RL > -Infinity) { let sCur = needI - Math.round(P[I_CL]) - tStar; for (let j = dpt; j < NSL; j++) { const t = C.FA[j][sCur], o = ord[j].opts[t]; LPICK[j] = o; for (let k = 0; k < XN; k++) xh[k] += o.v[k]; sCur -= Math.round(o.v[I_CL]); } }
+        else for (let j = dpt; j < NSL; j++) { const v = C.baseO[j].v; for (let k = 0; k < XN; k++) xh[k] += v[k]; LPICK[j] = C.baseO[j]; }
         for (const [q, r] of [[q1, r1], [q2, r2], [q3, r3]]) { if (q < 0) continue; let n = 0;
-          for (const e of C.sOrd[q]) { if (e.j < dpt) continue; if (n++ >= r) break; const a = e.o.v, b0 = C.baseO[e.j].v; for (let k = 0; k < XN; k++) xh[k] += a[k] - b0[k]; LPICK[e.j] = e.o; }
+          for (const e of C.sOrd[q]) { if (e.j < dpt) continue; if (n++ >= r) break; const a = e.o.v, b0 = LPICK[e.j].v; for (let k = 0; k < XN; k++) xh[k] += a[k] - b0[k]; LPICK[e.j] = e.o; }
           const v = sets[q].cum[Math.min(13, cnt[q] + r)].v; for (let k = 0; k < XN; k++) xh[k] += v[k]; }
       }
-      return C.linRem[dpt] + Math.max(0, s1) + Math.max(0, s2) + Math.max(0, s3);
+      return RL + Math.max(0, s1) + Math.max(0, s2) + Math.max(0, s3);
     };
     const LPICK = new Array(NSL);
     // 가격으로 고른 조합(남은 칸은 LPICK)을 실제로 모델에 넣어 봄 → 좋은 후보를 일찍 찾아 기준을 올림(지금 마디 상태는 되돌려 놓음)
@@ -1464,13 +1591,13 @@
         let gg = 0; for (let k = 0; k < XN; k++) { g[k] = P[k] + xh[k] - y[k]; gg += g[k] * g[k]; }
         if (gg < 1e-12) break;
         const eta = mu * (U - tg) / gg;
-        for (let k = 0; k < XN; k++) lam[k] = Math.max(0, lam[k] - eta * g[k]);
+        for (let k = 0; k < XN; k++) { const v = lam[k] - eta * g[k]; lam[k] = (k === I_CL && cool) ? v : Math.max(0, v); }
       }
       best.C.phi = best.phi; best.its = its; return best;
     };
     let TGT = 0;
     const ctxS = new Array(NSL + 1).fill(null), LoN = new Float64Array(XN); let phiCalls = 0, tuneCalls = 0;
-    const boxAt = (dpt) => { const mn = remMin[dpt]; for (let k = 0; k < XN; k++) LoN[k] = P[k] + mn[k]; return Mo.conjPrep(LoN, Float64Array.from(bound(dpt))); };
+    const boxAt = (dpt) => { const mn = remMin[dpt]; for (let k = 0; k < XN; k++) LoN[k] = P[k] + mn[k]; const Hi = Float64Array.from(bound(dpt)); clampBox(LoN, Hi); return Mo.conjPrep(LoN, Hi); };
     const lagOk = (dpt, pre) => {
       let C = ctxS[dpt - 1];
       if (!pre && !(C.phi + dotP(C.lam) + linSet(C, dpt) > thr - 1e-12)) return false;
@@ -1484,7 +1611,7 @@
       ctxS[dpt] = C;
       return true; };
     const lagSetup = (x0) => {
-      const c0 = Mo.calls(), Lo = Float64Array.from(remMin[0]), Hi = Float64Array.from(bound(0)), Bx = Mo.conjPrep(Lo, Hi); lagInfo.prepCalls = Mo.calls() - c0; lagInfo.callsBefore = c0;
+      const c0 = Mo.calls(), Lo = Float64Array.from(remMin[0]), Hi = Float64Array.from(bound(0)); clampBox(Lo, Hi); const Bx = Mo.conjPrep(Lo, Hi); lagInfo.prepCalls = Mo.calls() - c0; lagInfo.callsBefore = c0;
       const lam = new Float64Array(XN), GR = Mo.GR, tmp = new Float64Array(XN);
       for (let k = 0; k < XN; k++) { if (Hi[k] - Lo[k] < 1e-9) continue; const st = GR[k];
         tmp.set(x0); tmp[k] = Math.min(Hi[k], x0[k] + st); const up = Mo.value(tmp); tmp[k] = Math.max(Lo[k], x0[k] - st); const dn = Mo.value(tmp); tmp[k] = x0[k];
@@ -1503,6 +1630,33 @@
         for (let t = 0; t < nz.length; t += 2) { const k = nz[t], v = nz[t + 1]; if (v > T3[k]) { if (v > T1[k]) { T3[k] = T2[k]; T2[k] = T1[k]; T1[k] = v; } else if (v > T2[k]) { T3[k] = T2[k]; T2[k] = v; } else T3[k] = v; } } }
       for (let k = 0; k < XN; k++) xb[k] = P[k] + mx[k] + T1[k] + T2[k] + T3[k];
       return xb;
+    };
+    // 쿨감 조건이 있으면 라그랑주 상한의 상자를 '조건을 채우는 쿨감'으로 좁힘(쿨감 가격은 음수도 됨 → 조건을 상한 안에 넣는 셈)
+    const coolLoX = cool ? cool.T - Mo.bare - 1e-6 : -Infinity, coolHiX = cool && !cool.atLeast && cool.T < Mo.cap - 1e-9 ? cool.T - Mo.bare + 1e-6 : Infinity;
+    const clampBox = (Lo, Hi) => { if (!cool) return; Lo[I_CL] = Math.max(Lo[I_CL], coolLoX); Hi[I_CL] = Math.min(Hi[I_CL], coolHiX); if (Hi[I_CL] < Lo[I_CL]) Hi[I_CL] = Lo[I_CL]; };
+    // 쿨감을 '딱' 맞춰야 할 때: 남은 칸 아이템 쿨감으로 만들 수 있는 합(표) + 쿨감 세트 효과로 만들 수 있는 합으로 목표에 닿는지 정확히 봄
+    // (범위만 보면 5%·3%가 섞여서 못 맞추는 갈래를 끝까지 내려가 버림)
+    // 'eq': 딱 맞추기, 'ge': 이상(상한까지 딱 맞추기도 '상한 이상'이라 여기에). needI = 아바타로 채워야 하는 쿨감(아이템·세트 효과 합)
+    const eqWant = cool && !cool.atLeast && cool.T < Mo.cap - 1e-9;
+    const needF = cool ? (eqWant ? cool.T : Math.min(cool.T, Mo.cap)) - Mo.bare : null;
+    const needI = needF == null ? null : eqWant ? Math.round(needF) : Math.ceil(needF - 1e-6);
+    const exactCool = eqWant && Math.abs(needF - needI) < 1e-6 && needI >= 0 && needI <= 200;
+    const coolMode = exactCool ? 'eq' : (cool && !eqWant && needI >= 1 && needI <= 200) ? 'ge' : null;
+    let coolR = null, coolSets = null;
+    if (coolMode) { coolSets = []; sets.forEach((st, q) => { if (st.cum.some(c => c.v[I_CL])) coolSets.push(q); }); }
+    if (exactCool) {
+      coolR = new Array(NSL + 1); coolR[NSL] = new Uint8Array(needI + 1); coolR[NSL][0] = 1;
+      for (let j = NSL - 1; j >= 0; j--) { const R = new Uint8Array(needI + 1), N = coolR[j + 1]; for (const o of ord[j].opts) { const c = Math.round(o.v[I_CL]); if (Math.abs(o.v[I_CL] - c) > 1e-9) { coolR = null; break; } for (let a = 0; a + c <= needI; a++) if (N[a] && a + c >= 0) R[a + c] = 1; } if (!coolR) break; coolR[j] = R; }
+      coolSets = []; sets.forEach((st, q) => { if (st.cum.some(c => c.v[I_CL])) coolSets.push(q); });
+    }
+    const coolExactOk = (dpt) => {
+      if (!coolR) return true;
+      let rest = needI - Math.round(P[I_CL]); if (rest < 0) return false;
+      let S = new Uint8Array(rest + 1); S[0] = 1; const av = avail[dpt];
+      for (const q of coolSets) { const vals = []; for (let c = cnt[q]; c <= Math.min(13, cnt[q] + av[q]); c++) { const v = Math.round(sets[q].cum[c].v[I_CL]); if (v > 0) vals.push(v); }
+        if (!vals.length) continue; const N = S.slice(); for (let a = 0; a <= rest; a++) if (S[a]) for (const v of vals) if (a + v <= rest) N[a + v] = 1; S = N; }
+      const R = coolR[dpt]; for (let a = 0; a <= rest; a++) if (S[a] && R[rest - a]) return true;
+      return false;
     };
     const coolOk = (lo, hi) => { if (!cool) return true; const T = cool.T, cLo = Math.min(Mo.bare + lo, Mo.cap), cHi = Math.min(Mo.bare + hi, Mo.cap); return cool.atLeast ? cHi >= T - 1e-9 : (cHi >= T - 1e-9 && cLo <= T + 1e-9); };
     const leaf = () => {
@@ -1537,18 +1691,34 @@
     const chB = ord.map(s => new Float64Array(s.opts.length)), tv = new Float64Array(4), ti = new Int32Array(4);
     const childBounds = (dpt) => {
       const C = ctxS[dpt], d1 = dpt + 1, out = chB[dpt];
+      if (C.F) { // 쿨감 딱 맞추기: 마디에서 한 번 준비하고, 자식마다 그 아이템의 쿨감·세트만 바꿔 끼워 잼
+        const os = ord[dpt].opts, W = C.lw[dpt], base = C.phi + dotP(C.lam), rest0 = needI - Math.round(P[I_CL]), X = exPrep(C, d1), ge = coolMode === 'ge';
+        const ci = new Map(coolSets.map((q, i) => [q, i]));
+        for (let t = 0; t < os.length; t++) { const o = os[t]; let r = rest0 - Math.round(o.v[I_CL]); if (r < 0) { if (ge) r = 0; else { out[t] = -Infinity; continue; } }
+          const q = o.si; let Gq = 0, lvq = null;
+          if (q >= 0) { Gq = gq(C, q, cnt[q] + 1, d1); if (ci.has(q)) lvq = coolLv(C, q, cnt[q] + 1, d1); }
+          const v = exEval(C, d1, r, X, q, Gq, lvq, null); out[t] = v === -Infinity ? -Infinity : base + W[t] + v; }
+        return out;
+      }
       tv.fill(-Infinity); ti.fill(-1);
       for (let q = 0; q < NSET; q++) { const G = gq(C, q, cnt[q], d1); if (G > tv[3]) { let p = 3; while (p > 0 && G > tv[p - 1]) { tv[p] = tv[p - 1]; ti[p] = ti[p - 1]; p--; } tv[p] = G; ti[p] = q; } }
       const pos = (x) => x > 0 ? x : 0, top3 = pos(tv[0]) + pos(tv[1]) + pos(tv[2]);
-      const base = C.phi + dotP(C.lam) + C.linRem[d1], os = ord[dpt].opts, W = C.lw[dpt];
-      for (let t = 0; t < os.length; t++) { const q = os[t].si; let S3 = top3;
+      const os = ord[dpt].opts, W = C.lw[dpt];
+      let base = C.phi + dotP(C.lam) + (C.F ? 0 : C.linRem[d1]), Sc = null, rest0 = 0;
+      if (C.F) { rest0 = needI - Math.round(P[I_CL]); Sc = rest0 >= 0 ? setCoolSums(dpt, rest0) : null; }
+      for (let t = 0; t < os.length; t++) { const q = os[t].si; let S3 = top3, RB = 0;
+        if (C.F) { // 이 아이템을 고른 뒤 남은 칸으로 쿨감을 딱 맞출 때의 최댓값
+          const r = rest0 - Math.round(os[t].v[I_CL]); let bv = -Infinity; if (Sc && r >= 0) { const Fd = C.F[d1]; for (let a = 0; a <= r; a++) if (Sc[a] && Fd[r - a] > bv) bv = Fd[r - a]; }
+          if (bv === -Infinity) { out[t] = -Infinity; continue; }
+          RB = bv; }
         if (q >= 0) { const G1 = gq(C, q, cnt[q] + 1, d1);
           if (q === ti[0] || q === ti[1] || q === ti[2]) { // q가 위 3개 안: 그 자리를 G1로 바꾼 4개 중 큰 3개
             let a = -Infinity, b = -Infinity, c = -Infinity; for (let p = 0; p < 4; p++) { const v = ti[p] === q ? G1 : tv[p]; if (v > a) { c = b; b = a; a = v; } else if (v > b) { c = b; b = v; } else if (v > c) c = v; }
             S3 = pos(a) + pos(b) + pos(c);
           } else if (G1 > tv[2]) S3 = top3 - pos(tv[2]) + pos(G1); }
-        out[t] = base + W[t] + S3; }
+        out[t] = base + W[t] + RB + S3; }
       return out; };
+    const OI = ord.map(s => new Int32Array(s.opts.length));
     const rec = (dpt, pre) => {
       nodes++;
       if (opt.maxNodes && nodes > opt.maxNodes) { capped = true; return; }
@@ -1557,13 +1727,16 @@
         if (PRF) PRF.at[dpt]++;
         if (ctxS[0] && !lagOk(dpt, pre)) { if (PRF) PRF.lag[dpt]++; return; }
         const b = bound(dpt);
-        if (!coolOk(P[I_CL] + remMin[dpt][I_CL], b[I_CL])) { if (PRF) PRF.cool[dpt]++; return; }
+        if (!coolOk(P[I_CL] + remMin[dpt][I_CL], b[I_CL]) || !coolExactOk(dpt)) { if (PRF) PRF.cool[dpt]++; return; }
         if (!(Mo.value(b) > thr - 1e-12)) { if (PRF) PRF.box[dpt]++; return; }
         if (opt.tight !== false && thr > -Infinity && !(bound2(dpt, Float64Array.from(b)) > thr - 1e-12)) { if (PRF) PRF.sl[dpt]++; return; }
       }
-      const os = ord[dpt].opts, cb = ctxS[dpt] && dpt + 1 < NSL ? childBounds(dpt) : null;
-      for (let t = 0; t < os.length; t++) {
-        if (cb && !(cb[t] > thr - 1e-12)) { if (PRF) { PRF.at[dpt + 1]++; PRF.lag[dpt + 1]++; } continue; }
+      const os = ord[dpt].opts, cb = ctxS[dpt] && dpt + 1 < NSL ? childBounds(dpt) : null, oi = OI[dpt];
+      // 위쪽 값이 큰 자식부터(좋은 조합을 일찍 찾아 기준을 빨리 올림)
+      for (let t = 0; t < os.length; t++) { oi[t] = t; if (cb && opt.sortKids) { let p = t; while (p > 0 && cb[oi[p - 1]] < cb[t]) { oi[p] = oi[p - 1]; p--; } oi[p] = t; } }
+      for (let u = 0; u < os.length; u++) {
+        const t = oi[u];
+        if (cb && !(cb[t] > thr - 1e-12)) { if (!opt.sortKids) continue; if (PRF) { PRF.at[dpt + 1] += os.length - u; PRF.lag[dpt + 1] += os.length - u; } break; }
         const o = os[t];
         for (let k = 0; k < XN; k++) P[k] += o.v[k];
         if (o.si >= 0) cnt[o.si]++;
@@ -1691,7 +1864,7 @@
     const t0 = performance.now(), p = prof(), worn = p.worn || {}, cs = curStats(), cap = APP.coolCap ? APP.coolCap() : 35;
     const bareCool = (Number(cs['쿨감']) || 0) - (R.wornContribution(db, worn).sums['쿨감'] || 0);
     let T = 0; const want = Number(o.cool) || 0;
-    if (want > 0 && Number(cs['쿨감']) > 0) { T = want <= bareCool ? bareCool : bareCool + Math.ceil((want - bareCool) / 5) * 5; if (T > cap) T = cap; }
+    if (want > 0 && Number(cs['쿨감']) > 0) { const L = coolSteps(bareCool, cap); T = want <= bareCool ? bareCool : (L.find(t => t >= want - 1e-9) ?? cap); if (T > cap) T = cap; }
     const coolC = T > 0 ? { T, atLeast: o.atLeast !== false } : null;
     const suits = suitsFor(worn, o), bottoms = bottomsFor(o), bNow = p.bottom || '';
     const runs = [], bases = buffBases(3), models = [];
@@ -1765,8 +1938,8 @@
             : '계산기 탭의 \'초월한 스킬 재사용 시간 감소\'가 비어 있어서 쿨감을 맞출 수 없어요';
           const tries = [];
           if (cool > 0) {
-            // 쿨감은 5%씩 낮춰 가며 맞출 수 있는 가장 높은 목표를 찾음
-            if (cur['쿨감'] > 0) for (let t = cool - 5; t > 0; t -= 5) tries.push([{ cool: t }, 'cool:' + t]);
+            // 쿨감은 맞출 수 있는 값을 하나씩 낮춰 가며 가장 높은 목표를 찾음
+            if (cur['쿨감'] > 0) { const cap = APP.coolCap ? APP.coolCap() : 35, bc = Number(r.bare.baseCooldownBare) || 0; for (const t of coolSteps(bc, cap).filter(t => t < cool - 1e-9).reverse()) tries.push([{ cool: t }, 'cool:' + t]); }
             tries.push([{ cool: 0 }, 'cool']);
           }
           if (owned) tries.push([{ owned: null }, 'own']);
