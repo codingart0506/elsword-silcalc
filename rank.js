@@ -277,7 +277,7 @@
       ok.onclick = () => { if (!rects.length) { toast('또렷하게 둘 곳을 하나 이상 그려 주세요'); return; } close(rects.map(norm)); };
       const box = el('div', { class: 'kp', role: 'dialog', 'aria-label': '가릴 곳 직접 정하기' },
         el('div', { class: 'kp-head' }, el('b', { text: '가릴 곳 직접 정하기' }),
-          el('span', { text: '캐릭터 창(전투력 줄까지)과 상세 스탯 창을 끌어서 네모로 감싸세요. 네모 밖은 모두 흐려져요. 네모 안을 끌면 옮기고, 모서리 ×를 누르면 지워요.' })),
+          el('span', { text: '캐릭터 창(전투력 줄까지)과 상세 스탯 창을 끌어서 네모로 감싸세요. 네모 밖은 흐려져요.' })),
         el('div', { class: 'kp-stage' }, cv),
         el('div', { class: 'kp-acts' }, info, el('span', { class: 'kp-gap' }), clr, back, no, ok));
       document.addEventListener('keydown', onKey);
@@ -560,14 +560,14 @@
           empty.textContent = gone ? `관리자가 랭킹에서 ${gone.status === 'hidden' ? '내려서' : '삭제해서'} 랭킹을 볼 수 없어요.${gone.memo ? ` 사유: ${gone.memo}` : ''}`
             : wait ? '신청을 확인하고 있어요. 관리자가 승인하면 랭킹을 볼 수 있어요.'
             : rej ? `랭킹 신청이 거절됐어요.${rej.memo ? ` 사유: ${rej.memo}` : ''} 다시 신청해서 승인되면 볼 수 있어요.`
-            : '랭킹은 랭킹에 올라간 사람만 볼 수 있어요. 계산기에서 "랭킹에 올리기"로 신청해서 승인되면 볼 수 있어요. 다른 기기에서 승인받았다면 아래 "갱신 코드 입력"에 그때 받은 갱신 코드를 넣어 주세요.';
+            : '랭킹은 올라간 사람만 볼 수 있어요. 계산기의 "랭킹에 올리기"로 신청하세요. 다른 기기에서 승인받았다면 아래 "갱신 코드 입력"에 갱신 코드를 넣어 주세요.';
           pager.hidden = true; rkBusy = false; return;
         }
       }
       // 전직별인데 아직 전직을 안 골랐으면 목록 없이 안내만(검색해서 고르면 그 전직만 보여 줌)
       if (rkMode === 'cls' && !rkCls) {
         list.innerHTML = ''; pager.hidden = true; $('#rankPageNo').textContent = '';
-        empty.hidden = false; empty.textContent = '위 검색 칸에 전직 이름을 적어서 고르면 그 전직 랭킹만 보여요';
+        empty.hidden = false; empty.textContent = '위에서 전직을 골라 주세요';
         rkBusy = false; return;
       }
       // 한 명 더 받아서 다음 쪽이 있는지 알아봄
@@ -1840,7 +1840,7 @@
       el('p', { class: 'apply-sum' }, `${A.cls()} 실투력 `, el('b', { text: fmtInt(cp) }), '을(를) 올려요. 관리자가 본인 캐릭터인지 확인한 뒤 랭킹에 보여요.'),
       el('label', { class: 'ex-row' }, el('span', {}, '닉네임', el('small', { text: '게임 닉네임 그대로' })), nick),
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
-      el('p', { text: '게임 채팅창에 이 코드를 입력한 다음, 채팅이 보이게 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 찍어 넣어 주세요. 채팅 글자가 캐릭터 창이나 상세 스탯 창을 덮지 않게 해 주세요.' }),
+      el('p', { text: '게임 채팅창에 이 코드를 입력하고, 채팅이 보이게 캐릭터 창·상세 스탯 창을 띄워 공격력에 마우스를 올린 채 찍어 넣어 주세요. 채팅이 창을 덮지 않게요.' }),
       exampleFig(),
       el('p', { class: 'apply-privacy' }, '신청하면 닉네임, 계산기 세팅, 스크린샷이 랭킹용으로 저장돼요. 랭킹을 볼 때는 본 기록(본 캐릭터, 시각, 기기 구분용 임의 번호)이 180일 동안 남아요. 자세한 내용은 ', el('a', { href: 'privacy.html', target: '_blank', rel: 'noopener', text: '개인정보 처리방침' }), '에 있어요.'),
       pick.box, pick.file,
@@ -1907,7 +1907,7 @@
       el('h3', { id: 'upTitle', text: '랭킹 갱신' }),
       el('p', { class: 'apply-sum' }, `${r.nickname} 실투력을 `, el('b', { text: fmtInt(cp) }), '(으)로 바꿔 달라고 보내요. 관리자가 스크린샷을 확인하면 랭킹에 반영돼요.'),
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
-      el('p', { text: '게임 채팅 입력칸에 이 코드를 적은 다음, 캐릭터 창과 상세 스탯 창을 띄우고 공격력에 마우스를 올린 채 스크린샷을 새로 찍어 넣어 주세요. 채팅 글자가 캐릭터 창이나 상세 스탯 창을 덮지 않게 해 주세요. 갱신할 때마다 코드가 새로 나와요.' }),
+      el('p', { text: '게임 채팅 입력칸에 이 코드를 적고, 캐릭터 창·상세 스탯 창을 띄워 공격력에 마우스를 올린 채 새로 찍어 넣어 주세요. 채팅이 창을 덮지 않게요. 코드는 갱신마다 새로 나와요.' }),
       el('p', { class: 'apply-privacy', text: '지금 계산기에 있는 값이 그대로 올라가요. 스크린샷의 스탯과 다르면 반영되지 않아요.' }),
       exampleFig(),
       pick.box, pick.file,
@@ -1940,7 +1940,7 @@
 
   // ---------- 다른 기기에서 받은 갱신 코드로 연결 ----------
   $('#btnLinkCode').onclick = async () => {
-    const t = await A.dialog({ title: '갱신 코드 입력', text: '랭킹 신청을 마쳤을 때 받은 갱신 코드를 넣으면, 이 기기에서도 랭킹을 보고 내 랭킹을 갱신할 수 있어요. 계산기에서 지금 고른 캐릭터에 연결돼요.', input: '', ok: '입력' });
+    const t = await A.dialog({ title: '갱신 코드 입력', text: '신청할 때 받은 갱신 코드를 넣으면 이 기기에서도 랭킹을 보고 갱신할 수 있어요. 지금 고른 캐릭터에 연결돼요.', input: '', ok: '입력' });
     if (!t) return;
     const token = t.trim().toUpperCase();
     try {
@@ -2172,7 +2172,7 @@
 
     // ---------- 방문 통계 ----------
     {
-      const box = el('div', { class: 'adm-sec' }, el('p', { class: 'rank-note', text: '깃허브 페이지 주소로 들어온 방문이에요(한국 시간 하루 기준). 방문자는 그날 사이트를 연 브라우저 수, 처음 온 사람은 처음 연 브라우저 수예요.' }));
+      const box = el('div', { class: 'adm-sec' }, el('p', { class: 'rank-note', text: '하루(한국 시간) 기준 사이트를 연 브라우저 수예요.' }));
       panes.stats.append(box);
       c.rpc('admin_site_stats', { p_days: 60 }).then(({ data, error }) => {
         if (error) { box.append(el('p', { class: 'rank-note', text: '불러오지 못했어요. ' + errMsg(error) })); return; }
@@ -2190,7 +2190,7 @@
     // 누가 언제 무엇을 봤는지 + 기기 수(갱신 코드 돌려쓰기 확인). 이상하면 그 사람을 캐릭터 탭에서 숨기면 랭킹도 못 봐요
     const LOG_PAGE = 40;
     const logs = el('div', { class: 'adm-sec' },
-      el('p', { class: 'rank-note', text: '랭킹 목록과 상세(사진·세팅)를 본 기록이에요. 180일 지나면 지워져요. 이름을 누르면 그 사람 기록만 보여요. 최근 7일 동안 기기 4대 이상에서 봤으면 갱신 코드를 나눠 줬을 수 있고, 하루에 서로 다른 캐릭터 상세를 30명 넘게 봤으면 세팅을 긁어 가는 것일 수 있어서 빨갛게 보여요.' }));
+      el('p', { class: 'rank-note', text: '랭킹을 본 기록(180일 보관). 이름을 누르면 그 사람 것만 보여요. 7일 안에 기기 4대 이상, 하루에 상세 30명 넘게 보면 빨갛게 표시해요.' }));
     const logQ = searchBox('닉네임 검색(본 사람 또는 본 캐릭터)');
     const logInfo = el('p', { class: 'rank-note adm-found' });
     const logBox = el('div', { class: 'adm-logs' });
@@ -2426,7 +2426,7 @@
     // ---------- 관리자 ----------
     // 처음 관리자(주인)가 메일을 넣어 두면, 그 메일로 이 화면에서 로그인한 사람이 관리자가 됨. 주인만 넣고 뺄 수 있음
     const adm = el('div', { class: 'adm-sec' },
-      el('p', { class: 'rank-note', text: '여기에 메일을 넣어 두면 그 사람이 이 화면(주소 끝 ?admin)에서 그 메일로 로그인 링크를 받아 관리자가 돼요. 관리자는 신청·갱신 승인, 숨기기·삭제, 열람 기록을 모두 할 수 있어요. 넣고 빼는 건 처음 관리자만 할 수 있어요.' }));
+      el('p', { class: 'rank-note', text: '넣은 메일로 ?admin 화면에서 로그인하면 관리자가 돼요. 넣고 빼는 건 처음 관리자만 할 수 있어요.' }));
     const admList = el('div', { class: 'adm-admins' });
     const admMail = el('input', { type: 'email', class: 'adm-search', placeholder: '관리자로 넣을 메일 주소', autocomplete: 'off' });
     const admAdd = el('button', { type: 'button', class: 'btn primary', text: '관리자로 넣기' });

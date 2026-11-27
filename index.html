@@ -59,12 +59,12 @@
     <h2 id="ocrTitle">스크린샷으로 채우기</h2>
     <div class="drop" id="dropZone">
       <p class="drop-main">캐릭터 창과 상세 스탯 창을 띄우고<br>공격력에 마우스를 올린 채 <span class="nw"><kbd>PrtSc</kbd> →</span> <span class="nw">여기서 <kbd>Ctrl</kbd> + <kbd>V</kbd></span></p>
-      <p class="drop-sub">사진 한 장으로 스탯·극대화 범위·전직·악세서리를 채워요</p>
+      <p class="drop-sub" hidden></p>
       <div class="drop-btns">
         <label class="btn primary" for="fileIn">이미지 열기</label>
         <input id="fileIn" type="file" accept="image/*" hidden>
       </div>
-      <p class="drop-tip">게임 해상도 1920×1080 이상, 전체 화면을 권장해요. 다른 창이 상세 스탯 창을 가리지 않게, 마우스 설명 창 같은 글자가 스탯 글자와 겹치지 않게 찍어 주세요.</p>
+      <p class="drop-tip">1920×1080 이상 전체 화면에서, 다른 창이나 설명 창이 스탯 글자를 가리지 않게 찍어 주세요.</p>
     </div>
     <div class="stage" id="stage" hidden>
       <div class="stage-inner">
@@ -94,7 +94,7 @@
 
   <section class="card opt-card" id="optCard" hidden aria-labelledby="optTitle">
     <h2 id="optTitle">크극 최적화</h2>
-    <p class="opt-sub">크리·극대·보뎀 합계는 그대로 두고 다시 나눴을 때 실투력이 가장 높아지는 배분이에요</p>
+    <p class="opt-sub">크리·극대·보뎀 소켓을 다시 나눴을 때 가장 높은 배분이에요</p>
     <table class="opt-table">
       <thead><tr><th scope="col"><span class="sr">항목</span></th><th scope="col">지금</th><th scope="col">최적</th><th scope="col">소켓 조정</th></tr></thead>
       <tbody id="optBody"></tbody>
@@ -104,13 +104,13 @@
       <summary>계산 기준</summary>
       <div class="opt-set-row"><label for="optBase">기준 보뎀</label><select id="optBase"></select></div>
       <div class="opt-set-row"><label for="optMin">크리 최소 수치</label><span class="opt-min"><input id="optMin" type="text" inputmode="decimal" class="num" autocomplete="off"><span>%</span></span></div>
-      <p class="opt-hint">크리 최소 수치는 아이템에 붙어 있어 바꿀 수 없는 크리 소켓 합이에요. 기본 25%. 보스 데미지는 60%까지는 못 옮기는 걸로 봐요</p>
+      <p class="opt-hint">크리 최소 수치: 아이템에 붙어 못 바꾸는 크리(기본 25%). 보뎀은 60%까지는 못 옮기는 걸로 봐요</p>
     </details>
   </section>
 
   <section class="card opt-card" id="sockCard" hidden aria-labelledby="sockTitle">
     <h2 id="sockTitle">소켓 배분 최적화</h2>
-    <p class="opt-sub">바꿀 수 있는 마법석 소켓을 어느 옵션에 몇 칸 넣어야 실투력이 가장 높은지 계산해요. 사냥석은 힘트마로 바꾸는 건 빼고(다른 옵션으로만 옮겨서) 계산해요</p>
+    <p class="opt-sub">사냥석을 힘트마로 바꾸는 건 빼고 계산해요</p>
     <table class="opt-table sock-table">
       <thead><tr><th scope="col"><span class="sr">옵션</span></th><th scope="col">한 칸 수치</th><th scope="col">지금 칸 수</th><th scope="col">최적</th></tr></thead>
       <tbody id="sockBody"></tbody>
@@ -149,7 +149,7 @@
         <p class="av-drop-main" id="avDropMain">캐릭터 장비창을 띄우고 <span class="nw"><kbd>PrtSc</kbd> →</span> <span class="nw">여기서 <kbd>Ctrl</kbd> + <kbd>V</kbd></span></p>
         <label class="btn sm av-shot-btn">이미지 열기<input type="file" accept="image/*" id="avShotIn" hidden></label>
       </div>
-      <p class="opt-sub" id="avNote">장비창 스크린샷을 읽으면 지금 입은 아바타가 자동으로 채워져요</p>
+      <p class="opt-sub" id="avNote">장비창 스크린샷으로 지금 입은 아바타를 채워요</p>
       <div class="av-head" aria-hidden="true"><span>부위</span><span>지금 착용</span><span>고정</span></div>
       <div id="avWorn" class="av-worn"></div>
       <details class="opt-set av-set">
@@ -167,10 +167,9 @@
     </section>
     <section class="card av-res-card" aria-labelledby="avResTitle">
       <h2 id="avResTitle">추천 세팅</h2>
-      <p class="opt-sub">5셋 + 3세트 9부위 + 남은 3부위 최적 세팅을 추천해요</p>
       <div class="av-goal">
         <div class="av-goal-row"><label class="lab" for="avCoolSel">목표 쿨감</label><span class="av-inline" id="avCoolBox"></span></div>
-        <p class="av-hint" id="avCoolHint">조건 없음이면 쿨감까지 실투력에 넣어 가장 높은 조합을 골라요. 쿨감을 꼭 맞춰야 할 때만 골라 주세요.</p>
+        <p class="av-hint" id="avCoolHint">조건 없음이면 쿨감이 내려갈 수도 있어요</p>
       </div>
       <button class="btn primary wide" id="btnAvRun" type="button">추천 받기</button>
       <div id="avResult" aria-live="polite"></div>
@@ -258,9 +257,9 @@
 <script src="opt.js?v=384c449a"></script>
 <script src="avdata.js?v=90571006"></script>
 <script src="avrec.js?v=3bc15fbd"></script>
-<script src="app.js?v=984d1de4"></script>
-<script src="optchg.js?v=7fc1d8ab"></script>
-<script src="avatar.js?v=f252fe9a"></script>
-<script src="rank.js?v=71ede487"></script>
+<script src="app.js?v=77a12edf"></script>
+<script src="optchg.js?v=4264f9dd"></script>
+<script src="avatar.js?v=ecac2166"></script>
+<script src="rank.js?v=21bd81b9"></script>
 </body>
 </html>

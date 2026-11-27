@@ -269,7 +269,7 @@
     else if (lastRec && lastRec.ok) {
       const n = Object.keys(lastRec.found).length;
       note.textContent = `${lastRec.char} 장비창에서 ${n}칸을 알아봤어요. 다르면 직접 고쳐 주세요`;
-    } else note.textContent = '장비창 스크린샷을 읽으면 지금 입은 아바타가 자동으로 채워져요';
+    } else note.textContent = '장비창 스크린샷으로 지금 입은 아바타를 채워요';
     const body = $('#avWorn'); body.textContent = '';
     for (const part of PARTS) {
       const sel = el('select', { 'aria-label': (PART_LABEL[part] || part) + ' 지금 착용' });
@@ -310,7 +310,7 @@
       sel.onchange = () => { p.bottom = sel.value; p.bottomSet = true; save(); result = null; renderResult(); markB(); };
       markB();
       body.append(rowB);
-      body.append(el('p', { class: 'av-hint' }, '스탯 창을 찍을 때 끼고 있던 것을 골라 주세요. 영혼의 족쇄는 모든 스킬 데미지 5%에 사룡 세트 한 부위(2부위면 크리티컬 5%·보스 데미지 7%, 3부위면 양극화 5%·추가 지속 피해 5% 더), 글로잉 플라워는 크리티컬 10%·적응력 2%예요. 추천 받기를 누르면 둘 다 끼워 보고 실투력이 높은 쪽을 골라요'));
+      body.append(el('p', { class: 'av-hint' }, '스탯 창을 찍을 때 끼고 있던 것을 골라 주세요. 추천은 둘 다 끼워 보고 골라요'));
     }
     const allFixed = !!p.fiveFixed && PARTS.filter(x => x !== '아바타5셋').every(x => p.fixed[x]) && !!p.fixed['하의악세'];
     body.append(el('div', { class: 'av-fix-acts' },
@@ -324,7 +324,7 @@
     if (!APP.cls() || !(num('C11') > 0)) { box.append(el('p', { class: 'av-hint warn', text: '계산기 탭에 지금 스탯이 없어요. 상세 스탯 창 스크린샷을 먼저 읽어 주세요' })); return; }
     const cur = curStats(), grid = el('div', { class: 'av-stat' });
     for (const [k, v] of Object.entries(cur)) grid.append(el('div', null, el('span', { text: k }), el('span', { text: String(Math.round(v * 100) / 100) })));
-    box.append(grid, el('p', { class: 'av-hint', text: `${APP.cls()} · 계산기 탭에 넣은 값을 그대로 써요. 강배·역강배는 체력 50% 초과·이하, 추피는 추가 지속 피해, 보댐증은 보스 피해, 초댐증은 초월 스킬 데미지예요` }));
+    box.append(grid, el('p', { class: 'av-hint', text: `${APP.cls()} · 계산기 탭 값을 그대로 써요` }));
   }
   function renderOpts() {
     const box = $('#avOptBody'); if (!box) return; box.textContent = '';
@@ -345,7 +345,7 @@
     const p = prof(); p.sr = p.sr || {};
     const srChk = (key, label) => { const b = el('input', { type: 'checkbox' }); b.checked = p.sr[key] !== false; b.onchange = () => { p.sr[key] = b.checked; save(); result = null; renderResult(); }; return el('label', { class: 'av-fix' }, b, el('span', { text: label })); };
     row('사룡 세트 부위', el('span', { class: 'av-inline' }, srChk('book', '운명의 예언서'), srChk('medal', 'Type-Q 여왕의 훈장')),
-      `무기는 계산기의 '${String(APP.inputs().J26 || '-')}'를 써요. 영혼의 족쇄를 끼면 세트가 몇 부위인지에 따라 세트 효과까지 따져요`);
+      `무기는 계산기의 '${String(APP.inputs().J26 || '-')}'를 써요`);
     {
       const on = el('input', { type: 'checkbox' }); on.checked = !!st.buffOn;
       on.onchange = () => { st.buffOn = on.checked; save(); result = null; renderOpts(); renderResult(); };
@@ -368,7 +368,7 @@
           });
           box.append(el('div', { class: 'av-own-set' }, el('span', { class: 'av-own-name', text: buffLabel(c) }), el('div', { class: 'av-chips' }, ...chips)));
         }
-        box.append(el('p', { class: 'av-hint', text: '켜 둔 것 중에서 실투력이 가장 높은 걸 골라요. 미사용은 따로 고르지 않아요. 파티 버프와 이벤트 버프는 계산기 탭에 넣은 그대로 써요' }));
+        box.append(el('p', { class: 'av-hint', text: '켜 둔 것 중 실투력이 가장 높은 걸 골라요' }));
       }
     }
     box.append(el('p', { class: 'av-hint', text: `계산기에서 가져온 값: 환경 디버프 ${c.env}, 집결지 ${c.rally}, 파티 크뎀증 ${c.party ? '켬' : '끔'}, 마에스트로 헤일로 ${c.maestro ? '있음' : '없음'}, 초목의 아트마 ${c.atma}, 각인석 크뎀 ${c.imprint}` }));
@@ -394,7 +394,7 @@
     box.append(el('div', { class: 'av-own-acts' },
       el('button', { type: 'button', class: 'txt sm', text: '전체 선택', onclick: () => setOwn(all) }),
       el('button', { type: 'button', class: 'txt sm mute', text: '전체 취소', onclick: () => setOwn([]) }),
-      el('span', { class: 'av-hint', text: '지금 낀 아이템은 늘 가진 것으로 쳐요. 세트 이름을 누르면 그 세트를 한꺼번에 골라요' })));
+      el('span', { class: 'av-hint', text: '지금 낀 건 가진 것으로 쳐요. 세트 이름을 누르면 한꺼번에 골라요' })));
     // 한벌 아바타(세트 없이 한 칸)
     const sn = Object.keys(SUITS);
     const sChips = sn.map(d => {
@@ -473,8 +473,8 @@
     if (want > 0) box.append(el('label', { class: 'av-fix' }, atLeast, el('span', { text: '이상이면 됨' })));
     const hint = $('#avCoolHint');
     if (hint) hint.textContent = want > 0
-      ? `아바타 쿨감은 부위 5%, 세트 효과 3%·5%라서, 아바타 쿨감이 하나도 없을 때${bare != null ? `(${bare}%)` : ''}에서 그만큼 오른 값만 고를 수 있어요. 끝은 이 전직의 쿨감 상한(${cap}%)이에요.`
-      : '조건 없음이면 쿨감까지 실투력에 넣어 가장 높은 조합을 골라요. 쿨감을 꼭 맞춰야 할 때만 골라 주세요.';
+      ? `아바타로 맞출 수 있는 값만 나와요${bare != null ? ` (아바타 쿨감 없이 ${bare}%, 상한 ${cap}%)` : ''}`
+      : '조건 없음이면 쿨감이 내려갈 수도 있어요';
   }
   function renderResult() {
     renderCool();
@@ -570,10 +570,10 @@
         head.textContent = '';
         head.append(el('p', { class: 'av-vs-verdict' }, d < 0.3 ? `거의 같아요. ${top.n}${iga(top.n)} ${low.n}보다 ${d.toFixed(2)}% 높아요` : `${top.n}${iga(top.n)} ${low.n}보다 ${d.toFixed(2)}% 더 높아요`));
         head.append(el('p', { class: 'av-rival-note', text: cur === 'opt'
-          ? `지금 실투력 ${fmt(base0)} 기준이에요. 하의 악세마다 아바타·한벌과 크리·극대 마법석(힘트마와 바꾸기)까지 실투력이 가장 높게 다시 골랐어요`
+          ? `지금 ${fmt(base0)} 기준 · 하의 악세마다 가장 높게 다시 골랐어요`
           : matched
-          ? `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 고르고, 크리는 ${MODE_TXT[cur]}(${pc(rv.critT)} 기준) 힘트마를 바꿔 맞췄어요. 극대화는 ${goalM}(${pc(rv.maxT)})까지 채우는 게 더 높을 때만 채워요`
-          : `지금 실투력 ${fmt(base0)} 기준이에요. 두 쪽 다 아바타·한벌을 다시 골랐어요` }));
+          ? `지금 ${fmt(base0)} 기준 · 크리는 ${MODE_TXT[cur]}(${pc(rv.critT)}) 힘트마로 맞추고, 극대화는 ${goalM}(${pc(rv.maxT)})까지 채우는 게 더 높을 때만 채웠어요`
+          : `지금 ${fmt(base0)} 기준` }));
         { const t = srNote(rv.modes[cur].map(x => x.n)); if (t) head.append(el('p', { class: 'av-rival-note', text: t })); }
         if (matched && cur !== 'opt' && rv.modes[cur].every(x => x.cp < base0)) head.append(el('p', { class: 'av-rival-note', text: '두 쪽 다 지금보다 낮은 건 크리를 기준에 맞추느라 힘트마를 뺐기 때문이에요' }));
         cards.textContent = '';
@@ -612,7 +612,7 @@
     if (keepNow) { box.append(el('p', { class: 'av-hint', text: '조건에 맞는 다른 조합은 모두 지금 세팅보다 낮았어요' })); return; }
     box.append(el('p', { class: 'av-hint', text: `세트: ${r.best.setLabels.join(' · ') || '없음'}` }));
     if (r.stats) {
-      const notes = ['아바타 조합을 빠짐없이 다 따져서 실투력이 가장 높은 걸 골랐어요', '크리·극대 마법석(힘트마와 바꾸기)도 같이 맞췄어요', '아바타 세트 효과는 3세트까지만 들어가요'];
+      const notes = ['모든 조합을 다 따져서 가장 높은 걸 골랐어요(크리·극대 마법석 포함)', '아바타 세트 효과는 3세트까지만 들어가요'];
       if (r.stats.capped) notes.push('비슷한 조합이 너무 많아 위쪽 일부만 실투력으로 다시 쟀어요');
       box.append(el('ul', { class: 'av-notes' }, ...notes.map(t => el('li', { text: t }))));
     }
@@ -704,8 +704,8 @@
     const p = prof(), sr = p.sr || {}, with_ = [];
     if (String(APP.inputs().J26 || '') === '사룡무') with_.push('사룡무');
     if (sr.book !== false) with_.push('운명의 예언서'); if (sr.medal !== false) with_.push('Type-Q 여왕의 훈장');
-    const n = with_.length + 1, eff = n >= 3 ? '3부위 효과(양극화·추가 지속 피해 +5%)까지 넣었어요' : n === 2 ? '2부위 효과(크리 +5%·보스 +7%)만 넣었어요' : '세트 효과 없이 쳤어요';
-    return `${srN}는 사룡 세트 ${n}부위${with_.length ? `(${with_.join('·')}${(() => { const c = with_[with_.length - 1].charCodeAt(with_[with_.length - 1].length - 1); return c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28 ? '과' : '와'; })()} 함께)` : ''}로 보고 ${eff}. 사룡 세트 부위는 '계산 조건'에서 바꿀 수 있어요`;
+    const n = with_.length + 1, eff = n >= 3 ? '3부위 효과까지' : n === 2 ? '2부위 효과만' : '세트 효과 없이';
+    return `${srN}는 사룡 세트 ${n}부위${with_.length ? `(${with_.join('·')}${(() => { const c = with_[with_.length - 1].charCodeAt(with_[with_.length - 1].length - 1); return c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28 ? '과' : '와'; })()} 함께)` : ''}로 계산했어요(${eff})`;
   }
   function bottomOver(o, from, to) {
     if (from === to) return o;

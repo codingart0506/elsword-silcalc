@@ -507,7 +507,7 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     h('div', { class: 'oc-drop' },
       h('p', {}, '옵션 변환 창을 띄우고 ', h('span', { class: 'nw' }, h('kbd', { text: 'PrtSc' }), ' →'), ' ', h('span', { class: 'nw' }, '여기서 ', h('kbd', { text: 'Ctrl' }), ' + ', h('kbd', { text: 'V' }))),
       h('button', { type: 'button', class: 'btn sm', text: '이미지 열기', onclick: () => { fileFor = 'auto'; document.getElementById('ocFile').click(); } })),
-    h('p', { class: 'opt-sub', text: '사룡무기(4줄)·네블론 방어구(3줄) 옵션을 읽어요. 처음 넣은 건 지금 옵션, 옵션 변환을 돌린 뒤 넣은 건 새로 뜬 옵션으로 들어가요' }),
+    h('p', { class: 'opt-sub', text: '처음 넣은 사진은 지금 옵션, 변환 후 넣은 사진은 새 옵션으로 들어가요' }),
     h('div', { class: 'seg seg-sm oc-eq', role: 'tablist', id: 'ocEq' }),
     h('div', { class: 'oc-item', id: 'ocItem' }),
     h('div', { class: 'oc-slot', id: 'ocCur' }),
@@ -525,7 +525,7 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
         h('select', { id: 'ocSub' }, h('option', { value: '', text: '안 함' }), h('option', { value: 'atma', text: '아트마석 (크극 6 = 보뎀 3)' }), h('option', { value: 'hunt', text: '사냥석 (크극 6 = 보뎀 2.5)' }))),
       h('div', { class: 'opt-set-row' }, h('label', { for: 'ocEx', text: '양극화 상한(60%) 넘는 몫' }),
         h('select', { id: 'ocEx' }, h('option', { value: '0', text: '버림' }), h('option', { value: '1', text: '물마공 %로 바꿔서 셈' }), h('option', { value: '2', text: '추가 지속 피해로 바꿔서 셈' }))),
-      h('p', { class: 'opt-hint', text: '점수는 옵션이 없을 때 0점, 이 장비에서 나올 수 있는 가장 좋은 옵션(모두 최대 수치)일 때 100점이에요. 실투력 기준이라 직업·스탯마다 달라요. 치환은 다른 장비 소켓을 바꿔 맞출 수 있다고 보고 세는 방식이에요 (시트 3.0.19 옵션변환 계산과 같음).' })),
+      h('p', { class: 'opt-hint', text: '0점 = 옵션 없음, 100점 = 이 장비 최고 옵션(모두 최대). 실투력 기준이라 직업·스탯마다 달라요.' })),
   );
   const $ = (id) => document.getElementById(id);
   let fileFor = 'auto';
@@ -681,8 +681,8 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     if (!L) return;
     if (L.err === 'stat') {
       const go = h('button', { type: 'button', class: 'txt sm', text: '계산기 탭으로', onclick: () => { const b = document.querySelector('#views [data-view="calc"]'); if (b) b.click(); } });
-      sc.append(h('p', { class: 'oc-hint' }, '계산기 탭에서 스탯을 먼저 채우면 점수를 계산해요. ', go));
-      goal.append(h('p', { class: 'oc-hint', text: '스탯을 채우면 여기에 한 번 돌릴 때 좋은 옵션이 뜰 확률과 평균 횟수가 나와요' }));
+      sc.append(h('p', { class: 'oc-hint' }, '계산기 탭에서 스탯을 먼저 채워 주세요. ', go));
+      goal.append(h('p', { class: 'oc-hint', text: '스탯을 채우면 나와요' }));
       return;
     }
     if (L.err === 'type') return;
@@ -696,7 +696,7 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
       const sCur = score(1);
       sc.append(h('p', { class: 'oc-big' }, h('b', { text: `${sCur.toFixed(1)}점` }),
         h('span', { text: Number.isFinite(L.cp) ? ` 이 옵션이 실투력을 ${cpText(L.cp - cpNoOpt)} (${((1 / an.r0 - 1) * 100).toFixed(1)}%) 올려 줘요` : '' })));
-    } else sc.append(h('p', { class: 'oc-hint', text: '지금 붙은 옵션을 넣어야 점수를 매길 수 있어요. 옵션 변환 창을 찍어 붙여넣거나 직접 골라 주세요' }));
+    } else sc.append(h('p', { class: 'oc-hint', text: '지금 옵션을 넣으면 점수가 나와요' }));
     // 새 옵션
     if (L.nxt && linesOk(s.cur)) {
       const rN = ratio(L.snap, L.cur, L.nxt, L.o), sN = score(rN), d = (rN - 1) * 100;
@@ -727,7 +727,7 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     pIn.onchange = () => { let v = Number(String(pIn.value).replace(/[^0-9.]/g, '')); if (!(v >= 0)) v = PRICE0[key]; pr[key] = Math.round(v); persist(); paintResult(); };
     goal.append(h('div', { class: 'oc-price' }, h('span', { class: 'oc-t' }, h('span', { text: kind === 'w' ? '1억 ED 시세' : '변환석 1개' }), pIn, h('span', { text: '원' })),
       h('span', { class: 'oc-price-sub', text: kind === 'w' ? '현금 환산에 써요' : '캐시 기준' })));
-    goal.append(h('p', { class: 'oc-hint oc-goal-hint', text: `옵션 종류만 맞으면(수치가 모두 최대라면) ${T}점 이상: ${fmtP(pTop)}${pTop > 0 ? ` · 평균 ${fmtTries(pTop)}` : ''}. 100점은 ${an.bestIds.map((i) => CAT[i - 1].n).join(' + ')} 모두 최대예요. 수치 단계는 고르게, 옵션은 넥슨 공개 확률대로 뽑아요` }));
+    goal.append(h('p', { class: 'oc-hint oc-goal-hint', text: `옵션 종류만 맞으면(수치가 모두 최대라면) ${T}점 이상: ${fmtP(pTop)}${pTop > 0 ? ` · 평균 ${fmtTries(pTop)}` : ''}. 100점은 ${an.bestIds.map((i) => CAT[i - 1].n).join(' + ')} 모두 최대예요` }));
   }
   function applyNew() {
     const L = last; if (!L || !L.nxt || !L.an) return;
