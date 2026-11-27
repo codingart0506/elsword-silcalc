@@ -44,6 +44,16 @@
     return { '적응력': pct('C14'), '초적응력': pct('C15'), '강배': pct('C24'), '역강배': pct('C25'), '100이하': pct('C26'), '추피': pct('C22'), '양극화': pct('C20'),
       '물마퍼': mp, '모스댐': pct('C33'), '초댐증': pct('C30'), '크댐증': pct('C18'), '보댐증': pct('C21'), '쿨감': pct('C32') || pct('C31'), '강렬댐증': pct('C29') };
   }
+  // 공격력 칸(C11·C12) 바꾸기 — 시트 '교체 변동값'과 같은 식. 스탯창 공격력 = 기본 공격력 × (1 + 스탯형 공격력%) × (1 + 패시브형 공격력)
+  // 물공% d: 최소·최대 모두 (1+obs+d)/(1+obs)배. 고정 공격력 a: 최소·최대에 똑같이 a × (1+obs+d) × (1+패시브)를 더함(반올림 없음)
+  const atkConv = () => {
+    const w = num('C13'), pas = APP.atkPassive ? APP.atkPassive() : 0;
+    return (c11, c12, dmp, datk) => {
+      const obs = w > 0 ? 2 * (c12 - c11) / (1.1 * w) - 1 : 0, b = 1 + obs > 0 ? 1 + obs : 1;
+      const k = (b + dmp / 100) / b, add = datk * (b + dmp / 100) * (1 + pas);
+      return { C11: Math.max(1, c11 * k + add), C12: Math.max(1, c12 * k + add) };
+    };
+  };
   const IMPRINT_OF = { 0.04: '4% (찬란석 하옵)', 0.05: '5% (찬란석 상옵)', 0.055: '5.5% (강수, 11강)', 0.06: '6% (강수, 12강)', 0.065: '6.5% (강수, 13강)' };
   function calcOpts() {
     const inp = APP.inputs();
@@ -625,7 +635,7 @@
     const coolReal = r.bare && isFinite(r.bare.baseCooldownBare) ? Math.max(Number(cand.coolReal) || 0, Math.min(r.bare.baseCooldownBare + (cw['쿨감'] || 0), cap)) : cand.coolReal;
     AIDX.forEach((k, i) => {
       const d = (a[i] || 0) - (w[i] || 0); if (!d) return;
-      if (k === '물마퍼') { const m = (100 + cs['물마퍼'] + d) / (100 + cs['물마퍼']); o.C11 = Math.round(num('C11') * m); o.C12 = Math.round(num('C12') * m); return; }
+      if (k === '물마퍼') { Object.assign(o, atkConv()(num('C11'), num('C12'), d, 0)); return; }
       for (const c of STAT_CELL[k]) o[c] = Math.round(((Number(inp[c]) || 0) + d / 100) * 1e6) / 1e6;
     });
     const dc = Math.min(coolReal, cap) - cs['쿨감'];
@@ -639,11 +649,11 @@
     if (!APP.cpWith) return null;
     base = base || {};
     const cp0 = APP.cpWith(base); if (!(cp0 > 0)) return null;
-    const L0 = Math.log(cp0), inp = APP.inputs(), cs = curStats(), mp = cs['물마퍼'], curCool = cs['쿨감'];
+    const L0 = Math.log(cp0), inp = APP.inputs(), cs = curStats(), curCool = cs['쿨감'], AO = atkConv();
     // base에 스탯 칸이 들어 있으면(한벌·하의 악세를 바꿔 본 상태) 그 값에서부터 잼
     const at = (c) => Number(c in base ? base[c] : inp[c]) || 0;
     const over = (stat, d) => {
-      if (stat === '물마퍼') { const k = (100 + mp + d) / (100 + mp); return { C11: Math.round(('C11' in base ? at('C11') : num('C11')) * k), C12: Math.round(('C12' in base ? at('C12') : num('C12')) * k) }; }
+      if (stat === '물마퍼') return AO(('C11' in base ? at('C11') : num('C11')), ('C12' in base ? at('C12') : num('C12')), d, 0);
       const o = {}; for (const c of STAT_CELL[stat]) o[c] = Math.round((at(c) + d / 100) * 1e6) / 1e6; return o;
     };
     const lg = (stat, d) => { const v = APP.cpWith(Object.assign({}, base, over(stat, d))); return v > 0 ? Math.log(v) - L0 : 0; };
@@ -681,9 +691,7 @@
     }
     const dmp = delta.mp || 0, datk = delta.atk || 0;
     if (dmp || datk) {
-      const c11 = val('C11') || num('C11'), c12 = val('C12') || num('C12'), mp = cs['물마퍼'];
-      const k = (100 + mp + dmp) / (100 + mp), add = datk * (1 + (mp + dmp) / 100);
-      o.C11 = Math.round(c11 * k + add); o.C12 = Math.round(c12 * k + add * (c11 > 0 ? c12 / c11 : 1));
+      Object.assign(o, atkConv()(val('C11') || num('C11'), val('C12') || num('C12'), dmp, datk));
     }
     return o;
   }
@@ -1138,7 +1146,7 @@
     const inp = Object.assign({}, APP.inputs(), base), cs = curStats(), cap = APP.coolCap ? APP.coolCap() : 35;
     const W = R.wornContribution(db, worn).sums, Wv = xVec(W), sv0 = suitVec(suitNow), bv0 = bottomVec(bNow);
     for (let i = 0; i < XN; i++) Wv[i] += sv0[i] + bv0[i];
-    const curCool = Number(cs['쿨감']) || 0, bare = curCool - (W['쿨감'] || 0), mp = Number(cs['물마퍼']) || 0;
+    const curCool = Number(cs['쿨감']) || 0, bare = curCool - (W['쿨감'] || 0), AO = atkConv();
     const sk = APP.sockInfo ? APP.sockInfo() : { v: { crit: 6, max: 6, boss: 3, boss2: 2.5 }, counted: false, n: null, rawC: 0, rawM: 0 };
     const vc = sk.v.crit || 6, vm = sk.v.max || 6, vb = sk.v.boss || 3, vh = sk.v.boss2 || 2.5, NR = 12;
     const haveH = sk.counted ? sk.n.boss2 : 0, bossSlots = sk.counted ? sk.n.boss + sk.n.boss2 : Infinity;
@@ -1151,7 +1159,7 @@
       for (const k in XCELL) { const i = XI[k]; let dv = d[i]; if (i === I_BS) dv -= drop(nc + nm); if (dv) o[XCELL[k]] = r6(Math.max(0, (Number(inp[XCELL[k]]) || 0) + dv / 100)); }
       const dc = d[I_CL]; if (dc) for (const c of ['C31', 'C32']) o[c] = r6(Math.max(0, (Number(inp[c]) || 0) + dc / 100));
       const dmp = d[XI['물마퍼']], datk = d[XI['고정공']];
-      if (dmp || datk) { const k = (100 + mp + dmp) / (100 + mp), add = datk * (1 + (mp + dmp) / 100); o.C11 = Math.max(1, Math.round(C11 * k + add)); o.C12 = Math.max(1, Math.round(C12 * k + add * (C11 > 0 ? C12 / C11 : 1))); }
+      if (dmp || datk) Object.assign(o, AO(C11, C12, dmp, datk));
       const dcr = d[I_CR] + vc * nc, dmx = d[I_MX] + vm * nm;
       if (dcr) o.C17 = APP.addRaw('C17', C17, dcr / 100);
       if (dmx) o.C19 = APP.addRaw('C19', C19, dmx / 100);

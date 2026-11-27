@@ -1666,6 +1666,8 @@
     },
     optionsOf: (a) => (optionsOf(a) || []).slice(),
     // 직업별 쿨감 상한(%): 시트 '직업·패시브' 쿨감 상한(젬블리스 24%, 나머지 35%)
+    // 패시브형 공격력(시트 C406 = '교체 변동값' C54): 아바타 고정 공격력을 스탯창 공격력으로 바꿀 때 곱함
+    atkPassive: () => { const v = wb.get(CALC, 'C406'); return typeof v === 'number' && isFinite(v) ? v : 0; },
     coolCap: () => { const v = wb.get(CALC, 'C196'); return typeof v === 'number' && v > 0 ? Math.round(v * 1000) / 10 : 35; },
     // 랭킹도 계산기에 넣은 그대로(강렬:초월 점유율을 직접 넣었으면 그 비율로) 반영
     rankInputs: () => Object.assign({}, inputs, { _calc: CALC_VER }),
