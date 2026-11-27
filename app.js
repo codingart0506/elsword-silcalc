@@ -1935,7 +1935,8 @@
     if (!simWb) simWb = new E.Workbook(M);
     simWb.assign(sheetInputs(Object.assign({}, inputs, over || {})));
     const n = (a) => { const v = simWb.get(CALC, a); return typeof v === 'number' ? v : NaN; };
-    return { crit: n('C444') + n('C445') - n('C202'), max: n('C420') * n('C421') + n('C422'), res: n('C202') };
+    // critEnc: 격려 중 크리(시트 C446+C447: 점감 뒤 크리에 C226만큼 곱으로 더함). encOn: 펫의 격려를 쓰는지(C35)
+    return { crit: n('C444') + n('C445') - n('C202'), critEnc: n('C444') * (1 + n('C226')) + n('C445') - n('C202'), encOn: simWb.get(CALC, 'C35') === true, max: n('C420') * n('C421') + n('C422'), res: n('C202') };
   }
   // 스탯창 값 x에서 실제 확률이 1 이상이 되는 가장 작은 x(0.01% 단위)
   function capNeed(cell, key) {
@@ -1954,6 +1955,10 @@
     for (const [cell, key, toRaw, toWin, sk, name, cap] of [['C17', 'crit', SOCK_CI, SOCK_CW, 'crit', '크리티컬', '만크'], ['C19', 'max', SOCK_MI, SOCK_MW, 'max', '극대화', '만극']]) {
       const cur = Number(inputs[cell]) || 0, need = capNeed(cell, key), step = sv(sk) / 100;
       const r = { cell, name, cap, cur, real: Math.max(0, Math.min(1, now[key])), need, step };
+      const clamp1 = (v) => Math.max(0, Math.min(1, v));
+      // 스탯창 100%(점감 끝)에서의 확률 = 닿을 수 있는 최대(시트 '상시 만크'의 최대 확률)
+      if (need === null) r.max = clamp1(capEval({ [cell]: 1 })[key]);
+      if (key === 'crit' && now.encOn) { r.needEnc = capNeed(cell, 'critEnc'); if (r.needEnc === null) r.maxEnc = clamp1(capEval({ [cell]: 1 }).critEnc); }
       if (need !== null && step > 0) {
         const raw = toRaw(cur);
         if (cur < need) { let k = 0; while (toWin(raw + k * step) < need - 1e-6 && k < 40) k++; r.add = k; }
@@ -1981,14 +1986,20 @@
     const tbody = el('tbody'); tb.append(tbody);
     for (const r of r0.rows) {
       let txt, cls = 'same';
-      if (r.need === null) { txt = '스탯창으로는 못 닿아요'; cls = 'up'; }
+      if (r.need === null) { txt = `${r.cell === 'C17' ? '격려 없이는 ' : ''}불가능 (최대 ${fmtPct(r.max)})`; cls = 'up'; }
       else if (r.cur < r.need) { txt = `+${fmtPct(r.need - r.cur)}${r.add != null ? ` (마법석 ${r.add}칸)` : ''}`; cls = 'up'; }
       else { txt = r.cur - r.need < 5e-5 ? `${r.cap}이에요` : `${r.cap}, ${fmtPct(r.cur - r.need)} 남아요${r.spare ? ` (마법석 ${r.spare}칸)` : ''}`; cls = 'down'; }
-      tbody.append(el('tr', null, el('th', { scope: 'row', text: r.name }), el('td', { text: fmtPct(r.cur) }), el('td', { class: cls, text: txt })));
+      const td = el('td', { class: cls, text: txt });
+      // 격려 중(펫 격려): 격려 없이 만크가 아니면 한 줄 더
+      if (r.needEnc !== undefined && (r.need === null || r.cur < r.need)) {
+        const e = r.needEnc === null ? `격려 중에도 불가능 (최대 ${fmtPct(r.maxEnc)})` : r.cur < r.needEnc ? `격려 중엔 +${fmtPct(r.needEnc - r.cur)}` : '격려 중엔 만크예요';
+        td.append(el('small', { class: 'cap-enc', text: e }));
+      }
+      tbody.append(el('tr', null, el('th', { scope: 'row', text: r.name }), el('td', { text: fmtPct(r.cur) }), td));
     }
     body.append(tb);
-    const need = r0.rows.map(r => r.need === null ? '-' : `${r.name.slice(0, 2)} ${fmtPct(r.need)}`).join(', ');
-    body.append(el('p', { class: 'opt-hint', text: `만크·만극에 딱 맞는 스탯창 값: ${need}. 고른 필드의 크리 저항(${fmtPct(r0.res, 0)})까지 넣고, 격려는 빼고 계산했어요` }));
+    const need = r0.rows.map(r => `${r.name.slice(0, 2)} ${r.need === null ? '불가능' : fmtPct(r.need)}${r.needEnc != null && r.need !== null && r.needEnc < r.need - 5e-5 ? ` (격려 중 ${fmtPct(r.needEnc)})` : r.needEnc != null && r.need === null ? ` (격려 중 ${fmtPct(r.needEnc)})` : ''}`).join(', ');
+    body.append(el('p', { class: 'opt-hint', text: `만크·만극 스탯창 값: ${need} · 필드 크리 저항 ${fmtPct(r0.res, 0)} 포함` }));
     const m = r0.m, gain = el('p', { class: 'opt-gain' });
     if (m && m.moves && m.moves.length) {
       const mv = m.moves.map(x => x.n > 0 ? `힘트마 ${x.n}칸 → ${x.t}` : `${x.t} ${-x.n}칸 → 힘트마`).join(', ');

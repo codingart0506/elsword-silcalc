@@ -507,7 +507,6 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     h('div', { class: 'oc-drop' },
       h('p', {}, '옵션 변환 창을 띄우고 ', h('span', { class: 'nw' }, h('kbd', { text: 'PrtSc' }), ' →'), ' ', h('span', { class: 'nw' }, '여기서 ', h('kbd', { text: 'Ctrl' }), ' + ', h('kbd', { text: 'V' }))),
       h('button', { type: 'button', class: 'btn sm', text: '이미지 열기', onclick: () => { fileFor = 'auto'; document.getElementById('ocFile').click(); } })),
-    h('p', { class: 'opt-sub', text: '처음 넣은 사진은 지금 옵션, 변환 후 넣은 사진은 새 옵션으로 들어가요' }),
     h('div', { class: 'seg seg-sm oc-eq', role: 'tablist', id: 'ocEq' }),
     h('div', { class: 'oc-item', id: 'ocItem' }),
     h('div', { class: 'oc-slot', id: 'ocCur' }),
@@ -682,7 +681,6 @@ const CLASS_TIER = {"나이트 엠퍼러":2.0,"룬 마스터":1.0,"임모탈":1.
     if (L.err === 'stat') {
       const go = h('button', { type: 'button', class: 'txt sm', text: '계산기 탭으로', onclick: () => { const b = document.querySelector('#views [data-view="calc"]'); if (b) b.click(); } });
       sc.append(h('p', { class: 'oc-hint' }, '계산기 탭에서 스탯을 먼저 채워 주세요. ', go));
-      goal.append(h('p', { class: 'oc-hint', text: '스탯을 채우면 나와요' }));
       return;
     }
     if (L.err === 'type') return;

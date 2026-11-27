@@ -269,7 +269,7 @@
     else if (lastRec && lastRec.ok) {
       const n = Object.keys(lastRec.found).length;
       note.textContent = `${lastRec.char} 장비창에서 ${n}칸을 알아봤어요. 다르면 직접 고쳐 주세요`;
-    } else note.textContent = '장비창 스크린샷으로 지금 입은 아바타를 채워요';
+    } else note.textContent = '';
     const body = $('#avWorn'); body.textContent = '';
     for (const part of PARTS) {
       const sel = el('select', { 'aria-label': (PART_LABEL[part] || part) + ' 지금 착용' });
@@ -310,13 +310,11 @@
       sel.onchange = () => { p.bottom = sel.value; p.bottomSet = true; save(); result = null; renderResult(); markB(); };
       markB();
       body.append(rowB);
-      body.append(el('p', { class: 'av-hint' }, '스탯 창을 찍을 때 끼고 있던 것을 골라 주세요. 추천은 둘 다 끼워 보고 골라요'));
+      body.append(el('p', { class: 'av-hint' }, '스탯 창을 찍을 때 끼고 있던 것을 골라 주세요'));
     }
-    const allFixed = !!p.fiveFixed && PARTS.filter(x => x !== '아바타5셋').every(x => p.fixed[x]) && !!p.fixed['하의악세'];
     body.append(el('div', { class: 'av-fix-acts' },
       el('button', { type: 'button', class: 'txt sm', text: '전체 고정', onclick: () => { p.fiveFixed = true; for (const x of PARTS) if (x !== '아바타5셋') p.fixed[x] = true; p.fixed['하의악세'] = true; save(); result = null; render(); } }),
-      el('button', { type: 'button', class: 'txt sm mute', text: '고정 해제', onclick: () => { p.fiveFixed = false; p.fixed = {}; save(); result = null; render(); } }),
-      allFixed ? el('span', { class: 'av-hint', text: '모두 고정하면 지금 세팅 그대로예요' }) : ''));
+      el('button', { type: 'button', class: 'txt sm mute', text: '고정 해제', onclick: () => { p.fiveFixed = false; p.fixed = {}; save(); result = null; render(); } })));
     renderStats(); renderOpts(); renderOwn(); renderResult();
   }
   function renderStats() {
@@ -324,7 +322,7 @@
     if (!APP.cls() || !(num('C11') > 0)) { box.append(el('p', { class: 'av-hint warn', text: '계산기 탭에 지금 스탯이 없어요. 상세 스탯 창 스크린샷을 먼저 읽어 주세요' })); return; }
     const cur = curStats(), grid = el('div', { class: 'av-stat' });
     for (const [k, v] of Object.entries(cur)) grid.append(el('div', null, el('span', { text: k }), el('span', { text: String(Math.round(v * 100) / 100) })));
-    box.append(grid, el('p', { class: 'av-hint', text: `${APP.cls()} · 계산기 탭 값을 그대로 써요` }));
+    box.append(grid);
   }
   function renderOpts() {
     const box = $('#avOptBody'); if (!box) return; box.textContent = '';
@@ -368,7 +366,6 @@
           });
           box.append(el('div', { class: 'av-own-set' }, el('span', { class: 'av-own-name', text: buffLabel(c) }), el('div', { class: 'av-chips' }, ...chips)));
         }
-        box.append(el('p', { class: 'av-hint', text: '켜 둔 것 중 실투력이 가장 높은 걸 골라요' }));
       }
     }
     box.append(el('p', { class: 'av-hint', text: `계산기에서 가져온 값: 환경 디버프 ${c.env}, 집결지 ${c.rally}, 파티 크뎀증 ${c.party ? '켬' : '끔'}, 마에스트로 헤일로 ${c.maestro ? '있음' : '없음'}, 초목의 아트마 ${c.atma}, 각인석 크뎀 ${c.imprint}` }));
@@ -394,7 +391,7 @@
     box.append(el('div', { class: 'av-own-acts' },
       el('button', { type: 'button', class: 'txt sm', text: '전체 선택', onclick: () => setOwn(all) }),
       el('button', { type: 'button', class: 'txt sm mute', text: '전체 취소', onclick: () => setOwn([]) }),
-      el('span', { class: 'av-hint', text: '지금 낀 건 가진 것으로 쳐요. 세트 이름을 누르면 한꺼번에 골라요' })));
+      el('span', { class: 'av-hint', text: '세트 이름을 누르면 한꺼번에 골라요' })));
     // 한벌 아바타(세트 없이 한 칸)
     const sn = Object.keys(SUITS);
     const sChips = sn.map(d => {
@@ -612,7 +609,7 @@
     if (keepNow) { box.append(el('p', { class: 'av-hint', text: '조건에 맞는 다른 조합은 모두 지금 세팅보다 낮았어요' })); return; }
     box.append(el('p', { class: 'av-hint', text: `세트: ${r.best.setLabels.join(' · ') || '없음'}` }));
     if (r.stats) {
-      const notes = ['모든 조합을 다 따져서 가장 높은 걸 골랐어요(크리·극대 마법석 포함)', '아바타 세트 효과는 3세트까지만 들어가요'];
+      const notes = ['아바타 세트 효과는 3세트까지만 들어가요'];
       if (r.stats.capped) notes.push('비슷한 조합이 너무 많아 위쪽 일부만 실투력으로 다시 쟀어요');
       box.append(el('ul', { class: 'av-notes' }, ...notes.map(t => el('li', { text: t }))));
     }
