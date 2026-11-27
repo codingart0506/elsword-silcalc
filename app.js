@@ -2107,6 +2107,44 @@
   }
   hooks.push(renderEff);
 
+  // ---------- 스탯 분석 카드: 옵션 효율·크극 최적화·소켓 배분·만크·만극을 탭으로 하나씩 ----------
+  // 각 칸은 계산할 수 없을 때 스스로 hidden이 되고, 여기서는 고른 탭만 보여 줌(고른 탭은 이 기기에 기억)
+  const TOOL_KEY = 'silcalc.tool';
+  let toolSel = 'effCard';
+  try { toolSel = localStorage.getItem(TOOL_KEY) || 'effCard'; } catch (e) { /* 저장소를 못 쓰면 기본 탭 */ }
+  function toolsSync() {
+    const card = $('#toolsCard'); if (!card) return;
+    const tabs = [...card.querySelectorAll('[data-tool]')];
+    const ok = tabs.filter(b => { const p = document.getElementById(b.dataset.tool); return p && !p.hidden; });
+    card.hidden = !ok.length; if (!ok.length) return;
+    const cur = ok.some(b => b.dataset.tool === toolSel) ? toolSel : ok[0].dataset.tool;
+    for (const b of tabs) {
+      const on = b.dataset.tool === cur, p = document.getElementById(b.dataset.tool);
+      b.hidden = !ok.includes(b); b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1;
+      if (p) p.classList.toggle('on', on);
+    }
+  }
+  {
+    const card = $('#toolsCard');
+    if (card) {
+      const bar = card.querySelector('.tool-tabs');
+      bar.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-tool]'); if (!b) return;
+        toolSel = b.dataset.tool; try { localStorage.setItem(TOOL_KEY, toolSel); } catch (er) { /* 기억 못 해도 됨 */ }
+        toolsSync();
+      });
+      bar.addEventListener('keydown', (e) => { // 좌우 화살표로 탭 옮기기
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        const vis = [...bar.querySelectorAll('[data-tool]')].filter(b => !b.hidden), i = vis.findIndex(b => b.classList.contains('on'));
+        const n = vis[(i + (e.key === 'ArrowRight' ? 1 : vis.length - 1)) % vis.length]; if (!n) return;
+        e.preventDefault(); n.click(); n.focus();
+      });
+      const mo = new MutationObserver(toolsSync);
+      for (const b of card.querySelectorAll('[data-tool]')) { const p = document.getElementById(b.dataset.tool); if (p) mo.observe(p, { attributes: true, attributeFilter: ['hidden'] }); }
+      toolsSync();
+    }
+  }
+
   // ---------- 시작 ----------
   function selfTest() {
     const t = new E.Workbook(M); const v = cpOf(t); const exp = M.meta && M.meta.cpCheck;

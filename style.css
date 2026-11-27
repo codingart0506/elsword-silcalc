@@ -681,7 +681,11 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .eff-ctrl { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: 14px; color: var(--sub); }
 .eff-ctrl select { width: auto; }
 .eff-table td { text-align: right; font-variant-numeric: tabular-nums; }
-.eff-table td small { display: block; font-size: 12px; color: var(--sub); }
+.eff-table td small { display: inline-block; min-width: 86px; margin-left: 8px; font-size: 12px; color: var(--sub); }
+/* 스탯 분석 카드: 옵션 효율·크극 최적화·소켓 배분·만크·만극을 탭으로 하나씩 */
+.tools .tool-tabs { margin-bottom: 16px; max-width: none; }
+.tools .tool-tabs .tab { flex: 1 1 0; min-width: 0; white-space: nowrap; padding-left: 4px; padding-right: 4px; }
+.tool-panel:not(.on) { display: none !important; }
 .cap-enc { display: block; font-size: 12px; font-weight: 400; color: var(--sub); margin-top: 2px; }
 .av-opt .av-hint { flex-basis: 100%; margin: 0; }
 .av-own-on { margin: 4px 0 10px; }
