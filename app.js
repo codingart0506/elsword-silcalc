@@ -984,6 +984,10 @@
   }
   $('#miniBar').onclick = () => $('.hero').scrollIntoView({ behavior: 'smooth', block: 'start' });
   function setText(id, t) { const n = $(id); if (n && n.textContent !== t) n.textContent = t; }
+  // 쿨감이 달라졌을 때: 스킬 사용 가동률 변화와 쿨감을 뺀 실투력 변화(시트 아이템 시뮬레이터 '쿨감 계산 제외하기')
+  const sgnPct = (x) => `${x >= 0 ? '+' : '−'}${Math.abs(x * 100).toFixed(2)}%`;
+  function coolLine(a, b) { if (!a || !b || !(a.use > 0) || !(a.pre > 0) || !(b.use > 0)) return ''; const u = b.use / a.use - 1; if (Math.abs(u) < 1e-9) return ''; return `스킬 사용 가동률 ${sgnPct(u)} · 쿨감 빼면 ${sgnPct(b.pre / a.pre - 1)}`; }
+  function setCoolLine(pair) { const n = $('#deltaCool'); if (!n) return; const t = pair ? coolLine(pair[0], pair[1]) : ''; n.textContent = t; n.hidden = !t; }
   function renderResults() {
     const hero = $('.hero');
     $('#btnLink').hidden = !CAN_LINK || isEmptySetting(inputs);
@@ -992,7 +996,7 @@
     if (isEmptySetting(inputs)) {
       hero.classList.add('empty');
       setText('#rCP', '—'); setText('#rCPk', inputs.C6 ? '스크린샷을 넣거나 공격력부터 입력해 주세요' : '스크린샷을 넣거나 전직부터 골라 주세요');
-      setText('#rClass', inputs.C6 || ''); setText('#deltaText', ''); $('#btnPin').hidden = true; $('#btnRevert').hidden = true;
+      setText('#rClass', inputs.C6 || ''); setText('#deltaText', ''); setCoolLine(null); $('#btnPin').hidden = true; $('#btnRevert').hidden = true;
       const fi = $('#fieldInfo'); if (fi) fi.textContent = '';
       return;
     }
@@ -1023,7 +1027,8 @@
       dt.className = 'delta-text' + (same ? '' : d > 0 ? ' up' : ' down');
       const ref = shared ? '내 세팅' : '기준';
       dt.textContent = same ? `${ref}${shared ? '과' : ' 세팅과'} 같아요` : `${ref}보다 ${d > 0 ? '▲' : '▼'} ${fmtInt(Math.abs(d))} (${d > 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%)`;
-    } else { dt.className = 'delta-text'; dt.textContent = shared ? '' : '비교할 기준 세팅이 아직 없어요'; }
+      setCoolLine(same || swOn() ? null : [coolParts(baseWb), coolParts(wb)]);
+    } else { dt.className = 'delta-text'; dt.textContent = shared ? '' : '비교할 기준 세팅이 아직 없어요'; setCoolLine(null); }
     const noBase = typeof base !== 'number';
     const changed = Object.keys(controls).some(a => controls[a].row && controls[a].row.classList.contains('changed')) || !same;
     $('#btnPin').hidden = (!changed && !noBase) || !!shared; $('#btnRevert').hidden = !changed || noBase || !!shared;
@@ -1657,6 +1662,7 @@
     describeInputs,
     cp: () => { const v = cpOf(wb); return typeof v === 'number' ? Math.round(v) : NaN; },
     cpWith,
+    cpCool: (over) => cpCool(over),
     // 아이템 옵션을 스탯창 값에 더함: 크리·극대는 체감 전 원래 수치로 되돌려 더한 뒤 다시 스탯창 값으로(시트 Q38·V27과 같은 식)
     addRaw: (c, w, d) => {
       const r = (x) => Math.round(x * 1e6) / 1e6;
@@ -2013,6 +2019,93 @@
     body.append(gain);
   }
   hooks.push(renderCap);
+
+  // ---------- 옵션 효율표 (시트 '옵션 효율 계산' / Main N6) ----------
+  // 옵션 하나를 '더할 양'만큼 더했을 때 실투력이 몇 % 오르는지. 고정 공격력은 +1(1% 기준), 공격력 레벨은 +1레벨(1% 기준)
+  const EFF_STEPS = [0.001, 0.005, 0.01, 0.02, 0.025, 0.03, 0.04, 0.05, 0.06, 0.08, 0.1, 0.12, 0.15, 0.2];
+  // 무기 공격력 레벨 1당 공격력(시트 '무기·방어구 성장' attack-coefficient × enhancement-multiplier, 직업 공격력 티어는 '직업·패시브' G열)
+  const ATK_LV_COEF = { 1: 79.5, 2: 78, 0: 51 };
+  const ATK_LV_ENH = [0, 1.03, 1.06, 1.09, 1.16, 1.23, 1.3, 1.45, 1.6, 1.75, 2.15, 2.55, 2.95, 3.35];
+  const ATK_TIER2 = new Set(['나이트 엠퍼러', '에테르 세이지', '로드 아조트', '데이브레이커', '프로피티스', '레이지 하츠', '레버넌트', '코멧 크루세이더', '페이탈 팬텀', '센츄리온', '디우스 아에르', '비천', '일천', '엠파이어 소드', '오버마인드', '카타스트로피', '이노센트', '데메르시오', '템페스트 버스터', '블랙 매서커', '미네르바', '프라임 오퍼레이터', '블루헨', '비고트', '라디언트 소울', '닉스 피에타', '애버리스']);
+  // 쿨감 관련 값(시트 '현재·교체 후 계산'): 476 = 쿨타임 환산 전 피해 지수, 486 = 스킬 사용 가동률
+  function coolParts(w) {
+    const n = (a) => { const v = w.get(CALC, a); return typeof v === 'number' && isFinite(v) ? v : NaN; };
+    const sh = n('C203');
+    return { pre: n('C476'), use: (sh * n('C481') + (1 - sh) * n('C482')) * n('C484') * n('C485') };
+  }
+  function cpCool(over) {
+    if (!simWb) simWb = new E.Workbook(M);
+    simWb.assign(sheetInputs(Object.assign({}, inputs, over || {})));
+    const v = cpOf(simWb);
+    return Object.assign({ cp: typeof v === 'number' ? v : NaN }, coolParts(simWb));
+  }
+  let effStep = 0.01, effT = null, effSeq = 0, effRes = null;
+  function effCalc(step) {
+    if (!simWb) simWb = new E.Workbook(M);
+    const base = Object.assign({}, inputs);
+    simWb.assign(sheetInputs(base));
+    const cp0 = cpOf(simWb); if (!(typeof cp0 === 'number' && cp0 > 0)) return null;
+    const num = (a) => Number(base[a]) || 0, C11 = num('C11'), C12 = num('C12'), C13 = num('C13');
+    const obs = C13 > 0 ? 2 * (C12 - C11) / (1.1 * C13) - 1 : 0, b = 1 + obs > 0 ? 1 + obs : 1;
+    const pv = simWb.get(CALC, 'C406'), pas = typeof pv === 'number' && isFinite(pv) ? pv : 0;
+    const c375 = simWb.get(CALC, 'C375'), mag = atkType(simWb) === '마법', A = mag ? '마공' : '물공';
+    const lvAtk = (ATK_LV_COEF[ATK_TIER2.has(base.C6) ? 2 : 1] || 0) * (ATK_LV_ENH[Math.round(num('L26'))] || 0);
+    const add = (cells) => { const o = {}; for (const c of cells) o[c] = Math.round((num(c) + step) * 1e9) / 1e9; return o; };
+    // 크리·극대: 체감 전 원래 수치에 더함(시트 calc_440·418과 같음)
+    const addRaw = (c, w, d) => c === 'C17' ? SOCK_CW(SOCK_CI(w) + d) : SOCK_MW(SOCK_MI(w) + d);
+    const flat = (a, dW) => ({ C11: C11 + a * b * (1 + pas), C12: C12 + a * b * (1 + pas) + 0.55 * dW * b, C13: C13 + dW });
+    const rows = [
+      [`고정 ${A}`, flat(step * 100, 0)],
+      [`${A} (%)`, { C11: C11 * (b + step) / b, C12: C12 * (b + step) / b }],
+      [`${A}렙`, flat(step * 100 * lvAtk, step * 100 * lvAtk)],
+      ['쿨감', add(['C31', 'C32'])], ['쿨초 확률', add(['C34'])],
+      ['크리티컬', { C17: addRaw('C17', num('C17'), step) }], ['극대화', { C19: addRaw('C19', num('C19'), step) }],
+      ['HP>50% 피해', add(['C24'])], ['HP≤50% 피해', add(['C25'])], ['크뎀', add(['C18'])], ['보뎀', add(['C21'])], ['양극화', add(['C20'])],
+      ['모스뎀', add(['C33'])], ['HP≤100% 피해', add(['C26'])], ['추피', add(['C22'])], ['초월스뎀', add(['C30'])], ['강렬스뎀', add(['C29'])],
+      ['적응력', add(['C14'])], ['초적응력', add(['C15'])],
+    ];
+    const out = [];
+    for (const [name, o] of rows) {
+      simWb.assign(sheetInputs(Object.assign({}, base, o)));
+      const v = cpOf(simWb); if (typeof v === 'number' && isFinite(v)) out.push({ name, gain: v / cp0 - 1 });
+    }
+    // 곱연크뎀: 크리티컬 데미지 곱연산 배율(C375)에 (1+더할 양)을 곱함. 하의 스위칭을 켜면 시트도 따로 계산해서 뺌
+    if (typeof c375 === 'number' && !swOn()) {
+      const m = sheetInputs(base); m[CALC + '!C375'] = c375 * (1 + step); simWb.assign(m);
+      const v = cpOf(simWb); if (typeof v === 'number' && isFinite(v)) out.push({ name: '곱연크뎀', gain: v / cp0 - 1 });
+    }
+    simWb.assign(sheetInputs(base));
+    out.sort((x, y) => y.gain - x.gain);
+    return { rows: out, cp0, step, key: store.current, A };
+  }
+  function renderEff() {
+    const card = $('#effCard'); if (!card) return;
+    const bad = isEmptySetting(inputs) || !(Number(g('C11')) > 0) || typeof cpOf(wb) !== 'number' || !!shared;
+    card.hidden = bad; if (bad) return;
+    const sel = $('#effStep');
+    if (sel && !sel.options.length) {
+      for (const s of EFF_STEPS) sel.append(el('option', { value: String(s), text: `${+(s * 100).toFixed(1)}%` }));
+      sel.value = String(effStep);
+      sel.onchange = () => { effStep = Number(sel.value) || 0.01; renderEff(); };
+    }
+    const my = ++effSeq; clearTimeout(effT);
+    effT = setTimeout(() => { if (my !== effSeq) return; try { effRes = effCalc(effStep); } catch (e) { console.error(e); effRes = null; } drawEff(); }, 500);
+  }
+  function drawEff() {
+    const body = $('#effBody'); if (!body) return; body.textContent = '';
+    const r = effRes; if (!r || r.key !== store.current) return;
+    const amt = +(r.step * 100).toFixed(1);
+    const tb = el('table', { class: 'opt-table eff-table' }, el('thead', null, el('tr', null, el('th', { scope: 'col' }, el('span', { class: 'sr', text: '옵션' })), el('th', { scope: 'col', text: '실투력 상승' }))));
+    const tbody = el('tbody'); tb.append(tbody);
+    for (const x of r.rows) {
+      const nm = x.name.startsWith('고정 ') || x.name.endsWith('렙') ? `${x.name} +${amt}` : `${x.name} +${amt}%`;
+      const td = el('td', { class: x.gain > 0 ? 'up' : 'same', text: `${x.gain >= 0 ? '+' : '−'}${Math.abs(x.gain * 100).toFixed(3)}%` });
+      td.append(el('small', { text: `${x.gain >= 0 ? '+' : '−'}${fmtInt(Math.abs(Math.round(r.cp0 * x.gain)))}` }));
+      tbody.append(el('tr', null, el('th', { scope: 'row', text: nm }), td));
+    }
+    body.append(tb);
+  }
+  hooks.push(renderEff);
 
   // ---------- 시작 ----------
   function selfTest() {

@@ -519,6 +519,11 @@
         : el('span', { text: lead + (g < -0.0005 ? `실뎀 ${g.toFixed(2)}%` : '실뎀은 같아요') });
     }
     box.append(el('p', { class: 'av-gain' }, head));
+    // 쿨감이 달라지면: 스킬 사용 가동률과 쿨감을 뺀 실투력 변화(시트 아이템 시뮬레이터와 같은 값)
+    if (byCp && changed && !keepNow && APP.cpCool && r.best.over) {
+      const a = APP.cpCool({}), b2 = APP.cpCool(r.best.over), s2 = (x) => `${x >= 0 ? '+' : '−'}${Math.abs(x * 100).toFixed(2)}%`;
+      if (a.use > 0 && b2.use > 0 && a.pre > 0 && Math.abs(b2.use / a.use - 1) > 1e-9) box.append(el('p', { class: 'av-hint', text: `스킬 사용 가동률 ${s2(b2.use / a.use - 1)} · 쿨감 빼면 ${s2(b2.pre / a.pre - 1)}` }));
+    }
     const tb = el('tbody');
     for (const part of PARTS) {
       const now = p.worn[part] || '', want = keepNow ? now : (rec[part] || '');

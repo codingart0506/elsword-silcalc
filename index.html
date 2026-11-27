@@ -6,7 +6,7 @@
 <title>엘소드 실투력 계산기</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%233182F6%22/%3E%3Cpath d=%22M9 20 L14 14 L18 17 L23 10%22 stroke=%22white%22 stroke-width=%223%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 
-<link rel="stylesheet" href="style.css?v=c77a8eeb">
+<link rel="stylesheet" href="style.css?v=3abcd546">
 </head>
 <body>
 <div class="wrap">
@@ -47,6 +47,7 @@
     <div class="hero-unit" id="rCPk"></div>
     <div class="delta" id="delta">
       <span class="delta-text" id="deltaText"></span>
+      <span class="delta-cool" id="deltaCool" hidden></span>
       <span class="delta-acts">
         <button class="txt sm" id="btnPin">이 값을 기준으로</button>
         <button class="txt sm mute" id="btnRevert">기준으로 되돌리기</button>
@@ -120,6 +121,12 @@
   <section class="card opt-card" id="capCard" hidden aria-labelledby="capTitle">
     <h2 id="capTitle">만크·만극 계산</h2>
     <div id="capBody"></div>
+  </section>
+
+  <section class="card opt-card" id="effCard" hidden aria-labelledby="effTitle">
+    <h2 id="effTitle">옵션 효율표</h2>
+    <div class="eff-ctrl"><label for="effStep">더할 양</label><select id="effStep"></select></div>
+    <div id="effBody"></div>
   </section>
 
 
@@ -255,9 +262,9 @@
 <script src="opt.js?v=384c449a"></script>
 <script src="avdata.js?v=90571006"></script>
 <script src="avrec.js?v=3bc15fbd"></script>
-<script src="app.js?v=b4794491"></script>
+<script src="app.js?v=f1f23a17"></script>
 <script src="optchg.js?v=13fea851"></script>
-<script src="avatar.js?v=e5f6130a"></script>
+<script src="avatar.js?v=170e2f6d"></script>
 <script src="rank.js?v=21bd81b9"></script>
 </body>
 </html>

@@ -677,6 +677,11 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .av-hint.warn { color: var(--up); }
 .av-notes { font-size: 13px; color: var(--sub); line-height: 1.5; margin: 6px 0 0; padding-left: 18px; }
 .av-notes li + li { margin-top: 2px; }
+.delta-cool { display: block; flex-basis: 100%; font-size: 13px; font-weight: 500; color: var(--sub); font-variant-numeric: tabular-nums; }
+.eff-ctrl { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: 14px; color: var(--sub); }
+.eff-ctrl select { width: auto; }
+.eff-table td { text-align: right; font-variant-numeric: tabular-nums; }
+.eff-table td small { display: block; font-size: 12px; color: var(--sub); }
 .cap-enc { display: block; font-size: 12px; font-weight: 400; color: var(--sub); margin-top: 2px; }
 .av-opt .av-hint { flex-basis: 100%; margin: 0; }
 .av-own-on { margin: 4px 0 10px; }
