@@ -589,7 +589,7 @@
     const capped = ch.some(([c, cur]) => c === 'C20' && cur >= 0.6) ? '\n양극화가 상한(60%)이라 실제로는 덜 빠질 수 있어요.' : '';
     const ok = await dialog({ title: '상세 스탯도 같이 바꿀까요?',
       text: `${lines}${capped}\n\n지금 낀 카트리지를 처음 맞추는 거라면 '카트리지만 바꾸기'를 눌러 주세요. 스크린샷으로 읽은 상세 스탯에 이미 들어 있어요.`,
-      ok: '상세 스탯도 바꾸기', cancel: '카트리지만 바꾸기' });
+      ok: '상세 스탯도 바꾸기', cancel: '카트리지만 바꾸기', soft: true });
     if (!ok) return;
     for (const [c, , nv] of ch) setVal(c, nv);
     toast('상세 스탯도 카트리지만큼 바꿨어요');
@@ -1056,7 +1056,8 @@
     if (!store.bases[name]) store.bases[name] = Object.assign({}, inputs);
     persist(); applyInputs(); if (fixOptions()) scheduleAutosave(); applyBase(); renderProfiles(); refresh();
   }
-  function dialog({ title, text, input, area, code, ok = '확인', cancel = '취소', danger }) {
+  // soft: 취소 쪽(돌려주는 값 null)을 강조 버튼으로. 그냥 누르기 쉬운 쪽이 안전한 선택일 때
+  function dialog({ title, text, input, area, code, ok = '확인', cancel = '취소', danger, soft }) {
     return new Promise((resolve) => {
       const d = $('#dialog'); d.hidden = false;
       $('#dlgTitle').textContent = title; $('#dlgText').textContent = text || '';
@@ -1078,7 +1079,9 @@
       }
       const okB = $('#dlgOk'); okB.textContent = ok; okB.classList.toggle('danger', !!danger); $('#dlgCancel').textContent = cancel;
       $('#dlgCancel').hidden = code !== undefined; // 코드만 보여 주는 창은 닫기 하나만
-      const done = (v) => { d.hidden = true; okB.onclick = null; $('#dlgCancel').onclick = null; $('#dlgCancel').hidden = false; resolve(v); };
+      okB.classList.toggle('primary', !soft); $('#dlgCancel').classList.toggle('primary', !!soft);
+      if (soft) setTimeout(() => $('#dlgCancel').focus(), 0);
+      const done = (v) => { d.hidden = true; okB.onclick = null; $('#dlgCancel').onclick = null; $('#dlgCancel').hidden = false; okB.classList.add('primary'); $('#dlgCancel').classList.remove('primary'); resolve(v); };
       okB.onclick = () => done(input !== undefined ? inp.value : area !== undefined ? ar.value : true);
       $('#dlgCancel').onclick = () => done(null);
     });

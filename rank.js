@@ -355,6 +355,27 @@
   // 읽기 엔진(ocr.js)이 바뀌면 예전에 읽어 둔 결과는 안 씀: 주소의 ?v= 값(파일 내용으로 정해짐)을 열쇠에 넣음
   const ocrVer = (() => { const el = document.querySelector('script[src*="ocr.js"]'); const m = el && /[?&]v=(\w+)/.exec(el.src); return m ? m[1] : '0'; })();
   const ocrKey = (path) => 'silOcrChk.' + ocrVer + '.r2.' + path;
+  // 사진 한 장에서 상세 스탯을 읽음(관리자 확인 · 신청·갱신 창의 보내기 전 확인이 같이 씀)
+  async function readShot(cv) {
+    const O = window.SilOCR;
+    const r = await O.recognize(cv, null);
+    const res = {};
+    const take = (rr) => { for (const [k, f] of Object.entries(rr.found || {})) if (!res[k] && f && typeof f.value === 'number') res[k] = { v: f.value, low: f.score < 0.8 || !!f.guessed }; };
+    take(r);
+    res.small = !!r.small; res.doubt = (r.doubt || []).filter(k => k !== 'C35'); // 글자가 작은 사진: 두 번 읽어 값이 달랐던 칸
+    let atkList = r.atk || [];
+    // 공격력·적응력 줄을 못 읽었으면: 공격력에 마우스를 올려 뜬 설명 창 때문에 창 위치를 아래쪽만 잡은 경우가 있어서,
+    // 창 위쪽으로 넓힌 부분만 한 번 더 읽어 빈 칸을 채움
+    if (r.rect && (!res.C11 || !res.C14)) {
+      const R = r.rect, up = R.h * 0.35;
+      const r2 = await O.recognize(cv, { x: Math.max(0, R.x - 20), y: Math.max(0, R.y - up), w: Math.min(cv.width - Math.max(0, R.x - 20), R.w + 40), h: up + R.h * 0.45 }, null, { noVerify: true });
+      take(r2); atkList = atkList.concat(r2.atk || []);
+    }
+    // 물리·마법 공격력이 둘 다 보이면 둘 다 남겨 둠(어느 쪽인지는 올린 세팅의 전직으로 고름)
+    res.atk = {};
+    for (const a of atkList) if (a.kind && (!res.atk[a.kind] || a.score > res.atk[a.kind].score)) res.atk[a.kind] = { v: a.value, low: a.score < 0.8, score: a.score };
+    return res;
+  }
   function shotCheck(c, path, inputs) {
     const O = window.SilOCR;
     const box = el('div', { class: 'adm-ocr' }, el('span', { text: '사진 자동 확인: 차례를 기다리는 중' }));
@@ -366,23 +387,7 @@
       if (!res) {
         box.firstChild.textContent = '사진 자동 확인: 사진 읽는 중';
         const b = await shotBlob(c, path); if (!b) throw new Error('원본 사진을 열지 못했어요');
-        const cv = await blobToCanvas(b);
-        const r = await O.recognize(cv, null);
-        res = {};
-        const take = (rr) => { for (const [k, f] of Object.entries(rr.found || {})) if (!res[k] && f && typeof f.value === 'number') res[k] = { v: f.value, low: f.score < 0.8 || !!f.guessed }; };
-        take(r);
-        res.small = !!r.small; res.doubt = (r.doubt || []).filter(k => k !== 'C35'); // 글자가 작은 사진: 두 번 읽어 값이 달랐던 칸
-        let atkList = r.atk || [];
-        // 공격력·적응력 줄을 못 읽었으면: 공격력에 마우스를 올려 뜬 설명 창 때문에 창 위치를 아래쪽만 잡은 경우가 있어서,
-        // 창 위쪽으로 넓힌 부분만 한 번 더 읽어 빈 칸을 채움
-        if (r.rect && (!res.C11 || !res.C14)) {
-          const R = r.rect, up = R.h * 0.35;
-          const r2 = await O.recognize(cv, { x: Math.max(0, R.x - 20), y: Math.max(0, R.y - up), w: Math.min(cv.width - Math.max(0, R.x - 20), R.w + 40), h: up + R.h * 0.45 }, null, { noVerify: true });
-          take(r2); atkList = atkList.concat(r2.atk || []);
-        }
-        // 물리·마법 공격력이 둘 다 보이면 둘 다 남겨 둠(어느 쪽인지는 올린 세팅의 전직으로 고름)
-        res.atk = {};
-        for (const a of atkList) if (a.kind && (!res.atk[a.kind] || a.score > res.atk[a.kind].score)) res.atk[a.kind] = { v: a.value, low: a.score < 0.8, score: a.score };
+        res = await readShot(await blobToCanvas(b));
         try { sessionStorage.setItem(ocrKey(path), JSON.stringify(res)); } catch (e) { /* 못 남겨도 됨 */ }
       }
       ocrMemo.set(path, res);
@@ -392,7 +397,8 @@
       .catch(e => { console.warn(e); box.className = 'adm-ocr warn'; box.textContent = '사진 자동 확인을 못 했어요. ' + errMsg(e); });
     return box;
   }
-  function showShotCheck(box, res, inp) {
+  // 사진에서 읽은 값과 세팅 값을 칸마다 비교. diff의 c·v는 그 칸과 사진 값(사진 값으로 맞출 때 씀, 맞출 수 없는 줄은 v 없음)
+  function cmpShot(res, inp) {
     const O = window.SilOCR;
     const names = new Map((A.describeInputs ? A.describeInputs(inp) : []).map(r => [r.c, r.name]));
     const num = (v) => typeof v === 'number' ? v : (v === '' || v == null || !isFinite(+v) ? null : +v);
@@ -416,14 +422,18 @@
       if (!r && c === 'C11') {
         // 이 전직의 공격력 줄은 못 읽었는데, 올린 값이 사진의 반대 공격력(물리↔마법)과 같으면 바꿔 넣은 것
         const otherT = atkT === '마법' ? '물리' : atkT === '물리' ? '마법' : null, o = otherT && res.atk && res.atk[otherT];
-        if (o && up != null && Math.abs(up - o.v) < 0.5) { diff.push({ name, up: fmt(up, pct), shot: '못 읽음', note: `올린 값이 사진의 ${otherT} 공격력과 같아요` }); continue; }
+        if (o && up != null && Math.abs(up - o.v) < 0.5) { diff.push({ c, name, up: fmt(up, pct), shot: '못 읽음', note: `올린 값이 사진의 ${otherT} 공격력과 같아요` }); continue; }
         atkUnread = true;
       }
       if (!r) { if (up) miss.push(name); continue; }
       if (up != null && Math.abs(up - r.v) < (pct ? 5e-6 : 0.5)) same++;
       else if (swap && (c === 'C24' || c === 'C25')) pants.push(`${name} 올린 ${fmt(up, pct)}, 사진 ${fmt(r.v, pct)}`);
-      else diff.push({ name, up: fmt(up, pct), shot: fmt(r.v, pct), low: r.low });
+      else diff.push({ c, v: r.v, name, up: fmt(up, pct), shot: fmt(r.v, pct), low: r.low });
     }
+    return { diff, miss, same, pants, eq, atkUnread };
+  }
+  function showShotCheck(box, res, inp) {
+    const { diff, miss, same, pants, eq, atkUnread } = cmpShot(res, inp);
     box.innerHTML = '';
     if (!same && !diff.length && !pants.length) {
       box.className = 'adm-ocr warn';
@@ -451,6 +461,72 @@
     }
     if (pants.length) box.append(el('small', { class: 'miss', text: `강배·역강배 바지를 갈아입는 세팅(${eq ? '강배 역강배 수치 동일을 켬' : '두 수치 차이 12%p 이상'})이라 사진과 달라도 돼요: ${pants.join(' / ')}` }));
     if (miss.length) box.append(el('small', { class: 'miss', text: `사진에서 못 읽은 항목: ${miss.join(', ')}` }));
+  }
+  // ---------- 신청·갱신 창: 보내기 전에 사진과 계산기 값 대조 ----------
+  // 넣은 사진을 관리자 확인과 같은 방식으로 읽어, 계산기 상세 스탯과 다른 칸을 보여 주고 사진 값으로 맞출 수 있게 함.
+  // 사진 글자를 잘못 읽을 수도 있어서 막지는 않음: 다른 칸이 남아 있으면 보내기를 한 번 더 눌러야 보냄
+  function selfCheck(onFix) {
+    const O = window.SilOCR;
+    const box = el('div', { class: 'adm-ocr self-ocr', hidden: '' });
+    const st = { box, res: null, diff: [], seq: 0, busy: false, warned: false };
+    const draw = () => {
+      box.hidden = false; box.innerHTML = ''; st.warned = false;
+      const { diff, miss, same, pants, atkUnread } = cmpShot(st.res, A.rankInputs());
+      st.diff = diff;
+      if (!same && !diff.length && !pants.length) {
+        box.className = 'adm-ocr self-ocr warn';
+        box.append(el('span', { text: '사진에서 상세 스탯 창을 못 읽었어요. 보내기 전에 계산기 값이 사진과 같은지 직접 확인해 주세요' }));
+        return;
+      }
+      if (diff.length) {
+        box.className = 'adm-ocr self-ocr bad';
+        const tb = el('table', {}, el('tr', {}, el('th', { text: '항목' }), el('th', { text: '계산기' }), el('th', { text: '사진' })));
+        for (const d of diff) tb.append(el('tr', {}, el('td', {}, d.name, d.note ? el('small', { text: d.note }) : d.low ? el('small', { text: ' 사진 글자가 흐려서 잘못 읽었을 수 있어요' }) : null), el('td', { class: 'v', text: d.up }), el('td', { class: 'v', text: d.shot })));
+        box.append(el('b', { class: 't', text: `사진과 다른 값 ${diff.length}개` }), tb,
+          el('small', { class: 'miss', text: '이대로 보내면 랭킹에 반영되지 않을 수 있어요. 카트리지를 바꿀 때 상세 스탯까지 바꿨다면 사진 값으로 맞춰 주세요.' }));
+        const fix = diff.filter(d => typeof d.v === 'number' && !d.low);
+        if (fix.length) {
+          box.append(el('div', { class: 'self-acts' }, el('button', { type: 'button', class: 'btn', text: '사진 값으로 맞추기', onclick: () => {
+            const o = {}; for (const d of fix) o[d.c] = d.v;
+            A.setVals(o); draw(); if (onFix) onFix();
+            toast(`${fix.length}칸을 사진 값으로 맞췄어요`);
+          } })));
+        }
+      } else if (atkUnread) {
+        box.className = 'adm-ocr self-ocr warn';
+        box.append(el('span', { text: `공격력을 사진에서 못 읽었어요. 공격력은 직접 확인해 주세요. 읽은 상세 스탯 ${same}개는 계산기와 같아요` }));
+      } else {
+        box.className = 'adm-ocr self-ocr ok';
+        const what = pants.length ? '바지 수치 말고 ' : '';
+        box.append(el('span', { text: miss.length ? `${what}사진에서 읽은 상세 스탯 ${same}개가 계산기와 같아요` : `${what}상세 스탯 ${same}개가 사진과 모두 같아요` }));
+      }
+      if (st.res.small) box.append(el('small', { class: 'miss', text: '사진 글자가 작아서 숫자를 잘못 읽었을 수 있어요. 사진과 직접 비교해 주세요' }));
+      if (pants.length) box.append(el('small', { class: 'miss', text: '강배·역강배 바지를 갈아입는 세팅이라 체력 50% 초과·이하 피해는 사진과 달라도 돼요' }));
+      if (miss.length) box.append(el('small', { class: 'miss', text: `사진에서 못 읽은 항목: ${miss.join(', ')}` }));
+    };
+    st.run = async (cv) => {
+      if (!O || !O.recognize || !O.FIELDS) return;
+      const my = ++st.seq; st.busy = true; st.res = null; st.diff = []; st.warned = false;
+      box.hidden = false; box.className = 'adm-ocr self-ocr'; box.innerHTML = '';
+      box.append(el('span', { text: '사진과 계산기 값을 비교하는 중이에요' }));
+      try {
+        const res = await readShot(cv);
+        if (my !== st.seq) return;
+        st.res = res; draw();
+      } catch (e) {
+        if (my !== st.seq) return;
+        console.warn(e);
+        box.className = 'adm-ocr self-ocr warn'; box.textContent = '사진을 읽지 못해 비교하지 못했어요. 보내기 전에 계산기 값이 사진과 같은지 직접 확인해 주세요';
+      } finally { if (my === st.seq) st.busy = false; }
+    };
+    // 보내기 직전: 비교 중이거나 다른 칸이 남아 있으면 한 번 멈춤(한 번 더 누르면 보냄)
+    st.hold = () => {
+      if (st.warned) return false;
+      if (st.busy) { st.warned = true; toast('사진과 비교하는 중이에요. 끝날 때까지 기다리거나, 한 번 더 누르면 그냥 보내요'); return true; }
+      if (st.diff.length) { st.warned = true; box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); toast('사진과 다른 값이 있어요. 맞추거나, 한 번 더 누르면 그대로 보내요'); return true; }
+      return false;
+    };
+    return st;
   }
   // 관리자: 신청·갱신한 세팅을 계산기에서 열어 실투력이 맞는지 확인
   function adminSetting(nick, cls, inputs) {
@@ -1786,13 +1862,15 @@
     const file = el('input', { type: 'file', accept: 'image/*', hidden: '' });
     const box = el('div', { class: 'apply-shot', tabindex: '0', role: 'button' }, el('span', { text: '여기를 눌러 사진을 고르거나 Ctrl + V로 붙여 넣으세요' }));
     st.set = async (src, note) => {
+      let cv;
       try {
-        const cv = src instanceof HTMLCanvasElement ? src : await blobToCanvas(src);
+        cv = src instanceof HTMLCanvasElement ? src : await blobToCanvas(src);
         st.img = await toOrig(cv);
         const pc = privacyBlur(cv); st.pub = pc ? await toPub(pc) : null;
         box.innerHTML = ''; box.classList.add('has');
         box.append(el('img', { src: URL.createObjectURL(st.img), alt: '올릴 스크린샷' }), el('span', { text: note || '다른 사진으로 바꾸려면 다시 누르세요' }));
-      } catch (e) { toast('사진을 읽지 못했어요'); }
+      } catch (e) { toast('사진을 읽지 못했어요'); return; }
+      if (st.onSet) st.onSet(cv);
     };
     box.onclick = () => file.click();
     box.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } };
@@ -1832,18 +1910,21 @@
     const old = $('#applyDlg'); if (old) old.remove();
     const code = genCode();
     const pick = shotPicker();
+    const cpB = el('b', { text: fmtInt(cp) });
+    const chk = selfCheck(() => { const v = A.rankCp(); if (v > 0) cpB.textContent = fmtInt(v); });
+    pick.onSet = (cv) => chk.run(cv);
     const nick = el('input', { type: 'text', class: 'nick', maxlength: '20', placeholder: '게임 닉네임', value: A.nick() || (A.rank() || {}).nickname || '' });
     const close = () => { pick.off(); wrap.remove(); };
     const send = el('button', { type: 'button', class: 'btn primary', text: '신청하기' });
     const card = el('div', { class: 'dialog-card apply-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'apTitle' },
       el('h3', { id: 'apTitle', text: '랭킹에 올리기' }),
-      el('p', { class: 'apply-sum' }, `${A.cls()} 실투력 `, el('b', { text: fmtInt(cp) }), '을(를) 올려요. 관리자가 본인 캐릭터인지 확인한 뒤 랭킹에 보여요.'),
+      el('p', { class: 'apply-sum' }, `${A.cls()} 실투력 `, cpB, '을(를) 올려요. 관리자가 본인 캐릭터인지 확인한 뒤 랭킹에 보여요.'),
       el('label', { class: 'ex-row' }, el('span', {}, '닉네임', el('small', { text: '게임 닉네임 그대로' })), nick),
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
       el('p', { text: '게임 채팅창에 이 코드를 입력하고, 채팅이 보이게 캐릭터 창·상세 스탯 창을 띄워 공격력에 마우스를 올린 채 찍어 넣어 주세요. 채팅이 창을 덮지 않게요.' }),
       exampleFig(),
       el('p', { class: 'apply-privacy' }, '신청하면 닉네임, 계산기 세팅, 스크린샷이 랭킹용으로 저장돼요. 랭킹을 볼 때는 본 기록(본 캐릭터, 시각, 기기 구분용 임의 번호)이 180일 동안 남아요. 자세한 내용은 ', el('a', { href: 'privacy.html', target: '_blank', rel: 'noopener', text: '개인정보 처리방침' }), '에 있어요.'),
-      pick.box, pick.file,
+      pick.box, pick.file, chk.box,
       el('div', { class: 'dlg-actions' }, el('button', { type: 'button', class: 'btn', text: '취소', onclick: close }), send));
     const wrap = el('div', { class: 'dialog', id: 'applyDlg' }, card);
     document.body.append(wrap);
@@ -1854,6 +1935,11 @@
       const img = pick.img, pub = pick.pub;
       if (!img) { toast('인증 코드가 보이는 스크린샷을 넣어 주세요'); return; }
       if (buffBlocked()) return;
+      if (chk.hold()) return;
+      // 사진 값으로 맞췄으면 실투력이 바뀌어서 보낼 때 다시 계산
+      const cp = A.rankCp();
+      if (!(cp > 0)) { toast('실투력이 계산되지 않았어요'); return; }
+      if (underMin(cp)) return;
       send.disabled = true; send.textContent = '보내는 중';
       try {
         const c = await sb();
@@ -1901,22 +1987,30 @@
     const old = $('#applyDlg'); if (old) old.remove();
     // 계산기에 넣은 사진은 코드가 나오기 전에 찍은 것이라 미리 넣지 않음(신청처럼 매번 새로 찍어 넣음)
     const code = updCode(r), pick = shotPicker();
+    const cpB = el('b', { text: fmtInt(cp) });
+    const chk = selfCheck(() => { const v = A.rankCp(); if (v > 0) cpB.textContent = fmtInt(v); });
+    pick.onSet = (cv) => chk.run(cv);
     const close = () => { pick.off(); wrap.remove(); };
     const send = el('button', { type: 'button', class: 'btn primary', text: '보내기' });
     const card = el('div', { class: 'dialog-card apply-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'upTitle' },
       el('h3', { id: 'upTitle', text: '랭킹 갱신' }),
-      el('p', { class: 'apply-sum' }, `${r.nickname} 실투력을 `, el('b', { text: fmtInt(cp) }), '(으)로 바꿔 달라고 보내요. 관리자가 스크린샷을 확인하면 랭킹에 반영돼요.'),
+      el('p', { class: 'apply-sum' }, `${r.nickname} 실투력을 `, cpB, '(으)로 바꿔 달라고 보내요. 관리자가 스크린샷을 확인하면 랭킹에 반영돼요.'),
       el('div', { class: 'code-box' }, el('span', { text: '인증 코드' }), el('b', { text: code })),
       el('p', { text: '게임 채팅 입력칸에 이 코드를 적고, 캐릭터 창·상세 스탯 창을 띄워 공격력에 마우스를 올린 채 새로 찍어 넣어 주세요. 채팅이 창을 덮지 않게요. 코드는 갱신마다 새로 나와요.' }),
       el('p', { class: 'apply-privacy', text: '지금 계산기에 있는 값이 그대로 올라가요. 스크린샷의 스탯과 다르면 반영되지 않아요.' }),
       exampleFig(),
-      pick.box, pick.file,
+      pick.box, pick.file, chk.box,
       el('div', { class: 'dlg-actions' }, el('button', { type: 'button', class: 'btn', text: '취소', onclick: close }), send));
     const wrap = el('div', { class: 'dialog', id: 'applyDlg' }, card);
     document.body.append(wrap);
     send.onclick = async () => {
       if (!pick.img) { toast('인증 코드가 보이는 스크린샷을 넣어 주세요'); return; }
       if (buffBlocked()) return;
+      if (chk.hold()) return;
+      // 사진 값으로 맞췄으면 실투력이 바뀌어서 보낼 때 다시 계산
+      const cp = A.rankCp();
+      if (!(cp > 0)) { toast('실투력이 계산되지 않았어요'); return; }
+      if (underMin(cp)) return;
       send.disabled = true; send.textContent = '보내는 중';
       try {
         const c = await sb();

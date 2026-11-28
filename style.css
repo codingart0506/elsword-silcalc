@@ -535,6 +535,9 @@ body.view-rank .who, body.view-admin .who { display: none; }
 .adm-ocr td.v { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .adm-ocr td small { display: block; color: var(--mute); }
 .adm-ocr .miss { display: block; margin-top: 4px; color: var(--mute); }
+.self-ocr { margin: 0 0 12px; }
+.self-ocr[hidden] { display: none; }
+.self-ocr .self-acts { margin-top: 8px; }
 .adm-inputs { margin: 4px 0; font-size: 13px; }
 .adm-inputs summary { cursor: pointer; color: var(--blue); font-weight: 600; }
 .adm-in-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
